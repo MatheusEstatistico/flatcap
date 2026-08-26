@@ -40,4 +40,30 @@ class ConfigError(RuntimeError):
 
 @dataclass(frozen=True)
 class Config:
+    """
+    Configuração válida. Imutável de propósito: ninguém altera em trânsito.
+    """
+
+    api_url: str
+    token: str
+    root: str
+    origem_env: str | None = None # caminho do .env efetivamente carregado
+
+    @property
+    def token_mascarado(self) -> str:
+        """
+        
+        """
+        if len(self.token) <= 8:
+            return "*" * len(self.token)
+        return f"{self.token[:4]}{'*' * (len(self.token) - 8)}{self.token[-4:]}"
+
+def carregar() -> Config: 
+    """
+    
+    """
+
+# Validações individuais 
+
+def _validar_api_url(valor: str) -> str:
     pass
