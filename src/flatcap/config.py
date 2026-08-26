@@ -14,3 +14,7 @@ import os
 Chaves: 
 
 """
+
+CHAVES: dict[] = {
+    
+}
