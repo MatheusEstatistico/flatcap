@@ -217,12 +217,37 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-# dados
+# =========================================================
+# FlatCap — acrescentar ao final do .gitignore do repositorio
+# =========================================================
+
+# --- Credenciais ---------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# --- Dados de pessoas: nunca versionar -----------------------------------
 dados/
+output/
 *.xlsx
 *.xls
+*.xlsm
 *.csv
+*.tsv
 *.sav
 *.dta
 *.docx
-output/
+
+# Excecoes: arquivos de teste anonimizados e templates, que PRECISAM
+# ser versionados. Descomente conforme as fases 1 e 6 chegarem.
+# !tests/fixtures/*.csv
+# !templates/*.docx
+
+# --- Ambiente e artefatos de build ---------------------------------------
+.venv/
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
