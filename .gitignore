@@ -219,11 +219,10 @@ __marimo__/
 
 # dados
 dados/
-*.
-*.
-*.
-*.
-*.
-*.
-*.
+*.xlsx
+*.xls
+*.csv
+*.sav
+*.dta
+*.docx
 output/
