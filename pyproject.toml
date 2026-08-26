@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatcap"
+version = "0.1.0"
+description = "Orquestra o fluxo de atendimento estatistico: REDCap -> pastas -> descritiva -> relatorio .docx"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Matheus Fernandes", email = "matheusdfernandes@gmail.com" }]
+
+dependencies = [
+    "typer>=0.12",
+    "rich>=13.7",
+    "requests>=2.32",
+    "pandas>=2.2",
+    "openpyxl>=3.1",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.6",
+]
+
+# Cria o executavel `flatcap` no .venv/bin apontando para o objeto `app` do typer.
+[project.scripts]
+flatcap = "flatcap.cli:app"
+
+# Layout src/: o setuptools so procura pacotes dentro de src/.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F = pycodestyle+pyflakes, I = ordenacao de imports,
+# UP = moderniza sintaxe, B = armadilhas comuns (bugbear).
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
