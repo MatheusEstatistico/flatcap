@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "flatcap"
 version = "0.1.0"
-description = "Orquestra o fluxo de atendimento estatistico: REDCap -> pastas -> descritiva -> relatorio .docx"
+description = "Orquestra o flúxo de atendimento estatístico: REDCap -> pastas -> descritiva -> relatorio.docx"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Matheus Fernandes", email = "matheusdfernandes@gmail.com" }]
