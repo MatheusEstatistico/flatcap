@@ -15,8 +15,8 @@ from pathlib import Path
 import os
 
 """
-Chaves: 
-
+Chave: explicação mostrada quando ela falta. 
+As mensagens são o produto principal deste módulo: um erro de configuração precisa dizer o que fazer.
 """
 
 CHAVES: dict[str, str] = {
