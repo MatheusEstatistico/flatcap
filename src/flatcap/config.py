@@ -1,6 +1,10 @@
 """
-Anotações...
+Leitura e validação da configuração do FlatCap.
 
+Este é o único lugar do sistema que lê variáveis de ambiente. Todo o resto recebe um objeto `Config` pronto. 
+Consequência prática: nenhum caminho fixo e nenhum `os.environ` espalhado pelo código.
+Regra de precedência: variáveis já definidas no ambiente do sistema prevalecem sobre o `.env` (`override=False`). 
+Isso permite rodar em outra máquina, em um servidor ou em um teste sem editar arquivo nenhum.
 """
 
 from __future__ import annotations
