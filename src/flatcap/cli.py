@@ -66,13 +66,39 @@ def doctor(
   ),
 ) -> None:
   """
-  
+  Testar as credenciais, a conecção com o REDCap e a pasta de dados.
+
+  É o primeiro comando a rodar quando algo parecer errado: responde se o problema está na configuração, na rede ou no token.
   """
-  tabela = Table()
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("Verificação", no_wrap = True)
+  tabela.add_column("Resultado")
+  tabela.add_column("Detalhe", overflow = "fold")
 
+  # 1. Configuração 
+  try: 
+    cfg: Config = carregar(env_file = env, criar_root = criar_root)
+  except ConfigError as e:
+    raise _abortar("configuração", str(e)) from e
 
+  tabela.add_row("Arquivo .env", OK, cfg.origem_env or "(variáveis do ambiente do sistema)")
+  tabela.add_row("REDCAP_API_URL", OK, cfg.api_url)
+  tabela.add_row("REDCAP_TOKEN", OK, cfg.token_mascarado)
+  tabela.add_row("FLATCAP_ROOT", OK, STR(cfg.root))
 
+  # 2. Conexão com o REDCap 
+  try: 
+    projeto = exportar_projeto(cfg)
+  except RedcapError as e: 
+    tabela.add_row("Conexão REDCap", FALHA, "ver detalhe abaixo")
+    console.print(tabela)
+    raise _abortar("Conexão com o REDCap", str(e)) from e
+
+  titulo = projeto.get("project_file", "(sem título)")
+  tabela.add_row("Conexão REDCap", OK, f"{titulo} (id {projeto.get("project_id", "?")})")
+
+  console.print(tabela)
+  console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
 
 if __name__ == "__main__":
   app()
-
