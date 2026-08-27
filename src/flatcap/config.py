@@ -96,4 +96,33 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
 # Validações individuais 
 
 def _validar_api_url(valor: str) -> str:
+    """
+    Normaliza a URL da API e barra os dois encamos mais comuns.
+    """
     pass
+
+
+
+
+def _validar_root(valor: str, criar: bool = False) -> Path:
+    """
+    Expande `~`, resolve o caminho e confirma que da para escrevê-lo.
+    """
+    pass
+
+
+
+def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
+    """
+    Monta o texto do erro de chaves ausentes, com o próximo passo explícito.
+    """
+    pass
+
+
+
+
+
+
+
+
+
