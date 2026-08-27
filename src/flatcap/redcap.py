@@ -79,6 +79,11 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
 def exportar_projeto(cfg: Config) -> dict[str, Any]:
   """
   Devolve os metadados do projeto (`content = project`).
-  E a chamada mais barata da API e não depende de nenhum registro existir, por isso serve como teste de conexão no `flatcap doctor`. 
+  É a chamada mais barata da API e não depende de nenhum registro existir, por isso serve como teste de conexão no `flatcap doctor`. 
   """
-  pass
+  corpo = _post(cfg, {"content": "project"})
+  if not is isinstance(corpo, dict):
+    raise RedcapError(
+      f"Resposta inesperada em content=project: {type(corpo).__name__}"
+    )
+  return corpo
