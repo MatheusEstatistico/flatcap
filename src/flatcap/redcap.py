@@ -82,7 +82,7 @@ def exportar_projeto(cfg: Config) -> dict[str, Any]:
   É a chamada mais barata da API e não depende de nenhum registro existir, por isso serve como teste de conexão no `flatcap doctor`. 
   """
   corpo = _post(cfg, {"content": "project"})
-  if not is isinstance(corpo, dict):
+  if not isinstance(corpo, dict):
     raise RedcapError(
       f"Resposta inesperada em content=project: {type(corpo).__name__}"
     )
