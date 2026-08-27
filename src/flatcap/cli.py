@@ -94,7 +94,7 @@ def doctor(
     console.print(tabela)
     raise _abortar("Conexão com o REDCap", str(e)) from e
 
-  titulo = projeto.get("project_file", "(sem título)")
+  titulo = projeto.get("project_title", "(sem título)")
   tabela.add_row("Conexão REDCap", OK, f"{titulo} (id {projeto.get('project_id', '?')})")
 
   console.print(tabela)
