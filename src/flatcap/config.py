@@ -114,16 +114,47 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
     """
     Expande `~`, resolve o caminho e confirma que da para escrevê-lo.
     """
-    pass
+    root = Path(valor).expanduser()
 
+    if not root.is_absolute():
+        raise ConfigError(
+            "FLATCAP_ROOT precisa de um caminho aobsoluto.\n" \
+            f"Caminho atual: {valor!r}."
+        )
+    if not root.exists():
+        if not criar:
+            raise ConfigError(
+                f"FLATCAP_ROOT não exisite: {root}.\n"
+                "Confira se o caminho está correto ou se a nuvem está montada"
+            )
+        root.mkdir(parents = True, exist_ok = True)
 
+    if not root.is_dir():
+        raise ConfigError(
+            f"FLATCAP_ROOT existe mas não é uma pasta: {root}"
+        )
+
+    if not os.access(root, os.W_OK):
+        raise ConfigError(
+            f"Sem permissão de escrita no FLATCAP_ROOT {root}\n"
+        )
+    return root.resolve()
 
 def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     """
     Monta o texto do erro de chaves ausentes, com o próximo passo explícito.
     """
-    pass
-
+    linhas = ["Configuração incompleta. Fatam:", ""]
+    linhas += [f"{chave}\n {CHAVES[chave]}" for chave in faltando]
+    linhas.append("")
+    if caminho_env:
+        linhas.append(f"Arquivo .env lido: {caminho_env}")
+        linhas.append("Preencha as chaves acima novamente e reinicie o FlatCap.")
+    else:
+        linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
+        linhas.append("Crie aquivo .env copiando o modelo versionado:")
+        linhas.append("     cp .emv.example .env")
+    return "\n".join("linhas")
 
 
 
