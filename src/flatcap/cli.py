@@ -79,7 +79,7 @@ def doctor(
   try: 
     cfg: Config = carregar(env_file = env, criar_root = criar_root)
   except ConfigError as e:
-    raise _abortar("configuração", str(e)) from e
+    raise _abortar("Configuração", str(e)) from e
 
   tabela.add_row("Arquivo .env", OK, cfg.origem_env or "(variáveis do ambiente do sistema)")
   tabela.add_row("REDCAP_API_URL", OK, cfg.api_url)
