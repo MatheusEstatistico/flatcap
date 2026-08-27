@@ -56,15 +56,22 @@ class Config:
     @property
     def token_mascarado(self) -> str:
         """
-        
+        Versão segura para imprimir no terminal e em logs.
         """
         if len(self.token) <= 8:
             return "*" * len(self.token)
         return f"{self.token[:4]}{'*' * (len(self.token) - 8)}{self.token[-4:]}"
 
-def carregar() -> Config: 
+def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Config: 
     """
-    
+    Lê o `.env`, valida as três chaves e devolve um `Config`.
+
+    Args: 
+        env_file: 
+        criar_root: 
+
+    Raíses:
+        ConfigError: com a lista do que falta e por quê cada item importa.
     """
 
 # Validações individuais 
