@@ -67,13 +67,32 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
     Lê o `.env`, valida as três chaves e devolve um `Config`.
 
     Args: 
-        env_file: 
-        criar_root: 
-
+        env_file: caminho explícito de um `.env`. Se omitido, procura a partir do diretório atual e sobe na árvore.
+        criar_root: se True, cria `FLATCAP_ROOT` caso não exista. O padrão é False de propósito — um caminho digitado errado deve dar erro, não virar uma pasta vazia silenciosa em lugar nenhum.
+    
     Raíses:
         ConfigError: com a lista do que falta e por quê cada item importa.
     """
+    caminho_env = str(env_file) if env_file else find_dotenv(usecwd = True)
+    if caminho_env:
+        load_dotenv(caminho_env, override = False)
 
+    valores = {chave: (os.environ.get(chave) or "").strip() for chave in CHAVES}
+    
+    falando = [chave for chave, valor in valores.items() if not valor]
+    if faltando:
+        raise ConfigError(_mensagem_faltando(faltando, caminho_env))
+
+    api_url = _validar_api_url(valores["REDCAP_API_URL"])
+    root = _validar_root(valores["FLATCAP_ROOT"], criar = criar_root)
+
+    return Config(
+        api_url = api_url,
+        token = valores["REDCAP_TOKEN"],
+        root = root,
+        origem_env = caminhoo_env or None,
+    )
+    
 # Validações individuais 
 
 def _validar_api_url(valor: str) -> str:
