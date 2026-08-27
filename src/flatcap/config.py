@@ -157,9 +157,3 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     return "\n".join("linhas")
 
 
-
-
-
-
-
-
