@@ -84,7 +84,7 @@ def doctor(
   tabela.add_row("Arquivo .env", OK, cfg.origem_env or "(variáveis do ambiente do sistema)")
   tabela.add_row("REDCAP_API_URL", OK, cfg.api_url)
   tabela.add_row("REDCAP_TOKEN", OK, cfg.token_mascarado)
-  tabela.add_row("FLATCAP_ROOT", OK, STR(cfg.root))
+  tabela.add_row("FLATCAP_ROOT", OK, str(cfg.root))
 
   # 2. Conexão com o REDCap 
   try: 
@@ -95,7 +95,7 @@ def doctor(
     raise _abortar("Conexão com o REDCap", str(e)) from e
 
   titulo = projeto.get("project_file", "(sem título)")
-  tabela.add_row("Conexão REDCap", OK, f"{titulo} (id {projeto.get("project_id", "?")})")
+  tabela.add_row("Conexão REDCap", OK, f"{titulo} (id {projeto.get('project_id', '?')})")
 
   console.print(tabela)
   console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
