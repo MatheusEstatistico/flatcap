@@ -44,12 +44,31 @@ def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   return typer.Exit(code=1)
 
 @app.callback()
-def principal()
-
+def principal(
+  _: bool = typer.Option(
+    False, "--version", "-V", callback = _versao, is_eager = True,
+    help = "Mostra a versão e sai."
+  ),
+) -> None:
+  """
+  Ponto de entrada. Existe para hospedar as opções globais.
+  """
 
 @app.command()
-def doctor()
-
+def doctor(
+  criar_root: bool = typer.Option(
+    False, "--criar-root",
+    help = "Cria a pasta FLATCAP_ROOT se ela ainda não existir."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  
+  """
+  tabela = Table()
 
 
 
