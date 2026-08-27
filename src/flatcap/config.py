@@ -79,7 +79,7 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
 
     valores = {chave: (os.environ.get(chave) or "").strip() for chave in CHAVES}
     
-    falando = [chave for chave, valor in valores.items() if not valor]
+    faltando = [chave for chave, valor in valores.items() if not valor]
     if faltando:
         raise ConfigError(_mensagem_faltando(faltando, caminho_env))
 
@@ -90,7 +90,7 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
         api_url = api_url,
         token = valores["REDCAP_TOKEN"],
         root = root,
-        origem_env = caminhoo_env or None,
+        origem_env = caminho_env or None,
     )
     
 # Validações individuais 
@@ -99,10 +99,16 @@ def _validar_api_url(valor: str) -> str:
     """
     Normaliza a URL da API e barra os dois encamos mais comuns.
     """
-    pass
-
-
-
+    if "redcap.link" in valor:
+        raise ConfigError(
+            "REDCAP_API_URL aposta para 'redcap.link', que é o link curto do syrvey, não o endpoint da API.\n"
+            "Use o formato 'https://<servidor>/redcap/api/'."
+        )
+    if not valor.startswith(("http://", "https://")):
+        raise ConfigError(
+            "REDCAP_API_URL precisa começar com https://"
+        )
+    return valor if valor.endswith("/") else valor + "/"
 
 def _validar_root(valor: str, criar: bool = False) -> Path:
     """
