@@ -1,5 +1,7 @@
 """
-
+Esse módulo serve para transformar professores/colaboradores e alunos em apenas `Cliente`.
+Sua principal utilidade é que caso a variável `intro` receba outras categorias, só vai ser necessário acrescentar aqui e todo o resto vai funcionar. 
+Todo o resto do sistema só trata `Cliente`.
 """
 
 from __future__ import annotations
@@ -34,7 +36,18 @@ CAMPOS_REDCAP: list[str] = [
 @dataclass(frozen = True)
 class Cliente:
     """
-    
+    Imutável de propósito igual no `Config`
     """
-    pass
+    record_id: str
+    tipo: str
+    matricula: str
+    nome: str
+    tem_anexo: str
+
+    @property
+    def indentificado(self)-> bool:
+        """
+        Testa se da pra criar a pasta automaticamente.
+        """
+        return bool(self.matricula and self.nome)
 
