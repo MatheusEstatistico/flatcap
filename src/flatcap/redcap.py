@@ -134,7 +134,15 @@ def exportar_projeto(cfg: Config) -> dict[str, Any]:
   corpo = _post(cfg, {"content": "project"})
   if not isinstance(corpo, dict):
     raise RedcapError(
-      f"Resposta inesperada em content=project: {type(corpo).__name__}"
+      f"Resposta inesperada em content = project: {type(corpo).__name__}"
     )
   return corpo
 
+def exportar_registros(
+    cfg: Config,
+    fields: list[str] | None = None,
+    records: list[str] | None = None,
+) -> list[dict[str,str]]:
+  """
+  
+  """
