@@ -65,9 +65,19 @@ def nome_pasta(matricula: str, nome: str) -> str:
 
 def localizar_pasta(root: Path, matricula: str) -> Path | None:
     """
-    
+    Procura a pasta com a matrícula do cliente na pasta `FLATCAP_ROOT`.
+    Busca por prefíxo para garantir que não perca quando a pasta foi criada ou renomeada a mão. 
     """
-    pass
+    matricula_limpa = sanitizar(matricula)
+    if not matricula_limpa or not root.is_dir():
+        return None
+
+    for item in sorted(root.iterdir()):
+        if not item.is_dir():
+            continue
+        if _combina(item.name, matricula_limpa):
+            return item
+    return None
 
 def _combina(nome_pasta: str, matricula: str) -> bool:
     """
