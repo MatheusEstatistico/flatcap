@@ -23,7 +23,7 @@ class RedcapError(RuntimeError):
   Falha na conversa com a API do REDCap, já traduzida.
   """
 
-class ArquvoAusenteError(RedcapError):
+class ArquivoAusenteError(RedcapError):
     """
     O campo de arquivo existe, mas o registro não tem nada anexado.
     Sublasso do `RedcapError`.
@@ -225,5 +225,50 @@ def tem_arquivo(cfg: Config, record_id: str, campo: str) -> bool:
   except ArquivoAusenteError:
     return False
   return True
+
+
+# Auxiliares
+
+_PADROES_NOME = (
+  # Content-Disposition: attachment; filename="banco.xlsx"
+  re.compile(r'filename\*?\s*=\s*"([^"]+)"', re.IGNORECASE),
+  re.compile(r"filename\*?\s*=\s*([^;]+)", re.IGNORECASE),
+
+  # Content-Type: application/vnd...; name="banco.xlsx"  (é onde o REDCap põe)
+  re.compile(r'name\s*=\s*"([^"]+)"', re.IGNORECASE),
+  re.compile(r"name\s*=\s*([^;]+)", re.IGNORECASE),
+)
+
+def _nome_do_anexo(resposta: requests.Response) -> str | None:
+  """
+  Extrai o nome original do arquivo dos cabeçalhos da resposta.
+  """
+  cabecalhos = " ; ".join(
+    filter(
+      None,
+      (resposta.headers.get("Content-Disposition"), resposta.headers.get("Content-Type")),
+    )
+  )
+
+  for padrao in _PADROES_NOME:
+    achado = padrao.search(cabecalhos)
+    if achado:
+      nome = _limpar_nome_de_arquivo(achado.group(1))
+      if nome:
+        return nome
+
+  return None
+
+def _limpar_nome_de_arquivo(bruto: str) -> str:
+  """
+  Reduz o nome anunciado pelo servidor ao nome de arquivo puro.
+  Descarta qualquer componente de caminho (`../`, `C:\\`, `/etc/`) antes que ele chegue perto de um `open()`. O nome vem de fora, e o que vem de fora não monta caminho.
+  """
+  nome = bruto.strip().strip("'\"").strip()
+  nome = nome.replace("\\", "/").split("/")[-1]
+  nome = nome.replace("\x00", "").strip()
+
+  return "" if nome in {"", ".", ".."} else nome
+
 
 
