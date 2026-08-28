@@ -97,7 +97,7 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
 
 def _validar_api_url(valor: str) -> str:
     """
-    Normaliza a URL da API e barra os dois encamos mais comuns.
+    Normaliza a URL da API e barra os dois enganos mais comuns.
     """
     if "redcap.link" in valor:
         raise ConfigError(
@@ -106,7 +106,7 @@ def _validar_api_url(valor: str) -> str:
         )
     if not valor.startswith(("http://", "https://")):
         raise ConfigError(
-            "REDCAP_API_URL precisa começar com https://"
+            "REDCAP_API_URL precisa começar com https:// ou http://"
         )
     return valor if valor.endswith("/") else valor + "/"
 
@@ -118,7 +118,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
 
     if not root.is_absolute():
         raise ConfigError(
-            "FLATCAP_ROOT precisa de um caminho aobsoluto.\n" \
+            "FLATCAP_ROOT precisa de um caminho absoluto.\n" \
             f"Caminho atual: {valor!r}."
         )
     if not root.exists():
@@ -136,7 +136,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
 
     if not os.access(root, os.W_OK):
         raise ConfigError(
-            f"Sem permissão de escrita no FLATCAP_ROOT {root}\n"
+            f"Sem permissão de escrita no FLATCAP_ROOT: {root}"
         )
     return root.resolve()
 
