@@ -79,8 +79,16 @@ def localizar_pasta(root: Path, matricula: str) -> Path | None:
             return item
     return None
 
-def _combina(nome_pasta: str, matricula: str) -> bool:
+def _combina(nome_da_pasta: str, matricula: str) -> bool:
     """
-    
+    Função que diz o resultado da busca pela pasta usando a matrícula. 
+    Busca só a matrícula, então  aceita vários formatos de nomes, para garantir que não quebre com pastas feitas a mão ou com mudanças de configurações em server. 
     """
-    pass
+    if not nome_da_pasta.startswith(matricula):
+        return False
+    resto = nome_da_pasta[len(matricula): ]
+    return not resto or not resto[0].isdigit()
+
+
+
+
