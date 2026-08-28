@@ -18,6 +18,19 @@ from .config import Config
 
 TIMEOUT_SEGUNDOS = 30
 
+"""
+Mensagens com que o REDCap sinaliza "este registro não tem arquivo neste campo". 
+É ausência esperada, não falha: um cliente pode simplesmente não ter anexado o banco. 
+Comparação em minúsculas e por trecho, porque o texto exato varia entre versões e idiomas do servidor.
+"""
+_SEM_ARQUIVO = (
+  "there is no file",
+  "no file to download",
+  "não há arquivo",
+  "nao ha arquivo",
+  "nenhum arquivo",
+)
+
 class RedcapError(RuntimeError):
   """
   Falha na conversa com a API do REDCap, já traduzida.
@@ -269,6 +282,8 @@ def _limpar_nome_de_arquivo(bruto: str) -> str:
   nome = nome.replace("\x00", "").strip()
 
   return "" if nome in {"", ".", ".."} else nome
+
+
 
 
 
