@@ -23,6 +23,25 @@ class RedcapError(RuntimeError):
   Falha na conversa com a API do REDCap, já traduzida.
   """
 
+class ArquvoAusenteError(RedcapError):
+    """
+    O campo de arquivo existe, mas o registro não tem nada anexado.
+    Sublasso do `RedcapError`.
+    """
+
+@dataclass(frozen = True)
+class ArquivoRedcap:
+    """
+    O anexo baixad, ainda em memória. 
+    `nome` é o nome original do arquivo do jeito que foi nomeado o cliente. 
+    """
+    nome: str
+    conteudo: bytes
+    tipo_mime: str
+
+# Camada de rede
+
+
 def _post(cfg: Config, payload: dict[str, str]) -> Any:
   """
   Executa uma chamada autenticada e devolve o JSON já codificado. 
