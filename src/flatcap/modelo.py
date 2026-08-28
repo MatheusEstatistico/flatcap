@@ -51,3 +51,41 @@ class Cliente:
         """
         return bool(self.matricula and self.nome)
 
+def normalizar(registro: Mapping[str, Any]) -> Cliente:
+    """
+    Converte um registro cru do REDCap para `Cliente`
+
+    Mostra que o registro está incompleto direto e não apenas quebra...
+    """
+    intro = _texto(registro, "intro")
+    tipo, campo_matricula, campo_nome = _MAPA_INTRO.get(intro, (INDEFINIDO, "", ""))
+
+    if tipo == INDEFINIDO:
+        matricula, nome = _primeiro_par_preenchido(registro)
+    else:
+        matricula = _texto(registro, campo_matricula)
+        nome = _texto(registro, campo_nome)
+
+    return Cliente(
+        record_id = _texto(registro, "record_id"),
+        tipo = tipo,
+        matricula = matricula,
+        nome = nome,
+        tem_anexo = boll(_texto(registro, CAMPO_ANEXO)),
+    )
+
+def normalizar_varios(registros: Iterable[Mapping[str, Any]]) -> list[Cliente]:
+    """
+    Aplica a função `normalizar` à resposta toda mantendo a ordem do REDCap.
+    """
+    return [normalizar(registro) for registro in registros]
+
+
+
+# Funções auxiliares
+
+def _texto(registro: Mapping[str, Any], chave: str) -> str:
+    """
+    
+    """
+    pass
