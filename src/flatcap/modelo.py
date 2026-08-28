@@ -71,7 +71,7 @@ def normalizar(registro: Mapping[str, Any]) -> Cliente:
         tipo = tipo,
         matricula = matricula,
         nome = nome,
-        tem_anexo = boll(_texto(registro, CAMPO_ANEXO)),
+        tem_anexo = bool(_texto(registro, CAMPO_ANEXO)),
     )
 
 def normalizar_varios(registros: Iterable[Mapping[str, Any]]) -> list[Cliente]:
@@ -86,6 +86,24 @@ def normalizar_varios(registros: Iterable[Mapping[str, Any]]) -> list[Cliente]:
 
 def _texto(registro: Mapping[str, Any], chave: str) -> str:
     """
-    
+    Lê um campo como texto limpo, tolerando ausência, None e espaços de sobra.
     """
-    pass
+    if not chave:
+        return ""
+    valor = registro.get(chave)
+    if valor is None:
+        return ""
+    return str(valor).strip()
+
+def _primeiro_par_preenchido(registro: Mapping[str, Any]) -> tuple[str, str]:
+    """
+    Procura nos campos de nome e matricula mesmo quando o `intro` estiver em branco. 
+    """
+    for campo_matricula, campo_nome in _PARES:
+        if matricula := _texto(registro, campo_matricula):
+            return matricula, _texto(registro, campo_nome)
+
+    for _, campo_nome in _PARES:
+        if nome := _texto(registro, campo_nome):
+            return "", nome
+    return "", ""
