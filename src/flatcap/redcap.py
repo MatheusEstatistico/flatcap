@@ -41,6 +41,37 @@ class ArquivoRedcap:
 
 # Camada de rede
 
+def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
+  """
+  
+  """
+  dados = {
+    "token": cfg.token,
+    "format": "json",
+    "returnFormat": "json",
+    **payload,
+  }
+
+  try:
+    resposta = requests.post(cfg.api_url, data = dados, timeout = TIMEOUT_SEGUNDOS)
+  except requests.exceptions.SSLError as erro: 
+    raise RedcapError(
+      f"Não foi possível acessar {cfg.api_url}\n"
+      f"Detalhe técnico: {erro}"
+    ) from erro
+  except requests.exceptions.Timeout as erro: 
+    raise RedcapError(
+      f"O servidor não respondeu em {TIMEOUT_SEGUNDOS}s: {cfg.api_url}"
+    ) from erro
+
+  if resposta.status_code == 403:
+    raise RedcapError("403: Token recusado")
+  if resposta.status_code == 404:
+    raise RedcapError("404: Endereço não econtrado")
+
+  return resposta
+
+
 
 def _post(cfg: Config, payload: dict[str, str]) -> Any:
   """
@@ -96,6 +127,11 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
   resposta.raise_for_status()
   return corpo
 
+
+
+
+# Chamadas Gerais
+
 def exportar_projeto(cfg: Config) -> dict[str, Any]:
   """
   Devolve os metadados do projeto (`content = project`).
@@ -107,3 +143,4 @@ def exportar_projeto(cfg: Config) -> dict[str, Any]:
       f"Resposta inesperada em content=project: {type(corpo).__name__}"
     )
   return corpo
+
