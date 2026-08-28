@@ -144,5 +144,28 @@ def exportar_registros(
     records: list[str] | None = None,
 ) -> list[dict[str,str]]:
   """
+  Devolve as respostas do questionário (`content = record`).
+    Args:
+      fields: campos a trazer. Pedir só o necessário reduz a resposta e evita trafegar campos que o FlatCap não usa.
+      records: limita a registros específicos.
   
+  Os valores vêm crus (`rawOrLabel = raw`), então `intro` chega como "1"/"2" e não como "Professor/Colaborador".
   """
+  payload: dict[str, str] = {
+      "content": "record",
+      "type": "flat",
+      "rawOrLabel": "raw",
+      "rawOrLabelHeaders": "raw",
+      "exportCheckboxLabel": "false",
+      "exportSurveyFields": "false",
+      "exportDataAccessGroups": "false",
+    }
+  
+  if fields:
+    payload.update(_indexar("fields", fields))
+  if records:
+    payload.update(_indexar("records", records))
+
+  return _lista_de_dicionarios(_post(cfg, payload), "content=record")
+
+  
