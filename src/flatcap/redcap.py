@@ -124,6 +124,7 @@ def _indexar(nome: str, valores: list[str])-> dict[str, str]:
   return {f"{nome}[{i}]": valor for i, valor in enumerate(valores)}
 
 
+
 # Chamadas Gerais
 
 def exportar_projeto(cfg: Config) -> dict[str, Any]:
@@ -168,4 +169,61 @@ def exportar_registros(
 
   return _lista_de_dicionarios(_post(cfg, payload), "content=record")
 
-  
+def exportar_metadados(cfg: Config, fields: list[str] | None = None) -> list[dict[str, str]]:
+  """
+  Devolve o dicionário de variáveis do projeto (`content = metadata`).
+  """
+  payload: dict[str, str] = {"content": "metadata"}
+  if fields:
+    payload.update(_indexar("fields", fields))
+
+  return _lista_de_dicionarios(_post(cfg, payload), "content=metadata")
+
+def exportar_arquivo(cfg: Config, record_id: str, campo: str) -> ArquivoRedcap:
+  """
+  Baixa o anexo de um campo de arquivo (`content = file`, `action = export`).
+  Raises:
+    ArquivoAusenteError: o registro existe, mas não tem arquivo neste campo.
+    RedcapError: qualquer outra falha — token sem permissão de exportar arquivos, registro inexistente, campo que não é do tipo file.
+  """
+  resposta = _requisitar(
+    cfg,
+    {
+      "content": "file",
+      "action": "export",
+      "record": str(record_id),
+      "field": campo,
+    },
+  )
+
+  erro = _erro_no_corpo(resposta)
+  if erro is not None:
+    if any(marca in erro.lower() for marca in _SEM_ARQUIVO):
+      raise ArquivoAusenteError(
+        f"O registro {record_id} não tem arquivo no campo '{campo}'."
+      )
+    raise RedcapError(
+      f"Não consegui baixar o campo '{campo}' do registro {record_id}: {erro}"
+    )
+
+  resposta.raise_for_status()
+
+  return ArquivoRedcap(
+    nome=_nome_do_anexo(resposta) or f"{record_id}_{campo}",
+    conteudo=resposta.content,
+    tipo_mime=resposta.headers.get("Content-Type", "").split(";")[0].strip(),
+  )
+
+
+def tem_arquivo(cfg: Config, record_id: str, campo: str) -> bool:
+  """
+  Responde se existe anexo, sem que quem pergunta precise tratar exceção.
+  Custa um download completo: a API do REDCap não oferece uma consulta que responda "existe?" sem trazer o conteúdo. Por isso é usada apenas sob demanda, pela opção `--conferir-anexos` do `flatcap listar`, e não no caminho normal.
+  """
+  try:
+    exportar_arquivo(cfg, record_id, campo)
+  except ArquivoAusenteError:
+    return False
+  return True
+
+
