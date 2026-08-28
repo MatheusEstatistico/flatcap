@@ -42,10 +42,26 @@ def sanitizar(texto: str) -> str:
 
 def nome_pasta(matricula: str, nome: str) -> str:
     """
-    
+    Monta o nome da pasta do cliente: `123456789 - Matheus Fernandes`
+
+    Raises: 
+        NomeInvalidoError: erro para quando não tem número de matrícula válido. 
     """
     matricula_limpa = sanitizar(matricula)
     nome_limpo = sanitizar(nome)
+
+    if not matricula_limpa:
+        raise NomeInvalidoError(
+            f"Matrícula vazia. Recebido: {matricula!r}"
+            "Ver REDCap manualmente..."
+        )
+    if not nome_limpo:
+        """
+        Nome vazio não impede o trabalho, apenas a matrícula é indispensável. 
+        """
+        return matricula_limpa
+
+    return f"{matricula_limpa}{SEPARADOR}{nome_limpo}"
 
 def localizar_pasta(root: Path, matricula: str) -> Path | None:
     """
