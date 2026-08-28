@@ -43,7 +43,8 @@ class ArquivoRedcap:
 
 def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
   """
-  
+  Faz a requesição da chamada autenditaca e devolve só a resposta. 
+  Traduz as falhas de rede que não dependem do corpo. 
   """
   dados = {
     "token": cfg.token,
@@ -71,63 +72,56 @@ def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
 
   return resposta
 
-
+def _erro_no_corpo(resposta: requests.Response) -> str | None: 
+  """
+  Devolve a mensagem de erro do REDCap, se o corpo form um erro de aplicação. 
+  """
+  tipo = resposta.headers.get("Content-Type", "").lower()
+  if "json" not in tipo and not resposta.content[:1] == b"{":
+    return None
+  try:
+    corpo = resposta.json()
+  except ValueError: 
+    return None
+  if isinstance(corpo, dict) and "error" in corpo:
+    return str(corpo["error"])
+  return None
 
 def _post(cfg: Config, payload: dict[str, str]) -> Any:
   """
   Executa uma chamada autenticada e devolve o JSON já codificado. 
   """
-  dados = {
-    "token": cfg.token,
-    "format": "json",
-    "returnFormat": "json",
-    **payload,
-  }
+  resposta = _requisitar(cfg, payload)
 
-  try:
-    resposta = requests.post(cfg.api_url, data = dados, timeout = TIMEOUT_SEGUNDOS)
-  except requests.exceptions.SSLError as erro:
-    raise RedcapError(
-      f"Falha no certificado SSL de {cfg.api_url}\n"
-      f"Detalhe técnico: {erro}"
-    ) from erro
-  except requests.exceptions.ConnectionError as erro:
-    raise RedcapError(
-      f"Não consegui acessar {cfg.api_url}\n"
-      f"Detalhe técnico: {erro}"
-    ) from erro
-  except requests.exceptions.Timeout as erro:
-    raise RedcapError(
-      f"O servidor não respondeu em {TIMEOUT_SEGUNDOS}s: {cfg.api_url}"
-    ) from erro
-
-  if resposta.status_code == 403:
-    raise RedcapError(
-      "403 — token recusado."
-    )
-  if resposta.status_code == 404:
-    raise RedcapError(
-      f"404 — endereço não encontrado: {cfg.api_url}"
-    )
+  erro = _erro_no_corpo(resposta)
+  if erro is not None:
+    raise RedcapError(f"O REDCap recusou a chamada: {erro}.")
 
   try:
     corpo = resposta.json()
-  except ValueError as erro:
-    trecho = resposta.text[:200].replace("\n", " ")
+  except ValueError as causa:
+    trecho = resposta.text[:200].replace("\n", " ").strip()
     raise RedcapError(
       f"A resposta não era JSON (HTTP {resposta.status_code}).\n"
-    ) from erro
+    ) from causa
 
+def _lista_de_dicionarios(corpo: Any, rotulo: str) -> list[dict[str, str]]:
   """
-  O REDCap sinaliza erro de aplicação no corpo, não no `status`.
+  Confere se a resposta do corpo é uma lista.
   """
-  if isinstance(corpo, dict) and "error" in corpo:
-    raise RedcapError(f"O REDCap recusou a chamada: {corpo['error']}")
+  if not isinstance(corpo, list):
+    raise RedcapError(
+      f"Resposta inesperada em {rotulo}. Deveria ser uma lista."
+      f"Resposta atual {type(corpo).__name__}."
+    )
+  return [{str(k): "" if v is None else str (v) for k, v in item.items()} for item in corpo]
 
-  resposta.raise_for_status()
-  return corpo
-
-
+def _indexar(nome: str, valores: list[str])-> dict[str, str]:
+  """
+  Converte ['a', 'b'] em {'nome[0]': 'a', 'nome[1]': 'b'}. 
+  O REDCap espera parâmetros em lista. 
+  """
+  return {f"{nome}[{i}]": valor for i, valor in enumerate(valores)}
 
 
 # Chamadas Gerais
