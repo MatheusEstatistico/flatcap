@@ -1,19 +1,20 @@
 """
 Camada fina sobre a API do REDCap.
+A API tem três particularidades que este módulo isola, para que nenhuma delas vaze para o resto do sistema:
 
-Na Fase 0 existe apenas o mínimo que o `doctor` precisa: o POST autenticado e a chamada `content=project`. 
-As funções `exportar_registros`, `exportar_metadados` e `exportar_arquivo` entram na Fase 1, reaproveitando o mesmo `_post`.
-
-A API do REDCap tem duas particularidades que este módulo isola:
     1. tudo é POST com `application/x-www-form-urlencoded` no mesmo endpoint; o que muda e o campo `content` do corpo;
     2. erros vêm como HTTP 400 com um JSON {"error": "..."} — nao como exceção de rede. Sem tratamento, viram um KeyError incompreensível três camadas acima.
+    3. `content = file` devolve bytes, não JSON. Por isso a aquisição foi serparada em duas camadas: 
+        a) `_requisitar` faz a rede e devolve a resposta crua;
+        b) `_post` é a leitura JSON em cima dela.
 """
 
 from __future__ import annotations
+import re
+import requests
+from dataclasses import dataclass
 from typing import Any
 from .config import Config
-
-import requests
 
 TIMEOUT_SEGUNDOS = 30
 
