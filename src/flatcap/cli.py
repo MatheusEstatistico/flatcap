@@ -23,7 +23,7 @@ from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arqui
 
 app = typer.Typer(
     name="flatcap",
-    help="Orquestrador de fluxo para atendimento estatistico: REDCap -> pastas -> analise -> relatorio.docx.",
+    help="Orquestrador de fluxo para atendimento estatistico",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -38,6 +38,12 @@ def _versao(valor: bool) -> None:
   if valor:
     console.print(f"flatcap {__version__}")
     raise typer.Exit()
+
+def _plural(quantidade: int, singular: str, plural: str) -> str:
+  """
+  Devolve o substantivo já concordado com o número.
+  """
+  return singular if quantidade == 1 else plural
 
 def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   """
@@ -81,7 +87,8 @@ def doctor(
   """
   Testar as credenciais, a conecção com o REDCap e a pasta de dados.
 
-  É o primeiro comando a rodar quando algo parecer errado: responde se o problema está na configuração, na rede ou no token.
+  É o primeiro comando a rodar quando algo parecer errado: 
+    responde se o problema está na configuração, na rede ou no token.
   """
   tabela = Table(show_header = True, header_style = "bold")
   tabela.add_column("Verificação", no_wrap = True)
@@ -89,10 +96,7 @@ def doctor(
   tabela.add_column("Detalhe", overflow = "fold")
 
   # 1. Configuração 
-  try: 
-    cfg: Config = carregar(env_file = env, criar_root = criar_root)
-  except ConfigError as e:
-    raise _abortar("Configuração", str(e)) from e
+  cfg = _configuracao(env, criar_root = criar_root)
 
   tabela.add_row("Arquivo .env", OK, cfg.origem_env or "(variáveis do ambiente do sistema)")
   tabela.add_row("REDCAP_API_URL", OK, cfg.api_url)
@@ -128,7 +132,8 @@ def listar(
   """
   Lista as solicitações no REDCap, e o que já foi para o disco.
 
-  É o que coordena o fluxo diário de trabalho. Mostra o que chego ude novo de um lado e o que já virou pasta dentro do FLATCAP_ROOT.
+  É o que coordena o fluxo diário de trabalho. 
+  Mostra o que chego ude novo de um lado e o que já virou pasta dentro do FLATCAP_ROOT.
   """
   cfg = _configuracao(env)
 
@@ -147,36 +152,42 @@ def listar(
     clientes = _reconferir_anexos(cfg, clientes)
 
   console.print(_tabela_de_clientes(cfg, clientes))
-  console.print(_resumo(sfg, clientes))
+  console.print(_resumo(cfg, clientes))
 
 def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
   """
-  
+  Confirma na API os anexos que o export de registros não declarou.
   """
   suspeitos = [c for c in clientes if not c.tem_anexo and c.record_id]
   if not suspeitos:
     return clientes
 
+  quantos = len(suspeitos)
   confirmados: set[str] = set()
-  with console.status(f"Conferindo {len(suspeitos)} anexo na API do REDCap"):
+  with console.status(
+    f"Conferindo {quantos} {_plural(quantos, 'anexo', 'anexos')} na API do REDCap..."
+  ):
     for cliente in suspeitos:
       try:
         if tem_arquivo(cfg, cliente.record_id, CAMPO_ANEXO):
           confirmados.add(cliente.record_id)
-      except RedcapError as erro: 
+      except RedcapError as erro:
         erro_console.print(
           Text(f"Não foi possível conferir o anexo do registro {cliente.record_id}: {erro}",
                style = "yellow")
         )
+
   return [
     replace(c, tem_anexo = True) if c.record_id in confirmados else c
     for c in clientes
   ]
 
+
 def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
   """
   Monta a tabela que sai do comando `listar`.
-  Valores que vem do REDCap entram como `Text`.
+  Valores que vem do REDCap entram como `Text`, nunca como string crua: um
+  nome com colchete viraria marcação do rich e sumiria da tela.
   """
   tabela = Table(show_header = True, header_style = "bold")
   tabela.add_column("id", justify = "right", no_wrap = True)
@@ -220,8 +231,6 @@ def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
     partes.append(f"{len(alunos)} de aluno (depende da confirmação do professor)")
 
   return "\n" + " · ".join(partes)
-
-
 
 
 
