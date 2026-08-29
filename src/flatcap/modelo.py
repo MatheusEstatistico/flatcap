@@ -45,7 +45,7 @@ class Cliente:
     tem_anexo: str
 
     @property
-    def indentificado(self)-> bool:
+    def identificado(self)-> bool:
         """
         Testa se da pra criar a pasta automaticamente.
         """
