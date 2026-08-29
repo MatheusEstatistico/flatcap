@@ -116,9 +116,14 @@ def doctor(
 @app.command()
 def listar(
   env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+  conferir_anexos: bool = typer.Option(
     False, "--conferir-anexos",
-    help = "Confira cada anexo da API. (Só é necessário se a coluna `anexo` estiver vazia.)"
-  )
+    help = "Confirma cada anexo na API. Mais lento, e só necessário se a "
+           "coluna 'anexo' vier vazia para todo mundo."
+  ),
 ) -> None:
   """
   Lista as solicitações no REDCap, e o que já foi para o disco.
@@ -196,7 +201,7 @@ def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
 
 def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
   """
-  
+    Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
   """
   pendentes = [c for c in clientes if not localizar_pasta(cfg.root, c.matricula)]
   sem_anexo = [c for c in clientes if not c.tem_anexo]
@@ -215,6 +220,10 @@ def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
     partes.append(f"{len(alunos)} de aluno (depende da confirmação do professor)")
 
   return "\n" + " · ".join(partes)
+
+
+
+
 
 if __name__ == "__main__":
   app()
