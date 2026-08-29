@@ -29,7 +29,7 @@ CAMPOS_REDCAP: list[str] = [
     "matricula1",
     "prof1",
     "matricula2",
-    "aluno2",,
+    "aluno2",
     CAMPO_ANEXO,
 ]
 
