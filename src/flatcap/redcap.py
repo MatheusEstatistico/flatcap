@@ -102,21 +102,44 @@ def _erro_no_corpo(resposta: requests.Response) -> str | None:
 
 def _post(cfg: Config, payload: dict[str, str]) -> Any:
   """
-  Executa uma chamada autenticada e devolve o JSON já codificado. 
+  Chamada autenticada com resposta JSON, já decodificada.
   """
   resposta = _requisitar(cfg, payload)
-
+ 
   erro = _erro_no_corpo(resposta)
   if erro is not None:
-    raise RedcapError(f"O REDCap recusou a chamada: {erro}.")
-
+    raise RedcapError(f"O REDCap recusou a chamada: {erro}")
+ 
   try:
     corpo = resposta.json()
   except ValueError as causa:
     trecho = resposta.text[:200].replace("\n", " ").strip()
     raise RedcapError(
       f"A resposta não era JSON (HTTP {resposta.status_code}).\n"
+      "Isso costuma indicar que REDCAP_API_URL aponta para uma página do "
+      "REDCap, e não para o endpoint da API.\n"
+      f"Começo da resposta: {trecho!r}"
     ) from causa
+ 
+  resposta.raise_for_status()
+ 
+  # `null` é JSON válido e decodifica para None, então passaria pelo try acima
+  # sem erro nenhum e só estouraria camadas adiante, como "NoneType". Nenhuma
+  # chamada do REDCap responde `null` em operação normal, então é aqui que a
+  # investigação começa — e ela precisa do corpo cru para ir a algum lugar.
+  if corpo is None:
+    raise RedcapError(
+      f"O REDCap devolveu um corpo vazio (JSON null) em "
+      f"content={payload.get('content', '?')}.\n"
+      f"HTTP {resposta.status_code}, Content-Type "
+      f"{resposta.headers.get('Content-Type', '(ausente)')}, "
+      f"{len(resposta.content)} bytes.\n"
+      "Confira no REDCap se o token tem a permissão de exportação "
+      "correspondente a esta chamada."
+    )
+ 
+  return corpo
+
 
 def _lista_de_dicionarios(corpo: Any, rotulo: str) -> list[dict[str, str]]:
   """
