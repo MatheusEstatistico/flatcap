@@ -228,7 +228,7 @@ def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
   if incompletos:
     partes.append(f"[yellow]{len(incompletos)} com cadastro incompleto[/yellow]")
   if alunos:
-    partes.append(f"{len(alunos)} de aluno (depende da confirmação do professor)")
+    partes.append(f"{len(alunos)} de alunos")
 
   return "\n" + " · ".join(partes)
 
