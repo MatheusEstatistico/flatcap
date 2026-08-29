@@ -123,10 +123,6 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
  
   resposta.raise_for_status()
  
-  # `null` é JSON válido e decodifica para None, então passaria pelo try acima
-  # sem erro nenhum e só estouraria camadas adiante, como "NoneType". Nenhuma
-  # chamada do REDCap responde `null` em operação normal, então é aqui que a
-  # investigação começa — e ela precisa do corpo cru para ir a algum lugar.
   if corpo is None:
     raise RedcapError(
       f"O REDCap devolveu um corpo vazio (JSON null) em "
@@ -134,8 +130,7 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
       f"HTTP {resposta.status_code}, Content-Type "
       f"{resposta.headers.get('Content-Type', '(ausente)')}, "
       f"{len(resposta.content)} bytes.\n"
-      "Confira no REDCap se o token tem a permissão de exportação "
-      "correspondente a esta chamada."
+      "Confira no REDCap se o token tem a permissão de exportação correspondente a esta chamada."
     )
  
   return corpo
@@ -152,13 +147,11 @@ def _lista_de_dicionarios(corpo: Any, rotulo: str) -> list[dict[str, str]]:
     )
   return [{str(k): "" if v is None else str (v) for k, v in item.items()} for item in corpo]
 
-def _indexar(nome: str, valores: list[str])-> dict[str, str]:
+def _lista(valores: list[str]) -> str:
   """
-  Converte ['a', 'b'] em {'nome[0]': 'a', 'nome[1]': 'b'}. 
-  O REDCap espera parâmetros em lista. 
+  Converte ['a', 'b'] na string 'a,b', que é como o REDCap recebe listas.
   """
-  return {f"{nome}[{i}]": valor for i, valor in enumerate(valores)}
-
+  return ",".join(valor.strip() for valor in valores if valor and valor.strip())
 
 
 # Chamadas Gerais
@@ -197,11 +190,10 @@ def exportar_registros(
       "exportSurveyFields": "false",
       "exportDataAccessGroups": "false",
     }
-  
   if fields:
-    payload.update(_indexar("fields", fields))
+    payload["fields"] = _lista(fields)
   if records:
-    payload.update(_indexar("records", records))
+    payload["records"] = _lista(records)
 
   return _lista_de_dicionarios(_post(cfg, payload), "content=record")
 
@@ -211,7 +203,7 @@ def exportar_metadados(cfg: Config, fields: list[str] | None = None) -> list[dic
   """
   payload: dict[str, str] = {"content": "metadata"}
   if fields:
-    payload.update(_indexar("fields", fields))
+    payload["fields"] = _lista(fields)
 
   return _lista_de_dicionarios(_post(cfg, payload), "content=metadata")
 
@@ -292,7 +284,6 @@ def _nome_do_anexo(resposta: requests.Response) -> str | None:
       nome = _limpar_nome_de_arquivo(achado.group(1))
       if nome:
         return nome
-
   return None
 
 def _limpar_nome_de_arquivo(bruto: str) -> str:
@@ -303,7 +294,6 @@ def _limpar_nome_de_arquivo(bruto: str) -> str:
   nome = bruto.strip().strip("'\"").strip()
   nome = nome.replace("\\", "/").split("/")[-1]
   nome = nome.replace("\x00", "").strip()
-
   return "" if nome in {"", ".", ".."} else nome
 
 
