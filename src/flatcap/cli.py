@@ -7,6 +7,8 @@ Manter isso firme desde o início permite testar tudo sem simular terminal.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -15,7 +17,9 @@ from rich.text import Text
 
 from . import __version__
 from .config import Config, ConfigError, carregar
-from .redcap import RedcapError, exportar_projeto
+from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, normalizar_varios
+from .nomes import localizar_pasta
+from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 app = typer.Typer(
     name="flatcap",
@@ -42,6 +46,15 @@ def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   """
   erro_console.print(Panel(Text(mensagem), title=titulo, border_style="red"))
   return typer.Exit(code=1)
+
+def _configuracao(env: str | None, criar_root: bool = False) -> Config:
+  """
+  Carrega a configuração ou ecerra o comeando com a mensagem do arquivo `config.py`.
+  """
+  try:
+    return carregar(env_file = env, criar_root = criar_root)
+  except ConfigError as erro:
+    raise _abortar("Configuração", str(erro)) from erro
 
 @app.callback()
 def principal(
@@ -99,6 +112,109 @@ def doctor(
 
   console.print(tabela)
   console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
+
+@app.command()
+def listar(
+  env: str | None = typer.Option(
+    False, "--conferir-anexos",
+    help = "Confira cada anexo da API. (Só é necessário se a coluna `anexo` estiver vazia.)"
+  )
+) -> None:
+  """
+  Lista as solicitações no REDCap, e o que já foi para o disco.
+
+  É o que coordena o fluxo diário de trabalho. Mostra o que chego ude novo de um lado e o que já virou pasta dentro do FLATCAP_ROOT.
+  """
+  cfg = _configuracao(env)
+
+  try:
+    registros = exportar_registros(cfg, fields = CAMPOS_REDCAP)
+  except RedcapError as erro:
+    raise _abortar("Conexão com o REDCap", str(erro)) from erro
+
+  clientes = normalizar_varios(registros)
+
+  if not clientes:
+    console.print("Nenhuma nova solicitação.")
+    return
+
+  if conferir_anexos:
+    clientes = _reconferir_anexos(cfg, clientes)
+
+  console.print(_tabela_de_clientes(cfg, clientes))
+  console.print(_resumo(sfg, clientes))
+
+def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
+  """
+  
+  """
+  suspeitos = [c for c in clientes if not c.tem_anexo and c.record_id]
+  if not suspeitos:
+    return clientes
+
+  confirmados: set[str] = set()
+  with console.status(f"Conferindo {len(suspeitos)} anexo na API do REDCap"):
+    for cliente in suspeitos:
+      try:
+        if tem_arquivo(cfg, cliente.record_id, CAMPO_ANEXO):
+          confirmados.add(cliente.record_id)
+      except RedcapError as erro: 
+        erro_console.print(
+          Text(f"Não foi possível conferir o anexo do registro {cliente.record_id}: {erro}",
+               style = "yellow")
+        )
+  return [
+    replace(c, tem_anexo = True) if c.record_id in confirmados else c
+    for c in clientes
+  ]
+
+def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
+  """
+  Monta a tabela que sai do comando `listar`.
+  Valores que vem do REDCap entram como `Text`.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("id", justify = "right", no_wrap = True)
+  tabela.add_column("Tipo", no_wrap = True)
+  tabela.add_column("Matrícula", no_wrap = True)
+  tabela.add_column("Nome", overflow = "fold")
+  tabela.add_column("Anexo", justify = "center", no_wrap = True)
+  tabela.add_column("Pasta local", overflow = "fold")
+
+  for cliente in clientes:
+    pasta = localizar_pasta(cfg.root, cliente.matricula)
+    tabela.add_row(
+      Text(cliente.record_id or "?"),
+      Text(cliente.tipo, style = "yellow" if cliente.tipo == INDEFINIDO else ""),
+      Text(cliente.matricula or "—", style = "" if cliente.matricula else "yellow"),
+      Text(cliente.nome or "(sem nome)", style = "" if cliente.nome else "yellow"),
+      Text("sim", style = "green") if cliente.tem_anexo else Text("não", style = "yellow"),
+      Text(pasta.name, style = "green") if pasta else Text("—", style = "dim"),
+    )
+
+  return tabela
+
+def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
+  """
+  
+  """
+  pendentes = [c for c in clientes if not localizar_pasta(cfg.root, c.matricula)]
+  sem_anexo = [c for c in clientes if not c.tem_anexo]
+  incompletos = [c for c in clientes if not c.identificado]
+  alunos = [c for c in clientes if c.tipo == ALUNO]
+
+  partes = [
+    f"[bold]{len(clientes)}[/bold] solicitações",
+    f"[bold]{len(pendentes)}[/bold] sem pasta local",
+  ]
+  if sem_anexo:
+    partes.append(f"[yellow]{len(sem_anexo)} sem anexo[/yellow]")
+  if incompletos:
+    partes.append(f"[yellow]{len(incompletos)} com cadastro incompleto[/yellow]")
+  if alunos:
+    partes.append(f"{len(alunos)} de aluno (depende da confirmação do professor)")
+
+  return "\n" + " · ".join(partes)
 
 if __name__ == "__main__":
   app()
