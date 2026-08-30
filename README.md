@@ -7,8 +7,13 @@ Tudo pelo terminal
 
 ## configurações 
 
+
+
 ## comandos 
 
+- doctor: 
+
+- listar: 
 
 ## opções 
 
