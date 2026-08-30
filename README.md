@@ -15,5 +15,9 @@ Tudo pelo terminal
 
 - listar: 
 
+- novo: 
+
+- 
+
 ## opções 
 
