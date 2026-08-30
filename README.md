@@ -5,13 +5,11 @@ Ferramenta de automação de processos estatísticos com Python e REDCap.
 
 
 ## configurações 
-
 Para iniciar é preciso ... 
 
 
 
 ## funcionamento
-
 Tudo pelo terminal 
 
 
@@ -29,10 +27,9 @@ Tudo pelo terminal
 
 
 ## opções 
-
 Para otimizar o funcionamento, ainda é possível ...
 
 
 
 ## considerações importantes
-
+Vale destacar ainda que ...
