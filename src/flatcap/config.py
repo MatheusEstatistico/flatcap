@@ -8,11 +8,12 @@ Isso permite rodar em outra máquina, em um servidor ou em um teste sem editar a
 """
 
 from __future__ import annotations
-from dataclasses import dataclass
-from dotenv import find_dotenv, load_dotenv
-from pathlib import Path
 
 import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import find_dotenv, load_dotenv
 
 """
 Chave: explicação mostrada quando ela falta. 
@@ -119,7 +120,7 @@ def _validar_api_url(valor: str) -> str:
     """
     if "redcap.link" in valor:
         raise ConfigError(
-            "REDCAP_API_URL aposta para 'redcap.link', que é o link curto do syrvey, não o endpoint da API.\n"
+            "REDCAP_API_URL aponta para 'redcap.link', é o link do syrvey, não o endpoint da API.\n"
             "Use o formato 'https://<servidor>/redcap/api/'."
         )
     if not valor.startswith(("http://", "https://")):
@@ -176,7 +177,7 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
         linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
         linhas.append("Crie aquivo .env copiando o modelo versionado:")
         linhas.append("     cp .env.example .env")
-    return "\n".join("linhas")
+    return "\n".join(linhas)
 
 
 
