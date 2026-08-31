@@ -14,12 +14,23 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
 
 from . import __version__
 from .config import Config, ConfigError, carregar
 from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, normalizar_varios
 from .nomes import localizar_pasta
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
+from .projeto import (
+    ARQUIVO_HISTORICO,
+    ARQUIVO_PROJETO,
+    ClienteIncompletoError,
+    Plano,
+    ProjetoExistenteError,
+    RegistroNaoEncontradoError,
+    executar,
+    preparar,
+)
 
 app = typer.Typer(
     name="flatcap",
@@ -231,6 +242,115 @@ def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
     partes.append(f"{len(alunos)} de alunos")
 
   return "\n" + " · ".join(partes)
+
+@app.command()
+def novo(
+  record_id: str = typer.Argument(
+    ...,
+    help = "record_id da solicitação no REDCap, como aparece no `flatcap listar`."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Cria a pasta do projeto a partir de uma solicitação do REDCap.
+
+  POR PADRÃO APENAS SIMULA: desenha a árvore que seria criada e não escreve nada. Repita com --sim para executar.
+  """
+  cfg = _configuracao(env)
+
+  try: 
+    plano = preparar(cfg, record_id)
+  except ProjetoExistenteError as erro: 
+    console.print(Panel(Text(str(erro)), title = "Nada para fazer", border_style = "yellow"))
+    return
+  except (RegistroNaoEncontradoError, ClienteIncompletoError) as erro:
+    raise _abortar("Solicitação", str(erro)) from erro
+  except RedcapError as erro:
+    raise _abortar("Conexão com o REDCap", str(erro)) from erro
+
+  console.print(_cabecalho_do_plano(plano))
+  console.print(_arvore_do_plano(cfg, plano))
+
+  if not plano.tem_anexo:
+    console.print(
+      Text(
+        f"Este registro não tem anexo no campo '{CAMPO_ANEXO}'." 
+        "A pasta é criada assim mesmo — o banco entra depois, pela Fase 3.",
+        style = "yellow",
+      )
+    )
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi criado.\n"
+      "Repita com [bold]--sim[/bold] para executar."
+    )
+    return
+
+  try:
+    resultado = executar(plano)
+  except ProjetoExistenteError as erro: 
+    console.print(Panel(Text(str(erro)), title = "Nada para fazer", border_style = "yellow"))
+    return
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.raiz}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "A pasta pode ter ficado pela metade — confira antes de rodar de novo."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  quantos = len(resultado.criados)
+  console.print(
+    f"\n[green]Pasta criada.[/green] {quantos} "
+    f"{_plural(quantos, 'item', 'itens')} em {plano.raiz}"
+  ) 
+
+def _cabecalho_do_plano(plano: Plano) -> Text:
+  """
+  Uma linha identificando de quem é a solicitação, antes de desenhar a árvore.
+  Confirma que o `record_id` digitado é mesmo o cliente que você tinha em mente.
+  """
+  cliente = plano.cliente
+  return Text.assemble(
+    ("Registro ", "dim"), (cliente.record_id or "?", "bold"),
+    ("  ·  ", "dim"), (cliente.tipo, "yellow" if cliente.tipo == INDEFINIDO else ""),
+    ("  ·  ", "dim"), ("matrícula ", "dim"), (cliente.matricula, "bold"),
+    ("  ·  ", "dim"), (cliente.nome, "bold"),
+  )
+
+def _arvore_do_plano(cfg: Config, plano: Plano) -> Tree:
+  """
+  Desenha exatamente o que `executar` criaria, lendo o próprio `Plano`.
+  """
+  arvore = Tree(Text(str(cfg.root), style = "dim"))
+  raiz = arvore.add(Text(plano.raiz.name, style = "bold green"))
+
+  for subpasta in plano.subpastas:
+    ramo = raiz.add(Text(f"{subpasta.name}/"))
+    if plano.banco is not None and plano.banco.caminho.parent == subpasta:
+      ramo.add(
+        Text.assemble(
+          (plano.banco.caminho.name, "green"),
+          (f"   {plano.banco.tamanho_legivel} · somente leitura", "dim"),
+        )
+      )
+    elif subpasta.name.startswith("1.") and plano.banco is None:
+      ramo.add(Text("(sem anexo no REDCap)", style = "yellow"))
+
+  raiz.add(Text(ARQUIVO_HISTORICO))
+  raiz.add(Text(ARQUIVO_PROJETO))
+  return arvore
 
 
 
