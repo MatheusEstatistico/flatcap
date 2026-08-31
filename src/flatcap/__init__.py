@@ -4,6 +4,7 @@ FlatCap — O pacote e organizado em camadas finas, cada uma com uma responsabil
     redcap.py   conversa com a API do REDCap
     modelo.py   traduz o questionário para o domínio (Cliente)
     nomes.py    regra de nomenclatura das pastas e busca no disco
+    projeto.py  
 
     cli.py      expoe os comandos no terminal
 """
