@@ -1,13 +1,15 @@
 """
 Interface de linha de comando do FlatCap.
 
-Esta camada não contém regras de negócio, ela lê argumentos, chama as camadas de baixo, formata a saída e escolhe o código de saída do processo.
+Esta camada não contém regras de negócio, ela lê argumentos, chama as camadas de baixo, 
+formata a saída e escolhe o código de saída do processo.
 Manter isso firme desde o início permite testar tudo sem simular terminal. 
 """
 
 from __future__ import annotations
 
 from dataclasses import replace
+from pathlib import Path
 
 import typer
 from rich.console import Console
@@ -18,19 +20,33 @@ from rich.tree import Tree
 
 from . import __version__
 from .config import Config, ConfigError, carregar
+from .dados import (
+    ArquivoOrigemError,
+    DadosError,
+    LinhaDoTempo,
+    PlanoDados,
+    VersaoDuplicadaError,
+    executar_adicao,
+    linha_do_tempo,
+    preparar_adicao,
+)
+from .ficha import IMPLEMENTACAO, FichaError, localizar_projeto
 from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, normalizar_varios
 from .nomes import localizar_pasta
-from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 from .projeto import (
     ARQUIVO_HISTORICO,
     ARQUIVO_PROJETO,
+    PASTA_ANTIGAS,
+    PASTA_DADOS,
     ClienteIncompletoError,
     Plano,
     ProjetoExistenteError,
     RegistroNaoEncontradoError,
     executar,
     preparar,
+    tamanho_legivel,
 )
+from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 app = typer.Typer(
     name="flatcap",
