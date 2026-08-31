@@ -47,7 +47,6 @@ class Config:
     """
     Configuração válida. Imutável de propósito: ninguém altera em trânsito.
     """
-
     api_url: str
     token: str
     root: Path
@@ -136,7 +135,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
 
     if not root.is_absolute():
         raise ConfigError(
-            "FLATCAP_ROOT precisa de um caminho absoluto.\n" \
+            "FLATCAP_ROOT precisa de um caminho absoluto.\n"
             f"Caminho atual: {valor!r}."
         )
     
@@ -176,7 +175,7 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
         linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
         linhas.append("Crie aquivo .env copiando o modelo versionado:")
         linhas.append("     cp .env.example .env")
-    return "\n".join("linhas")
+    return "\n".join(linhas)
 
 
 
