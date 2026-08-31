@@ -143,5 +143,142 @@ def executar(plano: Plano) -> Resultado:
     """
     
     """
+    criados: list[Path] = []
+    avisos: list[str] = []
+
+    try:
+        plano.raiz.mkdir(parents = True)
+    except FileExistsError as erro:    
+        raise ProjetoExistenteError(
+            f"A pasta apareceu no disco entre a simulação e a execução: {plano.raiz}\n"
+            "Nada foi alterado. Rode `flatcap novo` novamente e veja o estado atual."
+        ) from erro
+    criados.append(plano.raiz)
+
+    for subpasta in plano.subpastas:
+        subpasta.mkdir()
+        criados.append(subpasta)
+
+    if plano.banco is not None:
+        plano.banco.caminho.write_bytes(plano.banco.conteudo)
+        criados.append(plano.banco.caminho)
+        if not marcar_somente_leitura(plano.banco.caminho):
+            avisos.append(
+                f"Não consegui marcar {plano.banco.caminho.name} como somente-leitura.\n"
+                "O arquivo está lá, mas sem a barreira contra edição acidental no Excel."
+            )
+
+    for nome_arquivo, conteudo in (
+        (ARQUIVO_PROJETO, plano.projeto_yaml),
+        (ARQUIVO_HISTORICO, plano.historico_md),
+    ):
+        caminho = plano.raiz / nome_arquivo
+        _escrever_texto(camiho, conteudo)
+        criados.append(caminho)
+
+    return Resultado(criados = tuple(criados), avisos = tuple(avisos))
+
+def anotar(raiz: Path, acao: str, agora: datetime | None = None) -> None:
+    """
+    
+    """
     pass
+
+def marcar_somente_leitura(caminho: Path) -> bool:
+    """
+    
+    """
+    pass
+
+def nome_do_banco(anexo: ArquivoRedcap, quando: date, record_id: str = "") -> str:
+    """
+    
+    """
+    pass
+
+
+# Backend de `preparar`
+
+def _buscar_clientes(cfg: Config, record_id: str) -> Cliente:
+    """
+    
+    """
+    pass
+
+def _conferir_identificacao(cliente: Cliente) -> None:
+    """
+    
+    """
+    pass
+
+def _destino(cfg: Config, cliente: Cliente) -> Path:
+    """
+    
+    """
+    pass
+
+def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
+    """
+    
+    """
+    pass
+
+def _montar_plano(cliente: Cliente, raiz: Path, aneco: ArquivoRedcap | None, quando: datetime,) -> Plano:
+    """
+    
+    """
+    pass
+
+
+# Conteúdo de arquivos de texto 
+
+class _SemAncoras(yaml.SafeDumper):
+    """
+    
+    """
+    pass 
+
+_CABECALHO_YAML = """/
+
+"""
+
+def _texto_projeto_yaml(cliente: Cliente, banco: ArquivoPlanejado | None, hoje:date) -> str:
+    """
+    
+    """
+    pass
+
+def _texto_historico(cliente: Cliente, banco: ArquivoPlanejado | None, quando: datetime) -> str:
+    """
+    
+    """
+    pass
+
+def _linha_historico(acao: str, quando:datetime) -> str:
+    """
+    
+    """
+    pass
+
+
+# Funções auxiliares 
+
+def _escrever_texto(caminho: Path, conteudo: str) -> str:
+    """
+    
+    """
+    pass
+
+def _extensao_do_mine(tipe_mine: str) -> str:
+    """
+    
+    """
+    pass
+
+def _tamanho_legivel(bytes_: int) -> str:
+    """
+    
+    """
+    pass
+
 
