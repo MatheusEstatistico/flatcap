@@ -175,7 +175,7 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     else:
         linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
         linhas.append("Crie aquivo .env copiando o modelo versionado:")
-        linhas.append("     cp .emv.example .env")
+        linhas.append("     cp .env.example .env")
     return "\n".join("linhas")
 
 
