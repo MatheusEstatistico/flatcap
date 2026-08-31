@@ -31,11 +31,51 @@ PREFIXO = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
 STATUS_INICIAL = "novo"
 
-_MIMEE_GENERICOS = {"", "application/octet-stream", "binary/octet-stream"}
+_MIMES_GENERICOS = {"", "application/octet-stream", "binary/octet-stream"}
 
-class ProjectERror(RuntimeError):
+class ProjetoError(RuntimeError):
+    """
+    Falha ao montar a pasta do projeto, já traduzida para o usuário.
+
+    Erro próprio pelo mesmo motivo de `ConfigError` e `RedcapError`: a CLI captura
+    esta classe e transforma em painel; qualquer outra exceção é bug de verdade e
+    deve subir com o traceback inteiro.
+    """
+
+
+class RegistroNaoEncontradoError(ProjetoError):
+    """
+    O REDCap não tem nenhum registro com este `record_id`.
+    """
+
+
+class ClienteIncompletoError(ProjetoError):
+    """
+    O registro existe, mas não dá para nomear a pasta a partir dele.
+
+    A automação cria pasta apenas para registro bem formado. Quem diagnostica é o
+    `flatcap listar`, que já marca esses casos em amarelo; o `novo` apenas se
+    recusa a produzir uma pasta que você teria de renomear depois.
+    """
+
+class ProjetoExistenteError(ProjetoError):
     """
     
     """
-    pass
 
+    def __init__(self, mensagem: str, pasta: Path) -> None:
+        super().__init__(mensagem)
+        self.pasta = pasta
+
+@dataclass(frozen = True)
+class ArquivoPlanejado: 
+    """
+    
+    """
+    caminho: Path
+    conteudo: bytes
+    sha256: str
+
+    @property
+    def tamanho(self) -> int:
+        pass
