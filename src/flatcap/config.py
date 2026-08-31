@@ -48,7 +48,6 @@ class Config:
     """
     Configuração válida. Imutável de propósito: ninguém altera em trânsito.
     """
-
     api_url: str
     token: str
     root: Path
@@ -137,7 +136,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
 
     if not root.is_absolute():
         raise ConfigError(
-            "FLATCAP_ROOT precisa de um caminho absoluto.\n" \
+            "FLATCAP_ROOT precisa de um caminho absoluto.\n"
             f"Caminho atual: {valor!r}."
         )
     
