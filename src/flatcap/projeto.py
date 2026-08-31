@@ -202,7 +202,7 @@ def anotar(raiz: Path, acao: str, agora: datetime | None = None) -> None:
 
 def marcar_somente_leitura(caminho: Path) -> bool:
     """
-    
+    Tira a permissão de escrita do arquivo. Devolve se conseguiu.
     """
     try:
         modo = caminho.stat().st_mode
@@ -213,7 +213,7 @@ def marcar_somente_leitura(caminho: Path) -> bool:
 
 def nome_do_banco(anexo: ArquivoRedcap, quando: date, record_id: str = "") -> str:
     """
-    
+    Monta `00_redcap_AAAA-MM-DD_<nome original>`.
     """
     base = sanitizar(anexo.nome)
     if not base:
@@ -264,7 +264,7 @@ def _conferir_identificacao(cliente: Cliente) -> None:
 
 def _destino(cfg: Config, cliente: Cliente) -> Path:
     """
-    
+    Decide onde a pasta vai ficar e garante que ainda não existe. A conferência é por matrícula, via `localizar_pasta`.
     """
     existente = localizar_pasta(Path(cfg.root), cliente.matricula)
     if existente is not None:
@@ -292,14 +292,14 @@ def _destino(cfg: Config, cliente: Cliente) -> Path:
 
 def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
     """
-    
+    Baixa o banco anexado. Devolve `None` quando o registro não tem anexo.
     """
     try:
         return exportar_arquivo(cfg, cliente.record_id, CAMPO_ANEXO)
     except ArquivoAusenteError:
         return None
 
-def _montar_plano(cliente: Cliente, raiz: Path, aneco: ArquivoRedcap | None, quando: datetime,) -> Plano:
+def _montar_plano(cliente: Cliente, raiz: Path, anexo: ArquivoRedcap | None, quando: datetime,) -> Plano:
     """
     Converte cliente + anexo em um `Plano` inteiramente resolvido.
     """
@@ -328,51 +328,122 @@ def _montar_plano(cliente: Cliente, raiz: Path, aneco: ArquivoRedcap | None, qua
 
 class _SemAncoras(yaml.SafeDumper):
     """
+    Dumper que nunca cria âncora nem alias.
     
+    O PyYAML deduplica valores repetidos: como `criado_em` e a `data` do banco são a mesma data, o arquivo saía com `criado_em: &id001 2026-08-29` e `data: *id001`.
+    Subclasse de `SafeDumper`, então a garantia de não instanciar objeto arbitrário na leitura continua valendo.
     """
-    pass 
+    def ignore_aliases(self, data: object) -> bool:  # noqa: ARG002
+        return True
 
 _CABECALHO_YAML = """/
-
+# projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.
+#
+# Este arquivo é seu: edite à vontade. O FlatCap lê o que está aqui e não
+# sobrescreve o que você escreveu.
+#
+#   prazo     10 dias úteis contados da reunião. A data da reunião está no
+#             calendário, não no REDCap — preencha depois de agendá-la.
+#   status    novo | em_analise | entregue
+#   analises  o que foi combinado na reunião. A Fase 7 lê esta lista para
+#             saber quais módulos rodar.
+#   dados     uma entrada por versão do banco, em ordem cronológica.
 """
 
 def _texto_projeto_yaml(cliente: Cliente, banco: ArquivoPlanejado | None, hoje:date) -> str:
     """
-    
+    Monta o `projeto.yaml`.
     """
-    pass
+    dados: list[dict[str, object]] = []
+    if banco is not None:
+        dados.append(
+            {
+                "arquivo": banco.caminho.name,
+                "origem": "redcap",
+                "sha256": banco.sha256,
+                "tamanho_bytes": banco.tamanho,
+                "data": hoje,
+            }
+        )
+
+    corpo: dict[str, object] = {
+        "record_id": cliente.record_id,
+        "tipo": cliente.tipo,
+        "matricula": cliente.matricula,
+        "nome": cliente.nome,
+        "criado_em": hoje,
+        "prazo": None,
+        "status": STATUS_INICIAL,
+        "analises": [],
+        "dados": dados,
+    }
+
+    corpo_yaml = yaml.dump(
+        corpo,
+        Dumper=_SemAncoras,
+        sort_keys=False,
+        allow_unicode=True,
+        default_flow_style=False,
+    )
+    return f"{_CABECALHO_YAML}\n{corpo_yaml}"
 
 def _texto_historico(cliente: Cliente, banco: ArquivoPlanejado | None, quando: datetime) -> str:
     """
-    
+    Monta o `historico.md` com a primeira linha de log já escrita.
     """
-    pass
+    titulo = nome_pasta(cliente.matricula, cliente.nome)
 
-def _linha_historico(acao: str, quando:datetime) -> str:
-    """
-    
-    """
-    pass
+    if banco is not None:
+        acao = (
+            f"`flatcap novo {cliente.record_id}` — pasta criada; anexo "
+            f"`{banco.caminho.name}` ({banco.tamanho_legivel}) baixado do "
+            f"campo `{CAMPO_ANEXO}`."
+        )
+    else:
+        acao = (
+            f"`flatcap novo {cliente.record_id}` — pasta criada. O registro não tem "
+            f"anexo no campo `{CAMPO_ANEXO}`; o banco ainda precisa ser recebido."
+        )
+
+    return (
+        f"# Histórico — {titulo}\n"
+        "\n"
+        "Uma linha por ação do FlatCap nesta pasta, em ordem cronológica.\n"
+        "\n"
+        f"{_linha_historico(acao, quando)}"
+    )
+
+def _linha_historico(acao: str, quando: datetime) -> str:
+    return f"- **{quando:%Y-%m-%d %H:%M}** — {acao}\n"
 
 
 # Funções auxiliares 
 
-def _escrever_texto(caminho: Path, conteudo: str) -> str:
+def _escrever_texto(caminho: Path, conteudo: str) -> None:
     """
-    
+    Escreve texto sempre em UTF-8 e sempre com `\\n`.
     """
-    pass
+    caminho.write_text(conteudo, encoding="utf-8", newline="\n")
 
-def _extensao_do_mime(tipe_mine: str) -> str:
-    """
-    
-    """
-    pass
+def _extensao_do_mime(tipo_mime: str) -> str:
+    tipo = (tipo_mime or "").strip().lower()
+    if tipo in _MIMES_GENERICOS:
+        return ""
+    return mimetypes.guess_extension(tipo) or ""
 
 def _tamanho_legivel(bytes_: int) -> str:
     """
-    
+    Formata o tamanho para leitura humana, com vírgula decimal.
     """
-    pass
+    tamanho = float(bytes_)
+    for unidade in ("B", "KiB", "MiB", "GiB"):
+        if tamanho < 1024 or unidade == "GiB":
+            if unidade == "B":
+                return f"{int(tamanho)} B"
+            return f"{tamanho:.1f} {unidade}".replace(".", ",")
+        tamanho /= 1024
+    return f"{bytes_} B"
+
+
 
 
