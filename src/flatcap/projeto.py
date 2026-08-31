@@ -25,6 +25,9 @@ SUBPASTAS: tuple[str, ...] = (
     "3. Análises",
 )
 
+ARQUIVO_PROJETO = "projeto.yaml"
+ARQUIVO_HISTORICO = "historico.md"
+
 PASTA_DADOS = SUBPASTAS[0] # o .docx fica na raíz do projeto
 
 PREFIXO = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
@@ -58,6 +61,7 @@ class ClienteIncompletoError(ProjetoError):
     recusa a produzir uma pasta que você teria de renomear depois.
     """
 
+
 class ProjetoExistenteError(ProjetoError):
     """
     Já existe pasta para essa matrícula. Nada foi mudado. 
@@ -68,6 +72,7 @@ class ProjetoExistenteError(ProjetoError):
     def __init__(self, mensagem: str, pasta: Path) -> None:
         super().__init__(mensagem)
         self.pasta = pasta
+
 
 @dataclass(frozen = True)
 class ArquivoPlanejado: 
@@ -91,6 +96,7 @@ class ArquivoPlanejado:
         """
         return _tamanho_legivel(self.tamanho)
 
+
 @dataclass(frozen = True)
 class Plano:
     """
@@ -111,6 +117,7 @@ class Plano:
     def tem_anexo(self) -> bool:
         return self.banco is not None
 
+
 @dataclass(frozen = True)
 class Resultado:
     """
@@ -123,14 +130,20 @@ class Resultado:
 
 
 # Casos de uso
-
 def preparar(
         cfg: Config,
         record_id: str,
         agora: datetime | None = None,
 ) -> Plano:
     """
-    
+    Lê o REDCap e devolve o plano completo na pasta. Nada de novo. 
+
+    Args; 
+        agora: relógio injetável. Sem ele, os testes não teriam como comparar o nome do arquivo, que carrega a data.
+
+    Raises: 
+        RegistroNaoEncontradoError, ClienteIncompletoError, ProjetoExistenteError
+        RedcapError: falha de rede, token ou permissão.
     """
     quando = agora or datetime.now()
     cliente = _buscar_cliente(cfg, record_id)
@@ -141,18 +154,20 @@ def preparar(
 
 def executar(plano: Plano) -> Resultado:
     """
-    
+    Escreve o plano no disco. Escritor puro: não decide, não consulta a rede.
     """
     criados: list[Path] = []
     avisos: list[str] = []
 
     try:
-        plano.raiz.mkdir(parents = True)
-    except FileExistsError as erro:    
+        plano.raiz.mkdir(parents=True)
+    except FileExistsError as erro:
         raise ProjetoExistenteError(
             f"A pasta apareceu no disco entre a simulação e a execução: {plano.raiz}\n"
-            "Nada foi alterado. Rode `flatcap novo` novamente e veja o estado atual."
+            "Nada foi alterado. Rode `flatcap novo` de novo para ver o estado atual.",
+            plano.raiz,
         ) from erro
+    
     criados.append(plano.raiz)
 
     for subpasta in plano.subpastas:
@@ -173,33 +188,44 @@ def executar(plano: Plano) -> Resultado:
         (ARQUIVO_HISTORICO, plano.historico_md),
     ):
         caminho = plano.raiz / nome_arquivo
-        _escrever_texto(camiho, conteudo)
+        _escrever_texto(caminho, conteudo)
         criados.append(caminho)
 
     return Resultado(criados = tuple(criados), avisos = tuple(avisos))
 
 def anotar(raiz: Path, acao: str, agora: datetime | None = None) -> None:
     """
-    
+    Acrescenta uma linha para o `historico.md`. 
     """
-    pass
+    with (raiz / ARQUIVO_HISTORICO).open("a", encoding="utf-8", newline="\n") as arquivo:
+        arquivo.write(_linha_historico(acao, agora or datetime.now()))
 
 def marcar_somente_leitura(caminho: Path) -> bool:
     """
     
     """
-    pass
+    try:
+        modo = caminho.stat().st_mode
+        caminho.chmod(modo & ~(stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH))
+    except OSError:
+        return False
+    return True
 
 def nome_do_banco(anexo: ArquivoRedcap, quando: date, record_id: str = "") -> str:
     """
     
     """
-    pass
+    base = sanitizar(anexo.nome)
+    if not base:
+        base = f"banco_{sanitizar(record_id) or 'sem_id'}"
+    if not Path(base).suffix:
+        base += _extensao_do_mime(anexo.tipo_mime)
+    return f"{PREFIXO_REDCAP}{quando:%Y-%m-%d}_{base}"
 
 
 # Backend de `preparar`
 
-def _buscar_clientes(cfg: Config, record_id: str) -> Cliente:
+def _buscar_cliente(cfg: Config, record_id: str) -> Cliente:
     """
     
     """
