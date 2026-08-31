@@ -42,7 +42,7 @@ class Cliente:
     tipo: str
     matricula: str
     nome: str
-    tem_anexo: str
+    tem_anexo: bool
 
     @property
     def identificado(self)-> bool:
