@@ -75,7 +75,8 @@ def _plural(quantidade: int, singular: str, plural: str) -> str:
 def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   """
   Imprime o erro em um painel e devolve a exceção que encerra o comando.
-  `Text(...)` em vez de uma string crua: impede que colchetes vindos da mensagem de erro sejam interpretados como marcação do rich.
+  `Text(...)` em vez de uma string crua: impede que colchetes vindos da mensagem
+  de erro sejam interpretados como marcação do rich.
   """
   erro_console.print(Panel(Text(mensagem), title=titulo, border_style="red"))
   return typer.Exit(code=1)
