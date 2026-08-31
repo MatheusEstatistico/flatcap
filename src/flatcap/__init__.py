@@ -8,4 +8,4 @@ FlatCap — O pacote e organizado em camadas finas, cada uma com uma responsabil
     cli.py      expoe os comandos no terminal
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
