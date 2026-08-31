@@ -30,7 +30,7 @@ ARQUIVO_HISTORICO = "historico.md"
 
 PASTA_DADOS = SUBPASTAS[0] # o .docx fica na raíz do projeto
 
-PREFIXO = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
+PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
 STATUS_INICIAL = "novo"
 
@@ -227,33 +227,101 @@ def nome_do_banco(anexo: ArquivoRedcap, quando: date, record_id: str = "") -> st
 
 def _buscar_cliente(cfg: Config, record_id: str) -> Cliente:
     """
-    
+    Traz um único registro do REDCap e normaliza.
     """
-    pass
+    pedido = str(record_id).strip()
+    registros = exportar_registros(cfg, fields=CAMPOS_REDCAP, records=[pedido])
+
+    if not registros:
+        raise RegistroNaoEncontradoError(
+            f"Não existe registro {pedido!r} neste projeto do REDCap.\n"
+            "Rode `flatcap listar` para ver os record_id disponíveis."
+        )
+
+    cliente = normalizar(registros[0])
+    # O `record_id` normalizado vem do corpo da resposta; se por alguma razão vier
+    # vazio, o que o usuário digitou é a melhor identificação que temos.
+    return cliente if cliente.record_id else replace(cliente, record_id=pedido)
 
 def _conferir_identificacao(cliente: Cliente) -> None:
     """
-    
+    Recusa registro sem matrícula ou sem nome, dizendo qual dos dois falta.
     """
-    pass
+    faltando = [
+        rotulo
+        for rotulo, valor in (("matrícula", cliente.matricula), ("nome", cliente.nome))
+        if not valor
+    ]
+    if not faltando:
+        return
+
+    raise ClienteIncompletoError(
+        f"O registro {cliente.record_id} não tem {' nem '.join(faltando)}.\n"
+        "Sem isso, a pasta sairia com um nome que você teria de corrigir à mão depois — e o `flatcap listar` deixaria de reencontrá-la.\n"
+        "Complete o registro no REDCap e rode de novo."
+        "O `flatcap listar` marca em amarelo os cadastros incompletos."
+    )
 
 def _destino(cfg: Config, cliente: Cliente) -> Path:
     """
     
     """
-    pass
+    existente = localizar_pasta(Path(cfg.root), cliente.matricula)
+    if existente is not None:
+        raise ProjetoExistenteError(
+            f"Já existe pasta para a matrícula {cliente.matricula}:\n"
+            f"  {existente}\n"
+            "Nada foi alterado. O `novo` nunca escreve sobre pasta existente",
+            existente,
+        )
+
+    try:
+        destino = Path(cfg.root) / nome_pasta(cliente.matricula, cliente.nome)
+    except NomeInvalidoError as erro:
+        raise ClienteIncompletoError(
+            f"A matrícula {cliente.matricula!r} do registro {cliente.record_id} não sobrou nada depois da limpeza de caracteres.\n"
+            "Corrija o registro no REDCap."
+        ) from erro
+
+    if destino.exists():
+        raise ProjetoExistenteError(
+            f"Já existe algo neste caminho: {destino}\nNada foi alterado.",
+            destino,
+        )
+    return destino
 
 def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
     """
     
     """
-    pass
+    try:
+        return exportar_arquivo(cfg, cliente.record_id, CAMPO_ANEXO)
+    except ArquivoAusenteError:
+        return None
 
 def _montar_plano(cliente: Cliente, raiz: Path, aneco: ArquivoRedcap | None, quando: datetime,) -> Plano:
     """
-    
+    Converte cliente + anexo em um `Plano` inteiramente resolvido.
     """
-    pass
+    hoje = quando.date()
+    banco = None
+    
+    if anexo is not None:
+        banco = ArquivoPlanejado(
+            caminho=raiz / PASTA_DADOS / nome_do_banco(anexo, hoje, cliente.record_id),
+            conteudo=anexo.conteudo,
+            sha256=hashlib.sha256(anexo.conteudo).hexdigest(),
+        )
+
+    return Plano(
+        cliente=cliente,
+        raiz=raiz,
+        subpastas=tuple(raiz / nome for nome in SUBPASTAS),
+        banco=banco,
+        projeto_yaml=_texto_projeto_yaml(cliente, banco, hoje),
+        historico_md=_texto_historico(cliente, banco, quando),
+        quando=quando,
+    )
 
 
 # Conteúdo de arquivos de texto 
@@ -295,7 +363,7 @@ def _escrever_texto(caminho: Path, conteudo: str) -> str:
     """
     pass
 
-def _extensao_do_mine(tipe_mine: str) -> str:
+def _extensao_do_mime(tipe_mine: str) -> str:
     """
     
     """
