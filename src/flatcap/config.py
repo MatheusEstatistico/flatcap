@@ -50,7 +50,7 @@ class Config:
 
     api_url: str
     token: str
-    root: str
+    root: Path
     origem_env: str | None = None # caminho do .env efetivamente carregado
 
     @property
@@ -73,8 +73,8 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
     Raíses:
         ConfigError: com a lista do que falta e por quê cada item importa.
     """
-    caminho_env = str(env_file) if env_file else find_dotenv(usecwd = True)
-    if caminho_env:
+    caminho_env = _localizar_env(env_file)
+    if caminho_env: 
         load_dotenv(caminho_env, override = False)
 
     valores = {chave: (os.environ.get(chave) or "").strip() for chave in CHAVES}
@@ -92,8 +92,26 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
         root = root,
         origem_env = caminho_env or None,
     )
-    
+
+
 # Validações individuais 
+
+def _localizar_env(env_file: str | Path | None) -> str:
+    """
+    Decide qual `.env` carregar. Devolve uma string vazia quando não tem nenhum. 
+
+    Um `--env` apontado para um arquivo que não existe é barrado. 
+    """
+    if env_file is None:
+        return find_dotenv(usecwd = True)
+
+    caminho = Path(env_file).expanduser()
+    if not caminho.exists():
+        raise ConfigError(
+            f"O arquivo indicado em `--env` não existe\n"
+            f"Confira o caminho do arquivo. Atual: {caminho}"
+        )
+    return str(caminho)
 
 def _validar_api_url(valor: str) -> str:
     """
@@ -108,7 +126,7 @@ def _validar_api_url(valor: str) -> str:
         raise ConfigError(
             "REDCAP_API_URL precisa começar com https:// ou http://"
         )
-    return valor if valor.endswith("/") else valor + "/"
+    return valor if valor.endswith("/") else valor + "/" # essa barra final serve para o server não responder "301"
 
 def _validar_root(valor: str, criar: bool = False) -> Path:
     """
@@ -121,6 +139,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
             "FLATCAP_ROOT precisa de um caminho absoluto.\n" \
             f"Caminho atual: {valor!r}."
         )
+    
     if not root.exists():
         if not criar:
             raise ConfigError(
@@ -140,13 +159,16 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
         )
     return root.resolve()
 
+
+# Mensagens 
+
 def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     """
     Monta o texto do erro de chaves ausentes, com o próximo passo explícito.
     """
     linhas = ["Configuração incompleta. Fatam:", ""]
     linhas += [f"{chave}\n {CHAVES[chave]}" for chave in faltando]
-    linhas.append("")
+
     if caminho_env:
         linhas.append(f"Arquivo .env lido: {caminho_env}")
         linhas.append("Preencha as chaves acima novamente e reinicie o FlatCap.")
@@ -155,5 +177,8 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
         linhas.append("Crie aquivo .env copiando o modelo versionado:")
         linhas.append("     cp .emv.example .env")
     return "\n".join("linhas")
+
+
+
 
 
