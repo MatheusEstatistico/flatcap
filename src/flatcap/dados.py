@@ -236,4 +236,42 @@ def executar_adicao(plano: PlanoDados) -> ResultadoDados:
     )
 
 
-# 
+# Caso de uso: a linha do tempo
+
+def linha_do_tempo(raiz: Path, conferir: bool = True) -> LinhaDoTempo:
+    """
+    
+    """
+    ficha = ler(Path(raiz))
+    pastas = (Path(raiz) / PASTA_DADOS, Path(raiz) / PASTA_ANTIGAS)
+
+    presentes: dict[str, Path] = {}
+    for pasta in pastas:
+        if not pasta.is_dir():
+            continue
+        for arquivo in sorted(pasta.iterdir()):
+            if arquivo.is_file() and not arquivo.name.startswith("."):
+                presentes.setdefault(arquivo.name, arquivo)
+
+    itens: list[ItemDaLinha] = []
+    for versao in ficha.dados:
+        caminho = presentes.pop(versao.arquivo, None)
+        if caminho is None:
+            itens.append(ItemDaLinha(versao, None, "ausente", None))
+            continue
+        confere: bool | None = None
+        if conferir:
+            atual, _ = _hash_e_tamanho(caminho)
+            confere = atual == versao.sha256
+        itens.append(ItemDaLinha(versao, caminho, caminho.parent.name, confere))
+
+    return LinhaDoTempo(
+        ficha = ficha,
+        itens = tuple(itens),
+        nao_registrados = tuple(sorted(presentes.values())),
+        conferido = conferir,
+    )
+
+
+# Backend
+
