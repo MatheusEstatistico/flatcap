@@ -370,6 +370,303 @@ def _arvore_do_plano(cfg: Config, plano: Plano) -> Tree:
   return arvore
 
 
+@dados_app.command("adicionar")
+def dados_adicionar(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+  ),
+  caminho: Path = typer.Argument(
+    ...,
+    help = "O arquivo revisado que o cliente mandou."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Registra uma nova versão do banco na pasta do projeto.
+
+  Copia o arquivo para `1. Dados originais/` com o próximo número da série,
+  manda a versão de trabalho anterior para `2. Versões antigas/` e acrescenta a
+  entrada em `dados:` no projeto.yaml. O `00_redcap_*` nunca é tocado.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para executar.
+  """
+  cfg = _configuracao(env)
+
+  try:
+    plano = preparar_adicao(cfg.root, identificador, caminho)
+  except VersaoDuplicadaError as erro:
+    _nada_a_fazer(str(erro))
+    return
+  except ArquivoOrigemError as erro:
+    raise _abortar("Arquivo de origem", str(erro)) from erro
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except DadosError as erro:
+    raise _abortar("Versionamento", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", f"Falhei ao ler {caminho}.\n{erro}") from erro
+
+  console.print(_cabecalho_dos_dados(plano))
+  console.print(_arvore_da_adicao(plano))
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi copiado nem movido.\n"
+      "Repita com [bold]--sim[/bold] para executar."
+    )
+    return
+
+  try:
+    resultado = executar_adicao(plano)
+  except (DadosError, FichaError) as erro:
+    raise _abortar("Versionamento", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.raiz}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "O que já tinha sido feito foi desfeito — confira a pasta antes de rodar "
+      "de novo."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  console.print(
+    f"\n[green]Versão {plano.sequencia:02d} registrada.[/green] "
+    f"{plano.destino.name} ({plano.tamanho_legivel})"
+  )
+  for de, para in resultado.movidos:
+    console.print(Text(f"  {de.name} → {para.parent.name}/", style = "dim"))
+
+
+@dados_app.command("listar")
+def dados_listar(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto."
+  ),
+  rapido: bool = typer.Option(
+    False, "--rapido",
+    help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Mostra a linha do tempo das versões do banco de um projeto.
+
+  Além do que está registrado em `dados:`, confronta a ficha com o disco: aponta
+  versão registrada que sumiu, arquivo alterado depois do registro e arquivo
+  presente na pasta que a ficha desconhece.
+  """
+  cfg = _configuracao(env)
+
+  try:
+    raiz = localizar_projeto(cfg.root, identificador)
+    tempo = linha_do_tempo(raiz, conferir = not rapido)
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", str(erro)) from erro
+
+  console.print(_cabecalho_da_ficha(tempo))
+
+  if not tempo.itens:
+    console.print(
+      Text(
+        "\nNenhuma versão registrada ainda. Assim que o cliente mandar o banco, "
+        "use `flatcap dados adicionar`.",
+        style = "yellow",
+      )
+    )
+  else:
+    console.print(_tabela_da_linha_do_tempo(tempo))
+
+  for linha in _divergencias(tempo):
+    console.print(linha)
+
+
+def _cabecalho_dos_dados(plano: PlanoDados) -> Text:
+  ficha = plano.ficha
+  return Text.assemble(
+    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+  )
+
+
+def _cabecalho_da_ficha(tempo: LinhaDoTempo) -> Text:
+  ficha = tempo.ficha
+  return Text.assemble(
+    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), (ficha.tipo or "?", ""),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+  )
+
+
+def _arvore_da_adicao(plano: PlanoDados) -> Tree:
+  """
+  Desenha o que `executar_adicao` faria, lendo o próprio plano.
+  """
+  arvore = Tree(Text(str(plano.raiz), style = "dim"))
+  saindo = {de for de, _ in plano.rotacoes}
+
+  originais = arvore.add(Text(f"{PASTA_DADOS}/"))
+  pasta = plano.raiz / PASTA_DADOS
+  if pasta.is_dir():
+    for arquivo in sorted(p for p in pasta.iterdir() if p.is_file()):
+      if arquivo in saindo:
+        originais.add(
+          Text.assemble(
+            (arquivo.name, "yellow"), ("   → vai para ", "dim"),
+            (f"{PASTA_ANTIGAS}/", "dim"),
+          )
+        )
+      elif arquivo.name.startswith("00_"):
+        originais.add(
+          Text.assemble((arquivo.name, ""), ("   intocado", "dim"))
+        )
+      else:
+        originais.add(Text(arquivo.name, style = "dim"))
+  originais.add(
+    Text.assemble(
+      (plano.destino.name, "bold green"),
+      (f"   {plano.tamanho_legivel} · novo", "dim"),
+    )
+  )
+
+  antigas = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+  if plano.rotacoes:
+    for _, para in plano.rotacoes:
+      antigas.add(Text.assemble((para.name, "yellow"), ("   recebe", "dim")))
+  else:
+    antigas.add(Text("(nada muda aqui)", style = "dim"))
+
+  arvore.add(
+    Text.assemble(
+      (ARQUIVO_PROJETO, ""), ("   + 1 entrada em ", "dim"), ("dados:", "dim"),
+    )
+  )
+  arvore.add(
+    Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim"))
+  )
+  return arvore
+
+
+def _tabela_da_linha_do_tempo(tempo: LinhaDoTempo) -> Table:
+  """
+  A cronologia. Nomes de arquivo entram como `Text` pelo mesmo motivo de sempre.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("#", justify = "right", no_wrap = True)
+  tabela.add_column("Arquivo", overflow = "fold")
+  tabela.add_column("Origem", no_wrap = True)
+  tabela.add_column("Data", no_wrap = True)
+  tabela.add_column("Tamanho", justify = "right", no_wrap = True)
+  tabela.add_column("Onde está", overflow = "fold")
+  tabela.add_column("Integridade", no_wrap = True)
+
+  for item in tempo.itens:
+    versao = item.versao
+    numero = versao.sequencia
+    if item.caminho is None:
+      onde = Text("ausente", style = "red")
+    elif item.local == PASTA_DADOS:
+      onde = Text("em uso", style = "green")
+    else:
+      onde = Text("arquivada", style = "dim")
+
+    if not tempo.conferido:
+      integridade = Text("—", style = "dim")
+    elif item.confere is None:
+      integridade = Text("—", style = "dim")
+    elif item.confere:
+      integridade = Text("confere", style = "green")
+    else:
+      integridade = Text("ALTERADO", style = "red bold")
+
+    tabela.add_row(
+      Text(f"{numero:02d}" if numero is not None else "?"),
+      Text(versao.arquivo),
+      Text(versao.origem or "—", style = "" if versao.origem else "yellow"),
+      Text(f"{versao.data:%d/%m/%Y}" if versao.data else "—"),
+      Text(tamanho_legivel(versao.tamanho_bytes)),
+      onde,
+      integridade,
+    )
+  return tabela
+
+
+def _divergencias(tempo: LinhaDoTempo) -> list[Text]:
+  """
+  As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
+  """
+  linhas: list[Text] = []
+
+  for item in tempo.ausentes:
+    linhas.append(
+      Text(
+        f"\nAusente: `{item.versao.arquivo}` está registrado na ficha e não está "
+        "no disco.\n"
+        "Alguém apagou ou renomeou o arquivo. O registro continua valendo como "
+        "prova de que a versão existiu — não apague a entrada da ficha.",
+        style = "red",
+      )
+    )
+
+  for item in tempo.alterados:
+    linhas.append(
+      Text(
+        f"\nAlterado: `{item.versao.arquivo}` está no disco com conteúdo "
+        "diferente do que foi registrado.\n"
+        "O arquivo foi aberto e salvo por cima depois de entrar na ficha. O "
+        "sha256 gravado deixou de descrever o que está lá.\n"
+        "O caminho correto é tratar o arquivo alterado como uma versão nova: "
+        "copie-o para fora da pasta e rode `flatcap dados adicionar`.",
+        style = "red",
+      )
+    )
+
+  if tempo.nao_registrados:
+    quais = "\n".join(f"  {p.parent.name}/{p.name}" for p in tempo.nao_registrados)
+    linhas.append(
+      Text(
+        f"\nNão registrados: {len(tempo.nao_registrados)} arquivo(s) na pasta que "
+        f"a ficha desconhece:\n{quais}\n"
+        "Arquivo copiado à mão não entra na cronologia. Para registrar, mova-o "
+        "para fora da pasta e rode `flatcap dados adicionar`.",
+        style = "yellow",
+      )
+    )
+
+  if tempo.itens and tempo.integra and tempo.conferido:
+    linhas.append(
+      Text("\nFicha e disco conferem.", style = "green")
+    )
+  elif tempo.itens and tempo.integra:
+    linhas.append(
+      Text(
+        "\nTodos os arquivos registrados estão no lugar. O conteúdo não foi "
+        "conferido (--rapido).",
+        style = "dim",
+      )
+    )
+
+  return linhas
+
+
 
 if __name__ == "__main__":
   app()
