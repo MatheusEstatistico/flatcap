@@ -88,6 +88,24 @@ class PlanoDados:
 @dataclass(frozen = True)
 class ResultadoDados:
     """
-    
+    A execução é aqui
     """
-    pass
+    criados: tuple[Path, ...] = ()
+    movidos: tuple[tuple[Path, Path], ...] = ()
+    avisos: tuple[str, ...] = ()
+
+@dataclass(frozen = True)
+class ItemDaLinha:
+    """
+    Uma versão registrada, confrontada com o que está no disco.
+    """
+    versao: Versao
+    caminho: Path | None
+    local: str
+    confere: bool | None # None = não conferido ou inexistente
+
+    @property
+    def presente(self) -> bool:
+        return self.caminho is not None
+
+
