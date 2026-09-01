@@ -1,9 +1,9 @@
 """
 Interface de linha de comando do FlatCap.
 
-Esta camada não contém regras de negócio, ela lê argumentos, chama as camadas de baixo, 
-formata a saída e escolhe o código de saída do processo.
-Manter isso firme desde o início permite testar tudo sem simular terminal. 
+Esta camada não contém regras de negócio: ela lê argumentos, chama as camadas de
+baixo, formata a saída e escolhe o código de saída do processo. Manter isso firme
+desde o início permite testar tudo sem simular terminal.
 """
 
 from __future__ import annotations
@@ -55,11 +55,18 @@ app = typer.Typer(
     add_completion=False,
 )
 
+dados_app = typer.Typer(
+    name="dados",
+    help="Versões do banco de dados de um projeto.",
+    no_args_is_help=True,
+)
+app.add_typer(dados_app, name="dados")
+
 console = Console()
 erro_console = Console(stderr = True)
 
 OK = "[green]OK[/green]"
-FALHA = "[red]FALHA[/red]" 
+FALHA = "[red]FALHA[/red]"
 
 def _versao(valor: bool) -> None:
   if valor:
@@ -81,9 +88,15 @@ def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   erro_console.print(Panel(Text(mensagem), title=titulo, border_style="red"))
   return typer.Exit(code=1)
 
+def _nada_a_fazer(mensagem: str) -> None:
+  """
+  Painel amarelo e saída com código 0: houve uma recusa, mas nada deu errado.
+  """
+  console.print(Panel(Text(mensagem), title = "Nada para fazer", border_style = "yellow"))
+
 def _configuracao(env: str | None, criar_root: bool = False) -> Config:
   """
-  Carrega a configuração ou ecerra o comeando com a mensagem do arquivo `config.py`.
+  Carrega a configuração ou encerra o comando com a mensagem do `config.py`.
   """
   try:
     return carregar(env_file = env, criar_root = criar_root)
@@ -113,9 +126,9 @@ def doctor(
   ),
 ) -> None:
   """
-  Testar as credenciais, a conecção com o REDCap e a pasta de dados.
+  Testar as credenciais, a conexão com o REDCap e a pasta de dados.
 
-  É o primeiro comando a rodar quando algo parecer errado: 
+  É o primeiro comando a rodar quando algo parecer errado:
     responde se o problema está na configuração, na rede ou no token.
   """
   tabela = Table(show_header = True, header_style = "bold")
@@ -123,18 +136,19 @@ def doctor(
   tabela.add_column("Resultado")
   tabela.add_column("Detalhe", overflow = "fold")
 
-  # 1. Configuração 
+  # 1. Configuração
   cfg = _configuracao(env, criar_root = criar_root)
 
   tabela.add_row("Arquivo .env", OK, cfg.origem_env or "(variáveis do ambiente do sistema)")
   tabela.add_row("REDCAP_API_URL", OK, cfg.api_url)
   tabela.add_row("REDCAP_TOKEN", OK, cfg.token_mascarado)
   tabela.add_row("FLATCAP_ROOT", OK, str(cfg.root))
+  tabela.add_row("Leitura do projeto.yaml", OK, IMPLEMENTACAO)
 
-  # 2. Conexão com o REDCap 
-  try: 
+  # 2. Conexão com o REDCap
+  try:
     projeto = exportar_projeto(cfg)
-  except RedcapError as e: 
+  except RedcapError as e:
     tabela.add_row("Conexão REDCap", FALHA, "ver detalhe abaixo")
     console.print(tabela)
     raise _abortar("Conexão com o REDCap", str(e)) from e
@@ -160,8 +174,9 @@ def listar(
   """
   Lista as solicitações no REDCap, e o que já foi para o disco.
 
-  É o que coordena o fluxo diário de trabalho. 
-  Mostra o que chego ude novo de um lado e o que já virou pasta dentro do FLATCAP_ROOT.
+  É o que coordena o fluxo diário de trabalho.
+  Mostra o que chegou de novo de um lado e o que já virou pasta dentro do
+  FLATCAP_ROOT.
   """
   cfg = _configuracao(env)
 
@@ -214,7 +229,7 @@ def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
 def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
   """
   Monta a tabela que sai do comando `listar`.
-  Valores que vem do REDCap entram como `Text`, nunca como string crua: um
+  Valores que vêm do REDCap entram como `Text`, nunca como string crua: um
   nome com colchete viraria marcação do rich e sumiria da tela.
   """
   tabela = Table(show_header = True, header_style = "bold")
@@ -240,7 +255,7 @@ def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
 
 def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
   """
-    Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
+  Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
   """
   pendentes = [c for c in clientes if not localizar_pasta(cfg.root, c.matricula)]
   sem_anexo = [c for c in clientes if not c.tem_anexo]
@@ -278,14 +293,15 @@ def novo(
   """
   Cria a pasta do projeto a partir de uma solicitação do REDCap.
 
-  POR PADRÃO APENAS SIMULA: desenha a árvore que seria criada e não escreve nada. Repita com --sim para executar.
+  POR PADRÃO APENAS SIMULA: desenha a árvore que seria criada e não escreve
+  nada. Repita com --sim para executar.
   """
   cfg = _configuracao(env)
 
-  try: 
+  try:
     plano = preparar(cfg, record_id)
-  except ProjetoExistenteError as erro: 
-    console.print(Panel(Text(str(erro)), title = "Nada para fazer", border_style = "yellow"))
+  except ProjetoExistenteError as erro:
+    _nada_a_fazer(str(erro))
     return
   except (RegistroNaoEncontradoError, ClienteIncompletoError) as erro:
     raise _abortar("Solicitação", str(erro)) from erro
@@ -298,8 +314,9 @@ def novo(
   if not plano.tem_anexo:
     console.print(
       Text(
-        f"Este registro não tem anexo no campo '{CAMPO_ANEXO}'." 
-        "A pasta é criada assim mesmo — o banco entra depois, pela Fase 3.",
+        f"Este registro não tem anexo no campo '{CAMPO_ANEXO}'. "
+        "A pasta é criada assim mesmo — o banco entra depois, pelo "
+        "`flatcap dados adicionar`.",
         style = "yellow",
       )
     )
@@ -313,8 +330,8 @@ def novo(
 
   try:
     resultado = executar(plano)
-  except ProjetoExistenteError as erro: 
-    console.print(Panel(Text(str(erro)), title = "Nada para fazer", border_style = "yellow"))
+  except ProjetoExistenteError as erro:
+    _nada_a_fazer(str(erro))
     return
   except OSError as erro:
     raise _abortar(
@@ -331,7 +348,7 @@ def novo(
   console.print(
     f"\n[green]Pasta criada.[/green] {quantos} "
     f"{_plural(quantos, 'item', 'itens')} em {plano.raiz}"
-  ) 
+  )
 
 def _cabecalho_do_plano(plano: Plano) -> Text:
   """
@@ -369,6 +386,9 @@ def _arvore_do_plano(cfg: Config, plano: Plano) -> Tree:
   raiz.add(Text(ARQUIVO_PROJETO))
   return arvore
 
+
+
+# flatcap dados
 
 @dados_app.command("adicionar")
 def dados_adicionar(
@@ -667,6 +687,5 @@ def _divergencias(tempo: LinhaDoTempo) -> list[Text]:
   return linhas
 
 
-
 if __name__ == "__main__":
-  app()
+    app()
