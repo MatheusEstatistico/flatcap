@@ -174,3 +174,66 @@ def preparar_adicao(
         quando = quando,
     )
 
+def executar_adicao(plano: PlanoDados) -> ResultadoDados:
+    """
+    
+    """
+    criados: list[Path] = []
+    movidos: list[tuple[Path, Path]] = []
+    avisos: list[str] = []
+    desfazer: list[Callable[[], None]] = []
+
+    try: 
+        pasta_antigas = plano.raiz / PASTA_ANTIGAS
+        if not pasta_antigas.exists():
+            pasta_antigas.mkdir(parents = True)
+            criados.append(pasta_antigas)
+            desfazer.append(lambda p = pasta_antigas: p.rmdir())
+
+        # 1. 
+        shutil.copy2(plano.origem, plano.destino)
+        criados.append(plano.destino)
+        desfazer.append(lambda p = plano.destino: p.unlink(missing_ok = True)) 
+
+        # 2. 
+        gravado, _ = _hash_e_tamanho(plano.destino)
+        if gravado != plano.sha256:
+            raise DadosError(
+                "A cópia saiu diferente  da original. \n"
+                f"  esprando: {plano.sha256}\n"
+                f"  no disco: {gravado}\n"
+                "nada foi registrado e o arquivo compiado foi removido."
+            )
+
+        # 3. 
+        for de, para in plano.rotacaoes:
+            de.rename(para)
+            movidos.append((de, para))
+            desfazer.append(lambda d = de, p = para: p.rename(d))
+
+        # 4. 
+        acrescentar_versao(plano.raiz, plano.versao)
+
+        # 5. 
+        try:
+            anotar(plano.raiz, _acao_do_historico(plano), plano.quando)
+        except OSError as erro: 
+            avisos.append(
+                f"A versão foi registrada, mas não consegui escrever no historico.md: {erro}"
+            )
+    except (OSError, DadosError, FichaError):
+        for passo in reversed(desfazer):
+            try:
+                passo()
+            except OSError:
+                avisos.append(
+                    "Falhei ao desfazer uma etapa.\n"
+                    "Confira a pasta do projeto antes de rodar de novo"
+                )
+        raise
+    return ResultadoDados(
+        criados = tuple(criados), movidos = tuple(movidos), avisos = tuple(avisos)
+    )
+
+
+# 
