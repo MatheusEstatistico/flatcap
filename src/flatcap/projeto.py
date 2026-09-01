@@ -1,13 +1,22 @@
 """
+A pasta do projeto no disco: decidir o que criar e depois criar.
 
+Primeira camada que **compõe** as outras: junta `config`, `redcap`, `modelo` e
+`nomes` para responder a uma pergunta só — o que acontece quando chega uma
+solicitação nova. A separação interna é a regra da casa:
+
+    plano = preparar(cfg, record_id)   # lê o REDCap, decide tudo, não toca no disco
+    executar(plano)                    # só escreve; não decide mais nada
+
+É o que faz o `--dry-run` valer alguma coisa: os dois modos percorrem o mesmo
+`Plano`, o modo simulação apenas não chama `executar`.
 """
 
 from __future__ import annotations
 
 import hashlib
 import mimetypes
-import  stat
-
+import stat
 from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
@@ -28,7 +37,9 @@ SUBPASTAS: tuple[str, ...] = (
 ARQUIVO_PROJETO = "projeto.yaml"
 ARQUIVO_HISTORICO = "historico.md"
 
-PASTA_DADOS = SUBPASTAS[0] # o .docx fica na raíz do projeto
+PASTA_DADOS = SUBPASTAS[0]    # onde vive a versão vigente do banco
+PASTA_ANTIGAS = SUBPASTAS[1]  # para onde a versão anterior é rodada na Fase 3
+# O .docx da Fase 6 fica na raiz da pasta do projeto — não há `4. Relatórios/`.
 
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
@@ -92,9 +103,9 @@ class ArquivoPlanejado:
     @property
     def tamanho_legivel(self) -> str:
         """
-        Tamanho formado para o temrinal e para o `historico.md`.
+        Tamanho formatado para o terminal e para o `historico.md`.
         """
-        return _tamanho_legivel(self.tamanho)
+        return tamanho_legivel(self.tamanho)
 
 
 @dataclass(frozen = True)
@@ -102,8 +113,10 @@ class Plano:
     """
     Tudo o que será criado, decidido e pronto para escrever.
 
-    Imutável como `Config` e `Cliente`: entre a simulação e a execução ningué, altera um caminho em trânsito. 
-    O conteúdo dos dois arquivos de texto já vem montado, para que `executar` não precise tomar nenhuma decisão. 
+    Imutável como `Config` e `Cliente`: entre a simulação e a execução ningué, altera um caminho em
+    trânsito.
+    O conteúdo dos dois arquivos de texto já vem montado, para que `executar` não precise tomar
+    nenhuma decisão.
     """
     cliente: Cliente
     raiz: Path
@@ -123,7 +136,8 @@ class Resultado:
     """
     O que `executar` de fato criou, e o que não foi planejado.
 
-    O `avisos` existe para o caso de somente-leitura: em unidades de rede ou pasta sincronizada em nuvem o `chmod` pode não pegar.  
+    O `avisos` existe para o caso de somente-leitura: em unidades de rede ou pasta sincronizada em
+    nuvem o `chmod` pode não pegar.
     """
     criados: tuple[Path, ...]
     avisos: tuple[str, ...] = ()
@@ -139,7 +153,8 @@ def preparar(
     Lê o REDCap e devolve o plano completo na pasta. Nada de novo. 
 
     Args; 
-        agora: relógio injetável. Sem ele, os testes não teriam como comparar o nome do arquivo, que carrega a data.
+        agora: relógio injetável. Sem ele, os testes não teriam como comparar o nome do arquivo, que
+        carrega a data.
 
     Raises: 
         RegistroNaoEncontradoError, ClienteIncompletoError, ProjetoExistenteError
@@ -257,14 +272,16 @@ def _conferir_identificacao(cliente: Cliente) -> None:
 
     raise ClienteIncompletoError(
         f"O registro {cliente.record_id} não tem {' nem '.join(faltando)}.\n"
-        "Sem isso, a pasta sairia com um nome que você teria de corrigir à mão depois — e o `flatcap listar` deixaria de reencontrá-la.\n"
+        "Sem isso, a pasta sairia com um nome que você teria de corrigir à mão\n"
+        "depois — e o `flatcap listar` deixaria de reencontrá-la.\n"
         "Complete o registro no REDCap e rode de novo."
         "O `flatcap listar` marca em amarelo os cadastros incompletos."
     )
 
 def _destino(cfg: Config, cliente: Cliente) -> Path:
     """
-    Decide onde a pasta vai ficar e garante que ainda não existe. A conferência é por matrícula, via `localizar_pasta`.
+    Decide onde a pasta vai ficar e garante que ainda não existe. A conferência é por matrícula, via
+    `localizar_pasta`.
     """
     existente = localizar_pasta(Path(cfg.root), cliente.matricula)
     if existente is not None:
@@ -279,7 +296,8 @@ def _destino(cfg: Config, cliente: Cliente) -> Path:
         destino = Path(cfg.root) / nome_pasta(cliente.matricula, cliente.nome)
     except NomeInvalidoError as erro:
         raise ClienteIncompletoError(
-            f"A matrícula {cliente.matricula!r} do registro {cliente.record_id} não sobrou nada depois da limpeza de caracteres.\n"
+            f"Da matrícula {cliente.matricula!r} do registro {cliente.record_id} não\n"
+            "sobrou nada depois da limpeza de caracteres.\n"
             "Corrija o registro no REDCap."
         ) from erro
 
@@ -299,7 +317,12 @@ def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
     except ArquivoAusenteError:
         return None
 
-def _montar_plano(cliente: Cliente, raiz: Path, anexo: ArquivoRedcap | None, quando: datetime,) -> Plano:
+def _montar_plano(
+    cliente: Cliente,
+    raiz: Path,
+    anexo: ArquivoRedcap | None,
+    quando: datetime,
+) -> Plano:
     """
     Converte cliente + anexo em um `Plano` inteiramente resolvido.
     """
@@ -330,13 +353,15 @@ class _SemAncoras(yaml.SafeDumper):
     """
     Dumper que nunca cria âncora nem alias.
     
-    O PyYAML deduplica valores repetidos: como `criado_em` e a `data` do banco são a mesma data, o arquivo saía com `criado_em: &id001 2026-08-29` e `data: *id001`.
-    Subclasse de `SafeDumper`, então a garantia de não instanciar objeto arbitrário na leitura continua valendo.
+    O PyYAML deduplica valores repetidos: como `criado_em` e a `data` do banco são a mesma data, o
+    arquivo saía com `criado_em: &id001 2026-08-29` e `data: *id001`.
+    Subclasse de `SafeDumper`, então a garantia de não instanciar objeto arbitrário na leitura
+    continua valendo.
     """
     def ignore_aliases(self, data: object) -> bool:  # noqa: ARG002
         return True
 
-_CABECALHO_YAML = """/
+_CABECALHO_YAML = """\
 # projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.
 #
 # Este arquivo é seu: edite à vontade. O FlatCap lê o que está aqui e não
@@ -431,9 +456,13 @@ def _extensao_do_mime(tipo_mime: str) -> str:
         return ""
     return mimetypes.guess_extension(tipo) or ""
 
-def _tamanho_legivel(bytes_: int) -> str:
+def tamanho_legivel(bytes_: int) -> str:
     """
     Formata o tamanho para leitura humana, com vírgula decimal.
+
+    Pública porque a Fase 3 imprime a mesma coluna na linha do tempo das
+    versões: dois formatadores diferentes para a mesma grandeza é como um
+    relatório acaba com "1,5 MiB" numa tabela e "1572864" na seguinte.
     """
     tamanho = float(bytes_)
     for unidade in ("B", "KiB", "MiB", "GiB"):
@@ -443,6 +472,7 @@ def _tamanho_legivel(bytes_: int) -> str:
             return f"{tamanho:.1f} {unidade}".replace(".", ",")
         tamanho /= 1024
     return f"{bytes_} B"
+
 
 
 
