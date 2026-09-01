@@ -108,4 +108,69 @@ class ItemDaLinha:
     def presente(self) -> bool:
         return self.caminho is not None
 
+@dataclass(frozen = True)
+class LinhaDoTempo:
+    """
+    Cronologia das versões.
+    """
+    ficha: Ficha
+    itens: tuple[ItemDaLinha, ...]
+    nao_registrados: tuple[Path, ...]
+    conferito: bool
+
+    @property
+    def ausente(self) -> tuple[ItemDaLinha, ...]:
+        return tuple(item for item in self.itens if not item.presente)
+
+    @property
+    def alterado(self) -> tuple[ItemDaLinha, ...]:
+        return tuple(item for item in self.itens if item.confere is False)
+
+    @property
+    def integra(self) -> bool:
+        return not (self.ausente or self.alterados or self.nao_registrados)
+
+
+# Caso de uso: adicionar uma versão
+
+def preparar_adicao(
+        root: Path, identificador: str, caminho: Path | str, agora: datetime | None = None, origem_rotulo: str = ORIGEM_PADRAO,
+) -> PlanoDados:
+    """
+    
+    """
+    quando = agora or datetime.now()
+    raiz = localizar_projeto(Path(root), identificador)
+    ficha = ler(raiz)
+
+    origem = _conferir_origem(caminho, raiz)
+    sha256, tamanho = _hash_e_tamanho(origem)
+
+    _recusar_duplicatas(ficha, sha256)
+
+    sequencia = _proxima_sequencia(ficha, raiz)
+    destino = raiz / PASTA_DADOS / _nome_da_versao(sequencia, origem.nome, quando.date())
+
+    if destino.exists():
+        raise DestinoOcupadoError(
+            f"Já existe um arquivo com esse nome:\n"
+            f"  {destino}"
+        )
+    return PlanoDados(
+        ficha = ficha,
+        origem = origem,
+        destino = destino,
+        sequencia = sequencia,
+        sha256 = sha256,
+        tamanho = tamanho,
+        rotacoes = _rotacoes(raiz),
+        versao = Versao(
+            arquivo = destino.name,
+            origem = origem_rotulo,
+            sha256 = sha256,
+            tamanho_bytes = tamanho,
+            data = quando.date(),
+        ),
+        quando = quando,
+    )
 
