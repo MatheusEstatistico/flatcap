@@ -24,13 +24,23 @@ Duas consequências de projeto vêm daí:
    Windows: ou o arquivo antigo continua inteiro, ou o novo está inteiro. Nunca
    metade dos dois.
 
-## Sobre a escolha do backend de YAML
+## Por que ruamel.yaml e não o PyYAML
 
-Esta implementação usa **ruamel.yaml em modo round-trip**. Ela preserva os
-comentários que você escrever no arquivo, a ordem das chaves e o estilo de
-aspas. Existe uma implementação alternativa com PyYAML puro, de mesma API
-pública; trocar é substituir este arquivo. Nenhum outro módulo sabe qual está
-instalado — é por isso que `dados.py` e `cli.py` importam só as funções abaixo.
+Os dois convivem no projeto, e a divisão de trabalho é clara: o `projeto.py`
+escreve a ficha do zero com o PyYAML, e este módulo a **altera** com o
+`ruamel.yaml` em modo round-trip.
+
+A diferença está em quem lê o arquivo de volta. O PyYAML descarta comentário no
+parser — para ele, comentário não é dado —, então um `safe_load` seguido de
+`dump` devolveria os mesmos valores e nenhuma das anotações que você escreveu
+ao lado de `prazo` ou de `analises`. O ruamel em `typ="rt"` carrega os
+comentários, a ordem das chaves e o estilo de aspas presos aos dados, e os
+devolve na gravação. É o que sustenta literalmente a promessa do cabeçalho da
+ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
+
+Toda a persistência do `projeto.yaml` está atrás das quatro funções públicas
+abaixo — `ler`, `acrescentar_versao`, `localizar_projeto` e `caminho_da_ficha`.
+`dados.py` e `cli.py` importam só isso e não sabem qual biblioteca está em uso.
 """
 
 from __future__ import annotations
@@ -49,13 +59,6 @@ from .nomes import localizar_pasta, sanitizar
 from .projeto import ARQUIVO_PROJETO
 
 IMPLEMENTACAO = "ruamel.yaml (round-trip — preserva comentários e formatação)"
-
-# As duas implementações de `ficha.py` têm a mesma API pública e diferem em uma
-# coisa só: se um comentário que você escreveu à mão sobrevive a um
-# `dados adicionar`. Declarar isso como uma constante permite que a mesma suíte
-# de testes rode nas duas, pulando só o teste que não se aplica — em vez de
-# manter duas suítes que precisam ser corrigidas em paralelo.
-PRESERVA_COMENTARIOS = True
 
 CHAVE_DADOS = "dados"
 

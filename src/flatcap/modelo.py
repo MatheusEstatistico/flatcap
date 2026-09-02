@@ -1,6 +1,7 @@
 """
 Esse módulo serve para transformar professores/colaboradores e alunos em apenas `Cliente`.
-Sua principal utilidade é que caso a variável `intro` receba outras categorias, só vai ser necessário acrescentar aqui e todo o resto vai funcionar. 
+Sua principal utilidade é que caso a variável `intro` receba outras categorias, só vai ser
+necessário acrescentar aqui e todo o resto vai funcionar.
 Todo o resto do sistema só trata `Cliente`.
 """
 
@@ -21,7 +22,11 @@ _MAPA_INTRO: dict[str, tuple[str, str, str]] = {
     "2": (ALUNO, "matricula2", "aluno2"),
 }
 
-_PARES = [(campo_matricula, campo_nome) for _, campo_matricula, campo_nome in _MAPA_INTRO.values()] # Os pares tentados quando `intro` não responde, na ordem.
+# Os pares tentados quando `intro` não responde, na ordem.
+_PARES = [
+    (campo_matricula, campo_nome)
+    for _, campo_matricula, campo_nome in _MAPA_INTRO.values()
+]
 
 CAMPOS_REDCAP: list[str] = [
     "record_id",

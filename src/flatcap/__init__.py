@@ -11,12 +11,9 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     
     cli.py      expõe os comandos no terminal
 
-A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece `projeto`, 
-e nenhuma delas conhece a `cli`. 
+A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece `projeto`, e nenhuma delas conhece a `cli`. 
 
-É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` 
-(ruamel.yaml ou PyYAML) sem que nenhum outro módulo perceba.
-
+É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem que nenhum outro módulo perceba.
 """
 
 __version__ = "0.4.0"

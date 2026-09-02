@@ -1,9 +1,9 @@
 """
 Interface de linha de comando do FlatCap.
 
-Esta camada não contém regras de negócio: ela lê argumentos, chama as camadas de
-baixo, formata a saída e escolhe o código de saída do processo. Manter isso firme
-desde o início permite testar tudo sem simular terminal.
+Esta camada não contém regras de negócio: 
+    ela lê argumentos, chama as camadas de baixo, 
+    formata a saída e escolhe o código de saída do processo.
 """
 
 from __future__ import annotations
@@ -82,8 +82,10 @@ def _plural(quantidade: int, singular: str, plural: str) -> str:
 def _abortar(titulo: str, mensagem: str) -> typer.Exit:
   """
   Imprime o erro em um painel e devolve a exceção que encerra o comando.
-  `Text(...)` em vez de uma string crua: impede que colchetes vindos da mensagem
-  de erro sejam interpretados como marcação do rich.
+
+  `Text(...)` em vez de uma string crua:
+      impede que colchetes vindos da mensagem
+      de erro sejam interpretados como marcação do rich.
   """
   erro_console.print(Panel(Text(mensagem), title=titulo, border_style="red"))
   return typer.Exit(code=1)
@@ -127,9 +129,7 @@ def doctor(
 ) -> None:
   """
   Testar as credenciais, a conexão com o REDCap e a pasta de dados.
-
-  É o primeiro comando a rodar quando algo parecer errado:
-    responde se o problema está na configuração, na rede ou no token.
+  Responde se o problema está na configuração, na rede ou no token.
   """
   tabela = Table(show_header = True, header_style = "bold")
   tabela.add_column("Verificação", no_wrap = True)
@@ -173,10 +173,8 @@ def listar(
 ) -> None:
   """
   Lista as solicitações no REDCap, e o que já foi para o disco.
-
-  É o que coordena o fluxo diário de trabalho.
-  Mostra o que chegou de novo de um lado e o que já virou pasta dentro do
-  FLATCAP_ROOT.
+      É o que coordena o fluxo diário de trabalho.
+      Mostra o que chegou de novo de um lado e o que já virou pasta.
   """
   cfg = _configuracao(env)
 
@@ -229,8 +227,8 @@ def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
 def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
   """
   Monta a tabela que sai do comando `listar`.
-  Valores que vêm do REDCap entram como `Text`, nunca como string crua: um
-  nome com colchete viraria marcação do rich e sumiria da tela.
+  Valores que vêm do REDCap entram como `Text`, nunca como string crua: 
+      um nome com colchete viraria marcação do rich e sumiria da tela.
   """
   tabela = Table(show_header = True, header_style = "bold")
   tabela.add_column("id", justify = "right", no_wrap = True)
@@ -292,9 +290,9 @@ def novo(
 ) -> None:
   """
   Cria a pasta do projeto a partir de uma solicitação do REDCap.
-
-  POR PADRÃO APENAS SIMULA: desenha a árvore que seria criada e não escreve
-  nada. Repita com --sim para executar.
+  POR PADRÃO APENAS SIMULA: 
+      Desenha a árvore que seria criada e não escreve nada. 
+      Repita com --sim para executar.
   """
   cfg = _configuracao(env)
 
