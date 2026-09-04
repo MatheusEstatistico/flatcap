@@ -361,7 +361,7 @@ class _SemAncoras(yaml.SafeDumper):
     def ignore_aliases(self, data: object) -> bool:  # noqa: ARG002
         return True
 
-_CABECALHO_YAML = """\
+_CABECALHO_YAML = """
 # projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.
 #
 # Este arquivo é seu: edite à vontade. O FlatCap lê o que está aqui e não
