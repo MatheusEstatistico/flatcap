@@ -7,7 +7,7 @@ Todo o resto do sistema só trata `Cliente`.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -85,9 +85,32 @@ def normalizar_varios(registros: Iterable[Mapping[str, Any]]) -> list[Cliente]:
     """
     return [normalizar(registro) for registro in registros]
 
+def mais_recentes(clientes: Sequence[Cliente], quantos: int) -> list[Cliente]:
+    """
+    
+    """
+    if quantos <= 0 or quantos >= len(clientes):
+        return list(clientes)
+
+    posicoes = sorted(
+        range(len(clientes)),
+        key = lambda i: _chave_recencia(i, clientes[i]),
+        reverse = True,
+    )
+    escolhidas = set(posicoes[: quantos])
+    return [cliente for i, cliente in enumerate(clientes) if i in escolhidas]
 
 
 # Funções auxiliares
+
+def _chave_recencia(indice: int, cliente: Cliente) -> tuple[int, int, int]:
+    """
+    Ordena o `record_id`.
+    """
+    texto = (cliente.record_id or "").strip()
+    if texto.isdigit():
+        return (1, int(texto), indice)
+    return (0, 0, indice)
 
 def _texto(registro: Mapping[str, Any], chave: str) -> str:
     """
