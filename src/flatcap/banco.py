@@ -69,3 +69,27 @@ class AbaInexistenteError(BancoError):
     A planilha `--aba` não existe na pasta de trabalho.
     """
 
+@dataclass(frozen = True)
+class Leitura:
+    """
+    
+    """
+    caminho: Path
+    aba: str | None = None
+    abas: tuple[str, ...] = ()
+    separador = str | None = None
+    codificacao: str | None = None
+
+    @property
+    def formato(self) -> str:
+        return self.caminho.suffix.lower()
+
+    @property
+    def outras_abas(self) -> tuple[str, ...]:
+        return tuple(nome for nome in self.abas if nome != self.aba)
+
+    def descrever(self) -> str:
+        """
+        Uma linha dizendo de onde vem os dados.
+        """
+        pass
