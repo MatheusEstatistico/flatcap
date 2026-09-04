@@ -31,7 +31,7 @@ from .dados import (
     preparar_adicao,
 )
 from .ficha import IMPLEMENTACAO, FichaError, localizar_projeto
-from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, normalizar_varios
+from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, mais_recentes, normalizar_varios
 from .nomes import localizar_pasta
 from .projeto import (
     ARQUIVO_HISTORICO,
@@ -161,6 +161,11 @@ def doctor(
 
 @app.command()
 def listar(
+  ultimos: int | None = typer.Option(
+    None, "-n", "--ultimos", min = 1, metavar = "N",
+    help = "Mostra apenas as N solicitações mais recentes, isto é, "
+            "as de maior record_id. Sem esta opção mostra todas."
+  ), 
   env: str | None = typer.Option(
     None, "--env",
     help = "Caminho de um .env alternativo."
@@ -188,6 +193,10 @@ def listar(
   if not clientes:
     console.print("Nenhuma nova solicitação.")
     return
+
+  total = len(clientes)
+  if ultimos is not None:
+    clientes = mais_recentes(clientes, ultimos)
 
   if conferir_anexos:
     clientes = _reconferir_anexos(cfg, clientes)
@@ -251,19 +260,23 @@ def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
 
   return tabela
 
-def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
+def _resumo(cfg: Config, clientes: list[Cliente], total: int | None = None) -> str:
   """
   Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
   """
+  total = len(clientes) if total is None else total
   pendentes = [c for c in clientes if not localizar_pasta(cfg.root, c.matricula)]
   sem_anexo = [c for c in clientes if not c.tem_anexo]
   incompletos = [c for c in clientes if not c.identificado]
   alunos = [c for c in clientes if c.tipo == ALUNO]
 
-  partes = [
-    f"[bold]{len(clientes)}[/bold] solicitações",
-    f"[bold]{len(pendentes)}[/bold] sem pasta local",
-  ]
+  cortado = len(clientes) != total
+  contagem = (
+    f"[bold]{len(clientes)}[/bold] de {total} solicitações." if cortado
+    else f"[bold]{total}[/bold] solicitações."
+  )
+
+  partes = [contagem, f"[bold]{len(pendentes)}[/bold] sem pasta local."]
   if sem_anexo:
     partes.append(f"[yellow]{len(sem_anexo)} sem anexo[/yellow]")
   if incompletos:
@@ -271,7 +284,15 @@ def _resumo(cfg: Config, clientes: list[Cliente]) -> str:
   if alunos:
     partes.append(f"{len(alunos)} de alunos")
 
-  return "\n" + " · ".join(partes)
+  resumo = "\n" + " . ".join(partes)
+  if cortado:
+    resumo += (
+      f"\n[dim]As {len(clientes)} mais recentes por record_id. "
+      f"Rode `-n` para ver as {total}.[/dim]"
+    )
+
+  return resumo
+
 
 @app.command()
 def novo(
