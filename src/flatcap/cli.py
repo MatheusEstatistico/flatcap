@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -30,8 +31,17 @@ from .dados import (
     linha_do_tempo,
     preparar_adicao,
 )
+from .dicionario import DicionarioError
 from .ficha import IMPLEMENTACAO, FichaError, localizar_projeto
-from .modelo import ALUNO, CAMPO_ANEXO, CAMPOS_REDCAP, INDEFINIDO, Cliente, mais_recentes, normalizar_varios
+from .modelo import (
+    ALUNO,
+    CAMPO_ANEXO,
+    CAMPOS_REDCAP,
+    INDEFINIDO,
+    Cliente,
+    mais_recentes,
+    normalizar_varios,
+)
 from .nomes import localizar_pasta
 from .projeto import (
     ARQUIVO_HISTORICO,
@@ -47,6 +57,9 @@ from .projeto import (
     tamanho_legivel,
 )
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
+
+if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .perfil import Achado, Perfil, PlanoPerfil
 
 app = typer.Typer(
     name="flatcap",
@@ -144,6 +157,7 @@ def doctor(
   tabela.add_row("REDCAP_TOKEN", OK, cfg.token_mascarado)
   tabela.add_row("FLATCAP_ROOT", OK, str(cfg.root))
   tabela.add_row("Leitura do projeto.yaml", OK, IMPLEMENTACAO)
+  tabela.add_row("Leitura de bancos", OK, _versoes_de_leitura())
 
   # 2. Conexão com o REDCap
   try:
@@ -158,6 +172,19 @@ def doctor(
 
   console.print(tabela)
   console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
+
+def _versoes_de_leitura() -> str:
+  """
+  Quais versões abrem o banco do cliente hoje.
+
+  Registrar isso no `doctor` é barato e evita a pergunta mais difícil de
+  responder da Fase 5: um gráfico saiu diferente do que saía antes — mudaram os
+  dados ou mudou a biblioteca?
+  """
+  import openpyxl
+  import pandas
+
+  return f"pandas {pandas.__version__} · openpyxl {openpyxl.__version__}"
 
 @app.command()
 def listar(
@@ -202,7 +229,7 @@ def listar(
     clientes = _reconferir_anexos(cfg, clientes)
 
   console.print(_tabela_de_clientes(cfg, clientes))
-  console.print(_resumo(cfg, clientes))
+  console.print(_resumo(cfg, clientes, total))
 
 def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
   """
@@ -704,6 +731,265 @@ def _divergencias(tempo: LinhaDoTempo) -> list[Text]:
     )
 
   return linhas
+
+
+# flatcap perfil
+
+@app.command()
+def perfil(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+  ),
+  aba: str | None = typer.Option(
+    None, "--aba", metavar = "NOME",
+    help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+  ),
+  rapido: bool = typer.Option(
+    False, "--rapido",
+    help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Descreve o banco e prepara a reunião com o cliente.
+
+  Abre a versão vigente registrada na ficha, mede cada variável, aponta os
+  problemas conhecidos e escreve dois arquivos na pasta do projeto: o `perfil.md`,
+  que é o documento que você leva para a conversa, e o `dicionario.csv`, que dirige
+  a descritiva daqui em diante.
+
+  O dicionário que já existir não é sobrescrito: as linhas que você preencheu
+  ficam intactas, e só entram as variáveis novas.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+  """
+  # O `pandas` sai de dentro deste import e não do topo do arquivo: ele custa uns
+  # 0,4 s para carregar, contra 0,08 s do typer com o rich. O `listar`, que roda
+  # várias vezes por dia e não abre banco nenhum, não deve pagar por isso.
+  from .banco import BancoError
+  from .perfil import executar_perfil, preparar_perfil
+
+  cfg = _configuracao(env)
+
+  try:
+    raiz = localizar_projeto(cfg.root, identificador)
+    plano = preparar_perfil(raiz, aba = aba, conferir = not rapido)
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except BancoError as erro:
+    raise _abortar("Banco de dados", str(erro)) from erro
+  except DicionarioError as erro:
+    raise _abortar("Dicionário", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", str(erro)) from erro
+
+  console.print(_cabecalho_do_perfil(plano.perfil))
+  console.print(_tabela_do_perfil(plano.perfil))
+  for bloco in _achados_no_terminal(plano.perfil):
+    console.print(bloco)
+  console.print(_arvore_do_perfil(plano))
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi escrito.\n"
+      "Repita com [bold]--sim[/bold] para gravar os dois arquivos."
+    )
+    return
+
+  try:
+    resultado = executar_perfil(plano)
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.raiz}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "Os dois arquivos são regeráveis: rode o comando de novo depois de resolver."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  console.print(
+    f"\n[green]Perfil escrito.[/green] {plano.caminho_perfil.name} e "
+    f"{plano.caminho_dicionario.name} em {plano.raiz}"
+  )
+  if not plano.fusao.existia:
+    console.print(
+      Text(
+        "Revise a coluna `tipo` do dicionário antes da Fase 5 — a sugestão é palpite.",
+        style = "yellow",
+      )
+    )
+
+
+def _cabecalho_do_perfil(perfil: Perfil) -> Text:
+  """
+  Quem, qual arquivo, e se dá para confiar nele. Nessa ordem.
+  """
+  ficha = perfil.ficha
+  cabecalho = Text.assemble(
+    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+    "\n",
+    ("Banco ", "dim"), (perfil.versao_arquivo, "bold"),
+    ("  ·  ", "dim"), (perfil.tamanho_legivel, "dim"),
+    ("  ·  ", "dim"),
+    (f"{perfil.linhas} linhas × {perfil.total_colunas} colunas", ""),
+  )
+
+  if perfil.leitura.aba:
+    cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{perfil.leitura.aba}"', "")))
+  if perfil.leitura.separador:
+    legivel = {"\t": "tabulação"}.get(perfil.leitura.separador, perfil.leitura.separador)
+    cabecalho.append(
+      Text.assemble(("  ·  ", "dim"), (f"separador {legivel}", "dim"),
+                    ("  ·  ", "dim"), (str(perfil.leitura.codificacao), "dim"))
+    )
+
+  cabecalho.append("\n")
+  if perfil.confere is True:
+    cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+  elif perfil.confere is False:
+    cabecalho.append(
+      Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+    )
+  else:
+    cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+  return cabecalho
+
+
+def _tabela_do_perfil(perfil: Perfil) -> Table:
+  """
+  Uma linha por variável. Valores do banco entram como `Text`, nunca como string
+  crua, pelo mesmo motivo do `listar`.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("#", justify = "right", no_wrap = True)
+  tabela.add_column("Variável", overflow = "fold")
+  tabela.add_column("Lido como", no_wrap = True)
+  tabela.add_column("Faltantes", justify = "right", no_wrap = True)
+  tabela.add_column("Únicos", justify = "right", no_wrap = True)
+  tabela.add_column("Sugestão", no_wrap = True)
+  tabela.add_column("Exemplos", overflow = "fold")
+
+  for coluna in perfil.colunas:
+    proporcao = coluna.proporcao_faltante
+    faltantes = Text("—", style = "dim")
+    if coluna.faltantes:
+      faltantes = Text(
+        f"{coluna.faltantes} ({proporcao * 100:.0f}%)",
+        style = "yellow" if proporcao >= 0.2 else "",
+      )
+
+    tabela.add_row(
+      Text(str(coluna.posicao)),
+      Text(coluna.nome),
+      Text(coluna.tipo_lido, style = "red" if coluna.tipo_lido == "misto" else ""),
+      faltantes,
+      Text(str(coluna.unicos)),
+      Text(coluna.sugestao, style = "dim" if coluna.sugestao == "ignorar" else ""),
+      Text(" · ".join(coluna.exemplos)),
+    )
+
+  return tabela
+
+
+def _achados_no_terminal(perfil: Perfil) -> list[Panel | Text]:
+  """
+  Os achados agrupados pelo que fazer com eles, do mais urgente para o menos.
+  """
+  from .perfil import CONFIRMAR, CORRIGIR, NOTA
+
+  if not perfil.achados:
+    return [
+      Text(
+        "\nNenhum problema encontrado pelos detectores. Isso não quer dizer que o "
+        "banco está certo — quer dizer que ele passa nos testes que o FlatCap sabe fazer.",
+        style = "green",
+      )
+    ]
+
+  estilos = {CORRIGIR: "red", CONFIRMAR: "yellow", NOTA: "dim"}
+  titulos = {
+    CORRIGIR: "Corrigir antes de começar",
+    CONFIRMAR: "Confirmar com o cliente",
+    NOTA: "Notas",
+  }
+
+  blocos: list[Panel | Text] = []
+  for gravidade in (CORRIGIR, CONFIRMAR, NOTA):
+    achados = perfil.por_gravidade(gravidade)
+    if not achados:
+      continue
+    blocos.append(
+      Panel(
+        _lista_de_achados(achados),
+        title = f"{titulos[gravidade]} ({len(achados)})",
+        border_style = estilos[gravidade],
+      )
+    )
+  return blocos
+
+
+def _lista_de_achados(achados: tuple[Achado, ...]) -> Text:
+  corpo = Text()
+  for posicao, achado in enumerate(achados):
+    if posicao:
+      corpo.append("\n")
+    if achado.variavel:
+      corpo.append(achado.variavel, style = "bold")
+      corpo.append(" — ")
+    corpo.append(achado.titulo)
+    if achado.exemplos:
+      corpo.append("\n    ")
+      corpo.append(" · ".join(achado.exemplos), style = "dim")
+  return corpo
+
+
+def _arvore_do_perfil(plano: PlanoPerfil) -> Tree:
+  """
+  Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
+  """
+  arvore = Tree(Text(str(plano.raiz), style = "dim"))
+  fusao = plano.fusao
+
+  if plano.perfil_anterior is None:
+    nota = "novo"
+  else:
+    nota = f"substitui o de {plano.perfil_anterior:%d/%m/%Y %H:%M}"
+  arvore.add(
+    Text.assemble((plano.caminho_perfil.name, "bold green"), (f"   {nota}", "dim"))
+  )
+
+  if not fusao.existia:
+    detalhe = f"novo · {fusao.total} variáveis"
+  else:
+    detalhe = (
+      f"{len(fusao.preservadas)} linha(s) preservada(s) · "
+      f"{len(fusao.novas)} nova(s) · {len(fusao.ausentes)} fora do banco"
+    )
+  ramo = arvore.add(
+    Text.assemble((plano.caminho_dicionario.name, "bold green"), (f"   {detalhe}", "dim"))
+  )
+  for nome in fusao.novas[:10]:
+    ramo.add(Text.assemble(("+ ", "green"), (nome, "")))
+  if len(fusao.novas) > 10:
+    ramo.add(Text(f"+ … mais {len(fusao.novas) - 10}", style = "dim"))
+  for nome in fusao.ausentes[:10]:
+    ramo.add(Text.assemble(("~ ", "yellow"), (nome, ""), ("   fora do banco", "dim")))
+
+  arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+  return arvore
 
 
 if __name__ == "__main__":
