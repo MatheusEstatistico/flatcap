@@ -16,4 +16,4 @@ A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `fich
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem que nenhum outro módulo perceba.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
