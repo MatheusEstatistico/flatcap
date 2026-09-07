@@ -50,7 +50,7 @@ extend-immutable-calls = ["typer.Argument", "typer.Option"]
 [tool.ruff.lint.isort]
 # 
 # 
-known-first-party = ["flatcap", "conftest", "servidor_falso"]
+known-first-party = ["flatcap", "conftest", "servidor_falso", "bancos"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

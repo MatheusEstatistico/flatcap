@@ -41,6 +41,13 @@ ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 Toda a persistência do `projeto.yaml` está atrás das quatro funções públicas
 abaixo — `ler`, `acrescentar_versao`, `localizar_projeto` e `caminho_da_ficha`.
 `dados.py` e `cli.py` importam só isso e não sabem qual biblioteca está em uso.
+
+Há uma quinta função pública, `escrever_atomico`, e ela **não** faz parte desse
+contrato: é o utilitário de gravação que a Fase 4 passou a compartilhar para o
+`dicionario.csv` e o `perfil.md`. Ela mora aqui porque foi aqui que a garantia
+precisou existir primeiro, e porque duas implementações de escrita atômica no
+mesmo pacote é como uma delas deixa de receber a próxima correção. Quem trocar
+esta implementação de YAML por outra precisa levá-la junto.
 """
 
 from __future__ import annotations
@@ -390,7 +397,7 @@ def _gravar_documento(caminho: Path, documento) -> None:
 
     buffer = io.StringIO()
     _construtor().dump(documento, buffer)
-    _escrever_atomico(caminho, buffer.getvalue())
+    escrever_atomico(caminho, buffer.getvalue())
 
 
 def _mapa_da_versao(versao: Versao) -> CommentedMap:
@@ -442,9 +449,14 @@ def _ler_texto(caminho: Path) -> str:
         ) from erro
 
 
-def _escrever_atomico(caminho: Path, texto: str) -> None:
+def escrever_atomico(caminho: Path, texto: str) -> None:
     """
     Grava o arquivo inteiro ou não grava nada.
+
+    Pública desde a Fase 4: o `dicionario.csv` guarda as decisões da reunião e o
+    `perfil.md` é o documento que você leva para ela. Os dois merecem a mesma
+    garantia que o `projeto.yaml`, e duas implementações de escrita atômica no
+    mesmo pacote é como uma delas deixa de receber a próxima correção.
 
     O temporário é criado **na mesma pasta** do destino de propósito: `os.replace`
     só é atômico dentro do mesmo sistema de arquivos, e um temporário em `/tmp`
