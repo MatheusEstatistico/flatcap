@@ -25,8 +25,8 @@ from .config import Config
 TIMEOUT_SEGUNDOS = 30
 
 """
-Mensagens com que o REDCap sinaliza "este registro não tem arquivo neste campo". 
-É ausência esperada, não falha: um cliente pode simplesmente não ter anexado o banco. 
+Mensagens com que o REDCap sinaliza "este registro não tem arquivo neste campo".
+É ausência esperada, não falha: um cliente pode simplesmente não ter anexado o banco.
 Comparação em minúsculas e por trecho, porque o texto exato varia entre versões e idiomas do
 servidor.
 """
@@ -52,8 +52,8 @@ class ArquivoAusenteError(RedcapError):
 @dataclass(frozen = True)
 class ArquivoRedcap:
     """
-    O anexo baixad, ainda em memória. 
-    `nome` é o nome original do arquivo do jeito que foi nomeado o cliente. 
+    O anexo baixad, ainda em memória.
+    `nome` é o nome original do arquivo do jeito que foi nomeado o cliente.
     """
     nome: str
     conteudo: bytes
@@ -63,8 +63,8 @@ class ArquivoRedcap:
 
 def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
   """
-  Faz a requesição da chamada autenditaca e devolve só a resposta. 
-  Traduz as falhas de rede que não dependem do corpo. 
+  Faz a requesição da chamada autenditaca e devolve só a resposta.
+  Traduz as falhas de rede que não dependem do corpo.
   """
   dados = {
     "token": cfg.token,
@@ -75,14 +75,25 @@ def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
 
   try:
     resposta = requests.post(cfg.api_url, data = dados, timeout = TIMEOUT_SEGUNDOS)
-  except requests.exceptions.SSLError as erro: 
+  except requests.exceptions.SSLError as erro:
     raise RedcapError(
       f"Não foi possível acessar {cfg.api_url}\n"
       f"Detalhe técnico: {erro}"
     ) from erro
-  except requests.exceptions.Timeout as erro: 
+  except requests.exceptions.Timeout as erro:
     raise RedcapError(
       f"O servidor não respondeu em {TIMEOUT_SEGUNDOS}s: {cfg.api_url}"
+    ) from erro
+  except requests.exceptions.ConnectionError as erro:
+    # Precisa vir **depois** do SSLError e do Timeout: no `requests`, os dois são
+    # subclasses desta. Sem esta cláusula, máquina sem rede, VPN caída ou proxy
+    # recusando derrubavam o `doctor` com o traceback inteiro do `urllib3` — que é
+    # exatamente o oposto do que o `doctor` existe para fazer.
+    raise RedcapError(
+      f"Não foi possível chegar a {cfg.api_url}\n"
+      "A máquina está sem rede, a VPN institucional está fora, ou o endereço da "
+      "API está errado.\n"
+      f"Detalhe técnico: {type(erro).__name__}: {erro}"
     ) from erro
 
   if resposta.status_code == 403:
@@ -92,16 +103,16 @@ def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
 
   return resposta
 
-def _erro_no_corpo(resposta: requests.Response) -> str | None: 
+def _erro_no_corpo(resposta: requests.Response) -> str | None:
   """
-  Devolve a mensagem de erro do REDCap, se o corpo form um erro de aplicação. 
+  Devolve a mensagem de erro do REDCap, se o corpo form um erro de aplicação.
   """
   tipo = resposta.headers.get("Content-Type", "").lower()
   if "json" not in tipo and not resposta.content[:1] == b"{":
     return None
   try:
     corpo = resposta.json()
-  except ValueError: 
+  except ValueError:
     return None
   if isinstance(corpo, dict) and "error" in corpo:
     return str(corpo["error"])
@@ -112,11 +123,11 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
   Chamada autenticada com resposta JSON, já decodificada.
   """
   resposta = _requisitar(cfg, payload)
- 
+
   erro = _erro_no_corpo(resposta)
   if erro is not None:
     raise RedcapError(f"O REDCap recusou a chamada: {erro}")
- 
+
   try:
     corpo = resposta.json()
   except ValueError as causa:
@@ -127,9 +138,9 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
       "REDCap, e não para o endpoint da API.\n"
       f"Começo da resposta: {trecho!r}"
     ) from causa
- 
+
   resposta.raise_for_status()
- 
+
   if corpo is None:
     raise RedcapError(
       f"O REDCap devolveu um corpo vazio (JSON null) em "
@@ -139,7 +150,7 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
       f"{len(resposta.content)} bytes.\n"
       "Confira no REDCap se o token tem a permissão de exportação correspondente a esta chamada."
     )
- 
+
   return corpo
 
 
@@ -187,7 +198,7 @@ def exportar_registros(
       fields: campos a trazer. Pedir só o necessário reduz a resposta e evita trafegar campos que o
       FlatCap não usa.
       records: limita a registros específicos.
-  
+
   Os valores vêm crus (`rawOrLabel = raw`), então `intro` chega como "1"/"2" e não como
   "Professor/Colaborador".
   """
@@ -309,6 +320,5 @@ def _limpar_nome_de_arquivo(bruto: str) -> str:
   nome = nome.replace("\\", "/").split("/")[-1]
   nome = nome.replace("\x00", "").strip()
   return "" if nome in {"", ".", ".."} else nome
-
 
 
