@@ -1,10 +1,12 @@
 """
 Leitura e validação da configuração do FlatCap.
 
-Este é o único lugar do sistema que lê variáveis de ambiente. Todo o resto recebe um objeto `Config` pronto. 
-Consequência prática: nenhum caminho fixo e nenhum `os.environ` espalhado pelo código.
-Regra de precedência: variáveis já definidas no ambiente do sistema prevalecem sobre o `.env` (`override=False`). 
-Isso permite rodar em outra máquina, em um servidor ou em um teste sem editar arquivo nenhum.
+Este é o único lugar do sistema que lê variáveis de ambiente. Todo o resto recebe
+um objeto `Config` pronto. Consequência prática: nenhum caminho fixo e nenhum
+`os.environ` espalhado pelo código.
+Regra de precedência: variáveis já definidas no ambiente do sistema prevalecem
+sobre o `.env` (`override=False`). Isso permite rodar em outra máquina, em um
+servidor ou em um teste sem editar arquivo nenhum.
 """
 
 from __future__ import annotations
@@ -16,14 +18,15 @@ from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 
 """
-Chave: explicação mostrada quando ela falta. 
-As mensagens são o produto principal deste módulo: um erro de configuração precisa dizer o que fazer.
+Chave: explicação mostrada quando ela falta.
+As mensagens são o produto principal deste módulo: um erro de configuração precisa
+dizer o que fazer.
 """
 
 CHAVES: dict[str, str] = {
     "REDCAP_API_URL": (
         "URL da API do REDCap, no formato https://<servidor>/redcap/api/ "
-        "(NÃO É O LINK DO SERVEY). Veja a página 'API Playground' do projeto." 
+        "(NÃO É O LINK DO SERVEY). Veja a página 'API Playground' do projeto."
     ),
     "REDCAP_TOKEN": (
         "Token da API, obtido no meu 'API' do projeto do REDCap. "
@@ -40,7 +43,8 @@ class ConfigError(RuntimeError):
     """
     Configuração ausente ou inválida!
 
-    Erro próprio (e não ValueERror genérico) para que a CLI possa capturá-lo e transformar em mensagem amigável, sem engolir bugs de verdade.
+    Erro próprio (e não ValueERror genérico) para que a CLI possa capturá-lo e
+    transformar em mensagem amigável, sem engolir bugs de verdade.
     """
 
 @dataclass(frozen=True)
@@ -62,23 +66,26 @@ class Config:
             return "*" * len(self.token)
         return f"{self.token[:4]}{'*' * (len(self.token) - 8)}{self.token[-4:]}"
 
-def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Config: 
+def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Config:
     """
     Lê o `.env`, valida as três chaves e devolve um `Config`.
 
-    Args: 
-        env_file: caminho explícito de um `.env`. Se omitido, procura a partir do diretório atual e sobe na árvore.
-        criar_root: se True, cria `FLATCAP_ROOT` caso não exista. O padrão é False de propósito — um caminho digitado errado deve dar erro, não virar uma pasta vazia silenciosa em lugar nenhum.
-    
+    Args:
+        env_file: caminho explícito de um `.env`. Se omitido, procura a partir do
+            diretório atual e sobe na árvore.
+        criar_root: se True, cria `FLATCAP_ROOT` caso não exista. O padrão é False
+            de propósito — um caminho digitado errado deve dar erro, não virar uma
+            pasta vazia silenciosa em lugar nenhum.
+
     Raíses:
         ConfigError: com a lista do que falta e por quê cada item importa.
     """
     caminho_env = _localizar_env(env_file)
-    if caminho_env: 
+    if caminho_env:
         load_dotenv(caminho_env, override = False)
 
     valores = {chave: (os.environ.get(chave) or "").strip() for chave in CHAVES}
-    
+
     faltando = [chave for chave, valor in valores.items() if not valor]
     if faltando:
         raise ConfigError(_mensagem_faltando(faltando, caminho_env))
@@ -94,13 +101,13 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
     )
 
 
-# Validações individuais 
+# Validações individuais
 
 def _localizar_env(env_file: str | Path | None) -> str:
     """
-    Decide qual `.env` carregar. Devolve uma string vazia quando não tem nenhum. 
+    Decide qual `.env` carregar. Devolve uma string vazia quando não tem nenhum.
 
-    Um `--env` apontado para um arquivo que não existe é barrado. 
+    Um `--env` apontado para um arquivo que não existe é barrado.
     """
     if env_file is None:
         return find_dotenv(usecwd = True)
@@ -126,7 +133,8 @@ def _validar_api_url(valor: str) -> str:
         raise ConfigError(
             "REDCAP_API_URL precisa começar com https:// ou http://"
         )
-    return valor if valor.endswith("/") else valor + "/" # essa barra final serve para o server não responder "301"
+    # A barra final serve para o servidor não responder "301".
+    return valor if valor.endswith("/") else valor + "/"
 
 def _validar_root(valor: str, criar: bool = False) -> Path:
     """
@@ -139,7 +147,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
             "FLATCAP_ROOT precisa de um caminho absoluto.\n"
             f"Caminho atual: {valor!r}."
         )
-    
+
     if not root.exists():
         if not criar:
             raise ConfigError(
@@ -160,7 +168,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
     return root.resolve()
 
 
-# Mensagens 
+# Mensagens
 
 def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     """
@@ -177,8 +185,3 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
         linhas.append("Crie aquivo .env copiando o modelo versionado:")
         linhas.append("     cp .env.example .env")
     return "\n".join(linhas)
-
-
-
-
-

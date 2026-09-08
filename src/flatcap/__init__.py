@@ -11,11 +11,15 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     banco.py       abre a versão vigente do banco como um quadro do pandas
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
+    descritiva.py  obedece ao dicionário: conta, resume e monta as tabelas
+    graficos.py    desenha os .png a partir das tabelas já calculadas
+    manifesto.py   escreve e lê o manifesto.json da descritiva
 
     cli.py         expõe os comandos no terminal
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
-`projeto`, `perfil` conhece `banco` e `dicionario`, e nenhuma delas conhece a `cli`.
+`projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
+e `manifesto`, e nenhuma delas conhece a `cli`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -24,6 +28,10 @@ Duas divisões da Fase 4 valem ser lidas juntas: `banco.py` é o único módulo 
 do cliente, para que as Fases 5 e 6 não voltem a decidir qual arquivo é o banco; e
 `dicionario.py` não importa o `pandas`, porque o formato do arquivo que guarda as decisões da
 reunião não depende de como o banco foi lido.
+
+A Fase 5 repete a divisão em outro eixo: `descritiva.py` calcula e não desenha, `graficos.py`
+desenha e não calcula, e `manifesto.py` não importa nem o `pandas` nem o `matplotlib` — é o
+índice que a Fase 6 vai ler para montar o `.docx` sem reabrir o banco.
 """
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"

@@ -39,6 +39,7 @@ ARQUIVO_HISTORICO = "historico.md"
 
 PASTA_DADOS = SUBPASTAS[0]    # onde vive a versão vigente do banco
 PASTA_ANTIGAS = SUBPASTAS[1]  # para onde a versão anterior é rodada na Fase 3
+PASTA_ANALISES = SUBPASTAS[2] # onde a Fase 5 escreve a pasta `descritiva/`
 # O .docx da Fase 6 fica na raiz da pasta do projeto — não há `4. Relatórios/`.
 
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
@@ -472,7 +473,6 @@ def tamanho_legivel(bytes_: int) -> str:
             return f"{tamanho:.1f} {unidade}".replace(".", ",")
         tamanho /= 1024
     return f"{bytes_} B"
-
 
 
 

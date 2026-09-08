@@ -70,7 +70,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, Leitura, abrir
+from .banco import Banco, Leitura, abrir, formato_de_data
 from .dicionario import (
     CATEGORICA,
     DATA,
@@ -157,17 +157,11 @@ _NOMES_DE_IDENTIFICADOR = (
     "comentarios",
 )
 
-_FORMATOS_DATA = (
-    "%d/%m/%Y",
-    "%d/%m/%y",
-    "%Y-%m-%d",
-    "%d-%m-%Y",
-    "%d.%m.%Y",
-    "%Y/%m/%d",
-    "%d/%m/%Y %H:%M",
-    "%d/%m/%Y %H:%M:%S",
-    "%Y-%m-%d %H:%M:%S",
-)
+# A lista de formatos de data e a detecção passaram para `banco.py` na Fase 5: o
+# detector `data_como_texto` daqui e a conversão que a descritiva faz precisam dar
+# a mesma resposta, e duas listas é como uma delas deixa de receber a próxima
+# correção. Ver a justificativa em `banco.formato_de_data`.
+_formato_de_data = formato_de_data
 
 # `1.234,56` e `1234,56` — o jeito brasileiro.
 _NUMERO_PTBR = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$|^[+-]?\d+(?:,\d+)?$")
@@ -1115,31 +1109,6 @@ def _e_numero(texto: str) -> bool:
     if not limpo:
         return False
     return bool(_NUMERO_PTBR.match(limpo) or _NUMERO_EN.match(limpo))
-
-
-def _formato_de_data(textos: list[str]) -> tuple[str | None, int]:
-    """
-    Descobre se a coluna é uma data escrita à mão, e em que formato.
-
-    Testa um formato por vez, explícito, em vez de deixar o `pandas` adivinhar:
-    o palpite dele aceita formatos misturados na mesma coluna e inverte dia com
-    mês sem avisar, que é exatamente o erro que este detector existe para
-    encontrar.
-    """
-    if not textos:
-        return None, 0
-
-    candidatos = [texto for texto in textos if any(s in texto for s in "/-.")]
-    if len(candidatos) / len(textos) < PROPORCAO_PARA_AFIRMAR:
-        return None, 0
-
-    serie = pd.Series(textos, dtype="object")
-    for formato in _FORMATOS_DATA:
-        convertidas = pd.to_datetime(serie, format=formato, errors="coerce")
-        quantas = int(convertidas.notna().sum())
-        if quantas / len(textos) >= PROPORCAO_PARA_AFIRMAR:
-            return formato, quantas
-    return None, 0
 
 
 def _variacoes_de_grafia(textos: list[str]) -> list[tuple[str, ...]]:

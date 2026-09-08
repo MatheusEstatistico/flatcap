@@ -46,6 +46,7 @@ from .nomes import localizar_pasta
 from .projeto import (
     ARQUIVO_HISTORICO,
     ARQUIVO_PROJETO,
+    PASTA_ANALISES,
     PASTA_ANTIGAS,
     PASTA_DADOS,
     ClienteIncompletoError,
@@ -59,6 +60,7 @@ from .projeto import (
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .descritiva import Descritiva, PlanoDescritiva
     from .perfil import Achado, Perfil, PlanoPerfil
 
 app = typer.Typer(
@@ -175,16 +177,21 @@ def doctor(
 
 def _versoes_de_leitura() -> str:
   """
-  Quais versões abrem o banco do cliente hoje.
+  Quais versões abrem o banco do cliente e desenham os gráficos hoje.
 
   Registrar isso no `doctor` é barato e evita a pergunta mais difícil de
   responder da Fase 5: um gráfico saiu diferente do que saía antes — mudaram os
-  dados ou mudou a biblioteca?
+  dados ou mudou a biblioteca? A resposta completa está no `manifesto.json` de
+  cada rodada; esta linha é a de agora, para comparar com ela.
   """
+  import matplotlib
   import openpyxl
   import pandas
 
-  return f"pandas {pandas.__version__} · openpyxl {openpyxl.__version__}"
+  return (
+    f"pandas {pandas.__version__} · openpyxl {openpyxl.__version__} · "
+    f"matplotlib {matplotlib.__version__}"
+  )
 
 @app.command()
 def listar(
@@ -987,6 +994,280 @@ def _arvore_do_perfil(plano: PlanoPerfil) -> Tree:
     ramo.add(Text(f"+ … mais {len(fusao.novas) - 10}", style = "dim"))
   for nome in fusao.ausentes[:10]:
     ramo.add(Text.assemble(("~ ", "yellow"), (nome, ""), ("   fora do banco", "dim")))
+
+  arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+  return arvore
+
+
+# flatcap descritiva
+
+@app.command()
+def descritiva(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+  ),
+  aba: str | None = typer.Option(
+    None, "--aba", metavar = "NOME",
+    help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+  ),
+  sem_graficos: bool = typer.Option(
+    False, "--sem-graficos",
+    help = "Escreve só as tabelas. Mais rápido, e o matplotlib nem é carregado."
+  ),
+  rapido: bool = typer.Option(
+    False, "--rapido",
+    help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Gera a análise descritiva obedecendo ao dicionario.csv.
+
+  Uma tabela de frequência e um gráfico de barras por categórica; resumo, tabela
+  por faixas e histograma por numérica; período e distribuição no tempo por data.
+  Tudo em `3. Análises/descritiva/`, com um `manifesto.json` que diz de qual
+  variável saiu cada arquivo.
+
+  Sem `faixas` preenchida no dicionário, as faixas saem pelos quartis da própria
+  variável. Numérica que chegou como texto faz o comando recusar: o caminho é
+  pedir a correção ao cliente e registrar a versão nova com `dados adicionar`.
+
+  Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+  """
+  # Mesmo motivo do `perfil`: o `pandas` custa perto de meio segundo para
+  # carregar e o `matplotlib` outro tanto. O `listar`, que roda várias vezes por
+  # dia, não deve pagar por um comando que ele não usa.
+  from .banco import BancoError
+  from .descritiva import (
+    DescritivaError,
+    executar_descritiva,
+    preparar_descritiva,
+  )
+
+  cfg = _configuracao(env)
+
+  try:
+    raiz = localizar_projeto(cfg.root, identificador)
+    plano = preparar_descritiva(
+      raiz, aba = aba, conferir = not rapido, com_graficos = not sem_graficos
+    )
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except BancoError as erro:
+    raise _abortar("Banco de dados", str(erro)) from erro
+  except DicionarioError as erro:
+    raise _abortar("Dicionário", str(erro)) from erro
+  except DescritivaError as erro:
+    raise _abortar("Descritiva", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", str(erro)) from erro
+
+  console.print(_cabecalho_da_descritiva(plano))
+  console.print(_tabela_da_descritiva(plano.descritiva))
+  for bloco in _fora_da_descritiva(plano.descritiva):
+    console.print(bloco)
+  for aviso in plano.descritiva.avisos:
+    erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+  console.print(_arvore_da_descritiva(plano))
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+      "Repita com [bold]--sim[/bold] para gerar a pasta."
+    )
+    return
+
+  try:
+    resultado = executar_descritiva(plano)
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.pasta}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+      "anterior — confira a pasta antes de rodar de novo."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  if resultado.arquivado is not None:
+    console.print(
+      Text(
+        f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+        style = "dim",
+      )
+    )
+
+  quantos = len(plano.arquivos)
+  console.print(
+    f"\n[green]Descritiva escrita.[/green] {quantos} "
+    f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+    f"{PASTA_ANALISES}/{plano.pasta.name}"
+  )
+
+
+def _cabecalho_da_descritiva(plano: PlanoDescritiva) -> Text:
+  """
+  Quem, qual banco, se dá para confiar nele, e quanto do dicionário entra.
+  """
+  descritiva = plano.descritiva
+  ficha = descritiva.ficha
+  banco = descritiva.banco
+  dicionario = plano.manifesto.dicionario
+
+  cabecalho = Text.assemble(
+    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+    "\n",
+    ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+    ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+    ("  ·  ", "dim"),
+    (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+  )
+  if banco.leitura.aba:
+    cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+  cabecalho.append("\n")
+  if banco.confere is True:
+    cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+  elif banco.confere is False:
+    cabecalho.append(
+      Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+    )
+  else:
+    cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+  cabecalho.append(
+    Text.assemble(
+      ("  ·  ", "dim"),
+      ("Dicionário ", "dim"),
+      (f"{dicionario['variaveis']} variáveis", ""),
+      (f", {len(descritiva.variaveis)} na descritiva", ""),
+      (f", {len(descritiva.fora)} fora", "dim"),
+    )
+  )
+  return cabecalho
+
+
+def _tabela_da_descritiva(descritiva: Descritiva) -> Table:
+  """
+  Uma linha por variável, com os arquivos que ela gera.
+
+  A coluna dos arquivos é a que importa: é o `manifesto.json` na tela, e é o que
+  responde "de qual variável saiu este .csv?" antes de o .csv existir.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("#", justify = "right", no_wrap = True)
+  tabela.add_column("Variável", overflow = "fold")
+  tabela.add_column("Tipo", no_wrap = True)
+  tabela.add_column("n", justify = "right", no_wrap = True)
+  tabela.add_column("Faltantes", justify = "right", no_wrap = True)
+  tabela.add_column("Arquivos", overflow = "fold")
+
+  for posicao, variavel in enumerate(descritiva.variaveis, start = 1):
+    proporcao = variavel.faltantes / variavel.n if variavel.n else 0.0
+    faltantes = Text("—", style = "dim")
+    if variavel.faltantes:
+      faltantes = Text(
+        f"{variavel.faltantes} ({proporcao * 100:.0f}%)",
+        style = "yellow" if proporcao >= 0.2 else "",
+      )
+
+    nomes = [t.nome for t in variavel.tabelas] + [g.nome for g in variavel.graficos]
+    tabela.add_row(
+      Text(str(posicao)),
+      Text(variavel.variavel),
+      Text(variavel.tipo),
+      Text(str(variavel.preenchidos)),
+      faltantes,
+      Text(" · ".join(nomes), style = "dim"),
+    )
+
+  return tabela
+
+
+def _fora_da_descritiva(descritiva: Descritiva) -> list[Panel]:
+  """
+  As variáveis que não geraram artefato, e por quê.
+
+  Aparecem na tela pelo mesmo motivo que aparecem no manifesto: "não está no
+  relatório" e "ninguém reparou que ela existia" são coisas diferentes.
+  """
+  if not descritiva.fora:
+    return []
+
+  corpo = Text()
+  for posicao, item in enumerate(descritiva.fora):
+    if posicao:
+      corpo.append("\n")
+    corpo.append(item.variavel, style = "bold")
+    corpo.append(" — ")
+    corpo.append(item.motivo)
+  return [
+    Panel(
+      corpo,
+      title = f"Fora da descritiva ({len(descritiva.fora)})",
+      border_style = "dim",
+    )
+  ]
+
+
+def _arvore_da_descritiva(plano: PlanoDescritiva) -> Tree:
+  """
+  Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
+  """
+  arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+  if plano.arquivamento is not None:
+    de, para = plano.arquivamento
+    quantos = len([p for p in de.iterdir()])
+    ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+    ramo.add(
+      Text.assemble(
+        (f"{para.name}/", "yellow"),
+        (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+      )
+    )
+
+  ramo = arvore.add(
+    Text.assemble(
+      (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+      ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+    )
+  )
+  for tabela in plano.tabelas[:12]:
+    ramo.add(Text.assemble(("+ ", "green"), (tabela.nome, "")))
+  if len(plano.tabelas) > 12:
+    ramo.add(Text(f"+ … mais {len(plano.tabelas) - 12} tabela(s)", style = "dim"))
+
+  if plano.com_graficos:
+    ramo.add(
+      Text.assemble(
+        ("+ ", "green"), (f"{len(plano.graficos)} gráfico(s) .png", ""),
+      )
+    )
+  else:
+    ramo.add(Text("(sem gráficos: --sem-graficos)", style = "yellow"))
+
+  ramo.add(
+    Text.assemble(
+      ("+ ", "green"), ("manifesto.json", "bold"),
+      (f"   índice de {len(plano.descritiva.variaveis)} variável(is) e "
+       f"{plano.manifesto.total_artefatos} artefato(s)", "dim"),
+    )
+  )
 
   arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
   return arvore

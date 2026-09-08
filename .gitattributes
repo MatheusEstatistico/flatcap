@@ -1,1 +1,94 @@
+# 1. NORMALIZAÇÃO GLOBAL DE FIM DE LINHA (O MAIS IMPORTANTE)
+# Diz ao Git: "Detecte se é texto. Ao commitar, normalize para LF. Ao fazer checkout, 
+# converta para o padrão do SO (CRLF no Windows, LF no Mac/Linux)".
 * text=auto
+
+# 2. ARQUIVOS DE TEXTO EXPLÍCITOS (GARANTIA CONTRA BINÁRIOS FALSOS)
+*.c text
+*.cpp text
+*.h text
+*.js text
+*.ts text
+*.jsx text
+*.tsx text
+*.py text
+*.rb text
+*.go text
+*.java text
+*.php text
+*.html text
+*.htm text
+*.css text
+*.scss text
+*.less text
+*.json text
+*.yaml text
+*.yml text
+*.toml text
+*.xml text
+*.svg text
+*.sql text
+*.md text
+*.txt text
+
+# 3. REGRAS ESPECÍFICAS PARA SCRIPTS (QUEBRA DE LINHA OBRIGATÓRIA)
+# Scripts shell (Linux/macOS) DEVEM sempre usar LF, mesmo no Windows
+*.sh text eol=lf
+# Scripts batch (Windows) DEVEM sempre usar CRLF
+*.bat text eol=crlf
+# PowerShell pode usar LF ou CRLF, mas LF é mais seguro para repositórios compartilhados
+*.ps1 text eol=lf
+
+# 4. ARQUIVOS BINÁRIOS (NUNCA MODIFICAR QUEBRAS DE LINHA E NÃO MOSTRAR DIFF)
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.tar binary
+*.mp4 binary
+*.mp3 binary
+*.pyc binary
+*.o binary
+*.so binary
+*.dll binary
+*.exe binary
+
+# 5. TRATAMENTO DE DIFFS PARA IMAGENS (OPCIONAL - USAR PLUGIN EXIF)
+# Mostra metadados no diff, se você tiver o diff=exif configurado globalmente
+*.png diff=exif
+*.jpg diff=exif
+
+# 6. ATRIBUTOS PARA GITHUB/GITLAB (LINGUIST)
+# Oculta arquivos gerados/minificados das estatísticas de linguagem do repositório
+*.min.js linguist-generated=true
+*.min.css linguist-generated=true
+*.bundle.js linguist-generated=true
+dist/ linguist-generated=true
+build/ linguist-generated=true
+out/ linguist-generated=true
+node_modules/ linguist-generated=true
+vendor/ linguist-generated=true
+*.lock linguist-generated=true  # package-lock, yarn.lock, etc.
+
+# 7. OTIMIZAÇÃO DE MERGE/DIF F PARA ARQUIVOS DE DEPENDÊNCIA
+# Evita mostrar diffs enormes em arquivos de lock (considera como binário para diff)
+package-lock.json -diff
+yarn.lock -diff
+pnpm-lock.yaml -diff
+Gemfile.lock -diff
+composer.lock -diff
+poetry.lock -diff
+
+# 8. IGNORAR AO GERAR PACOTES .TAR.GZ OU .ZIP (git archive)
+.gitattributes export-ignore
+.gitignore export-ignore
+.env.example export-ignore
+docker-compose.override.yml export-ignore
+*.local.* export-ignore
+
+
+
