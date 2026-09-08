@@ -46,6 +46,7 @@ fiel ao que o cliente mandou, e é o `perfil.py` que aponta o que está torto.
 from __future__ import annotations
 
 import csv
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -79,6 +80,26 @@ _CONVERSAO = {
 _AMOSTRA_BYTES = 64 * 1024
 _SEPARADORES = (";", ",", "\t", "|")
 _CODIFICACOES = ("utf-8", "cp1252", "latin-1")
+
+# Os formatos de data escritos à mão, na ordem em que são testados. Moram aqui, e
+# não em quem os usa, porque este é o módulo que sabe como o arquivo do cliente
+# chega — e porque a Fase 4, que denuncia a data escrita como texto, e a Fase 5,
+# que precisa convertê-la para descrever o período, têm de dar exatamente a mesma
+# resposta. Duas listas de formatos é como um comando lê `03/04` como 3 de abril
+# e o outro como 4 de março.
+FORMATOS_DATA: tuple[str, ...] = (
+    "%d/%m/%Y",
+    "%d/%m/%y",
+    "%Y-%m-%d",
+    "%d-%m-%Y",
+    "%d.%m.%Y",
+    "%Y/%m/%d",
+    "%d/%m/%Y %H:%M",
+    "%d/%m/%Y %H:%M:%S",
+    "%Y-%m-%d %H:%M:%S",
+)
+
+PROPORCAO_PARA_AFIRMAR = 0.9  # a partir daqui dá para afirmar "a coluna é isto"
 
 
 class BancoError(RuntimeError):
@@ -145,6 +166,7 @@ class Leitura:
     abas: tuple[str, ...] = ()
     separador: str | None = None
     codificacao: str | None = None
+    avisos: tuple[str, ...] = ()  # o que o leitor teve de relevar para abrir
 
     @property
     def formato(self) -> str:
@@ -269,7 +291,7 @@ def abrir(raiz: Path, aba: str | None = None, conferir: bool = True) -> Banco:
 
     quadro, leitura = abrir_arquivo(caminho, aba=aba)
 
-    avisos: list[str] = []
+    avisos: list[str] = list(leitura.avisos)
     confere = item.confere if item is not None else None
     if confere is False:
         avisos.append(
@@ -385,14 +407,33 @@ def _ler_csv(caminho: Path) -> tuple[pd.DataFrame, Leitura]:
     codificacao, amostra = _decodificar(bruto)
     separador = _separador(amostra)
 
+    avisos: list[str] = []
     try:
-        quadro = pd.read_csv(
-            caminho,
-            sep=separador,
-            encoding=codificacao,
-            engine="python",  # tolera linha com número de campos diferente do cabeçalho
-            skip_blank_lines=True,
-        )
+        # O `pandas` avisa por `warnings` que perdeu campo, e um `warning` impresso
+        # no meio da saída de um comando é um recado que o usuário aprende a
+        # ignorar. Capturado aqui, ele vira um aviso do FlatCap e viaja até o
+        # `perfil.md` e o manifesto da descritiva, junto do resto.
+        with warnings.catch_warnings(record=True) as capturados:
+            warnings.simplefilter("always", pd.errors.ParserWarning)
+            quadro = pd.read_csv(
+                caminho,
+                sep=separador,
+                encoding=codificacao,
+                engine="python",  # tolera linha com número de campos diferente do cabeçalho
+                skip_blank_lines=True,
+                # Sem isto, uma linha com mais campos do que o cabeçalho faz o
+                # `pandas` promover a primeira coluna a índice — e a tabela inteira
+                # anda uma casa para a esquerda sem que nada avise. Melhor perder o
+                # campo sobrando, que fica avisado, do que deslocar tudo em silêncio.
+                index_col=False,
+            )
+        if any(issubclass(c.category, pd.errors.ParserWarning) for c in capturados):
+            avisos.append(
+                f"O arquivo `{caminho.name}` tem linha com mais campos do que o "
+                f"cabeçalho, e o que sobrou foi descartado. Quase sempre é um "
+                f"`{separador}` digitado dentro de um campo de texto. Confira o "
+                "arquivo antes de confiar nas colunas da direita."
+            )
     except pd.errors.EmptyDataError as erro:
         raise BancoVazioError(
             f"O arquivo `{caminho.name}` não tem nem a linha de cabeçalho — são "
@@ -402,7 +443,12 @@ def _ler_csv(caminho: Path) -> tuple[pd.DataFrame, Leitura]:
     except Exception as erro:  # noqa: BLE001 - mesma justificativa do `.xlsx`
         raise BancoIlegivelError(_mensagem_ilegivel(caminho, erro)) from erro
 
-    return quadro, Leitura(caminho=caminho, separador=separador, codificacao=codificacao)
+    return quadro, Leitura(
+        caminho=caminho,
+        separador=separador,
+        codificacao=codificacao,
+        avisos=tuple(avisos),
+    )
 
 
 def _decodificar(bruto: bytes) -> tuple[str, str]:
@@ -427,22 +473,38 @@ def _separador(amostra: str) -> str:
     Descobre o separador pela primeira linha não vazia.
 
     O `csv.Sniffer` tem a primeira palavra porque entende aspas. Quando ele se
-    recusa a decidir — acontece com cabeçalho de uma coluna só — a contagem
-    resolve, e o empate cai em `,`, que é o padrão do formato.
+    recusa a decidir, a contagem no cabeçalho resolve.
+
+    O caso que sobra é o cabeçalho **sem separador nenhum** — um arquivo de uma
+    coluna só. Cair em `,` ali é o que quebrava: um `.csv` de uma coluna com
+    `peso` no cabeçalho e `70,5` nas linhas era partido em duas colunas, e o
+    `pandas`, vendo mais campos do que nomes, promovia a primeira metade a índice
+    em silêncio. O que chegava à análise era a coluna `peso` valendo 5, 2, 0 — e
+    nada na saída denunciava. Então, quando o cabeçalho não tem separador, o
+    escolhido é um que também não apareça no resto da amostra: o arquivo tem uma
+    coluna, e é assim que ele é lido.
     """
-    linha = next((linha for linha in amostra.splitlines() if linha.strip()), "")
+    linhas = [linha for linha in amostra.splitlines() if linha.strip()]
+    cabecalho = linhas[0] if linhas else ""
 
     try:
-        dialeto = csv.Sniffer().sniff(linha, delimiters="".join(_SEPARADORES))
+        dialeto = csv.Sniffer().sniff(cabecalho, delimiters="".join(_SEPARADORES))
     except csv.Error:
         pass
     else:
         if dialeto.delimiter in _SEPARADORES:
             return dialeto.delimiter
 
-    contagens = {separador: linha.count(separador) for separador in _SEPARADORES}
+    contagens = {separador: cabecalho.count(separador) for separador in _SEPARADORES}
     melhor = max(contagens, key=lambda separador: contagens[separador])
-    return melhor if contagens[melhor] else ","
+    if contagens[melhor]:
+        return melhor
+
+    corpo = "\n".join(linhas[1:8])
+    for separador in _SEPARADORES:
+        if separador not in corpo:
+            return separador
+    return ","
 
 
 # Mensagens
@@ -495,6 +557,39 @@ def _mensagem_formato(caminho: Path) -> str:
             "`flatcap dados adicionar`."
         )
     return "\n".join(linhas)
+
+
+def formato_de_data(
+    textos: list[str], proporcao: float = PROPORCAO_PARA_AFIRMAR
+) -> tuple[str | None, int]:
+    """
+    Descobre se uma coluna de texto é uma data escrita à mão, e em que formato.
+
+    Devolve o formato e quantos valores ele explica; `(None, 0)` quando nenhum
+    formato explica a coluna inteira.
+
+    Testa um formato por vez, explícito, em vez de deixar o `pandas` adivinhar: o
+    palpite dele aceita formatos misturados na mesma coluna e inverte dia com mês
+    sem avisar. Para a Fase 4 isso é o detector `data_como_texto`; para a Fase 5 é
+    a diferença entre converter uma coluna e inventar datas — e por isso a
+    exigência é que **um único** formato explique a coluna quase toda. Coluna com
+    dois formatos misturados não é convertida por ninguém: é devolvida como
+    indecidível, que é o que ela é.
+    """
+    if not textos:
+        return None, 0
+
+    candidatos = [texto for texto in textos if any(s in texto for s in "/-.")]
+    if len(candidatos) / len(textos) < proporcao:
+        return None, 0
+
+    serie = pd.Series(textos, dtype="object")
+    for formato in FORMATOS_DATA:
+        convertidas = pd.to_datetime(serie, format=formato, errors="coerce")
+        quantas = int(convertidas.notna().sum())
+        if quantas / len(textos) >= proporcao:
+            return formato, quantas
+    return None, 0
 
 
 def _mensagem_ilegivel(caminho: Path, erro: Exception) -> str:
