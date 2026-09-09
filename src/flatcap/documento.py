@@ -207,12 +207,12 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
     for alerta in relatorio.alertas:
         _caixa_de_aviso(documento, alerta, estilos)
 
-    _texto_padrao(documento, relatorio, estilos)
+    abriu = _texto_padrao(documento, relatorio, estilos)
 
     numero_tabela = 0
     numero_figura = 0
 
-    for secao in relatorio.secoes:
+    for posicao, secao in enumerate(relatorio.secoes):
         cabecalho = _paragrafo(
             documento,
             secao.rotulo,
@@ -224,6 +224,14 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
             espaco_depois=2,
         )
         cabecalho.paragraph_format.keep_with_next = True
+
+        # A primeira variável começa em página nova, para que a abertura fique
+        # sozinha na primeira. É `page_break_before` no título, e não um
+        # parágrafo de quebra atrás dele: um parágrafo a mais deixaria a marca
+        # dele no alto da página seguinte, empurrando o título para baixo, e
+        # sobraria no documento se um dia o texto de abertura sumisse.
+        if posicao == 0 and abriu:
+            cabecalho.paragraph_format.page_break_before = True
 
         for tabela in secao.tabelas:
             numero_tabela += 1
@@ -301,9 +309,9 @@ def _documento_padrao():
 # As peças do documento
 
 
-def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> None:
+def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
     """
-    Os parágrafos fixos que abrem todo relatório.
+    Os parágrafos fixos que abrem todo relatório. Devolve se escreveu algum.
 
     O texto vem no `Relatorio`, e não de uma constante lida aqui: quem escreve o
     documento não sabe de onde ele veio, e no dia em que ele passar a vir do
@@ -312,7 +320,12 @@ def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> None:
     Sem estilo próprio de propósito. É texto corrido, e texto corrido é o estilo
     `FlatCap Corpo` — que é justamente o que se ajusta no Word para mudar a cara
     de todos os relatórios de uma vez.
+
+    O `bool` de volta existe para a quebra de página: sem texto de abertura, a
+    primeira página seria só o título e o subtítulo, e quebrar ali produziria
+    uma página quase em branco que ninguém pediu.
     """
+    escreveu = False
     for paragrafo in relatorio.texto:
         if not paragrafo.strip():
             continue
@@ -322,6 +335,8 @@ def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> None:
         _texto(escrito, paragrafo.strip(), aplicar_estilo=False)
         escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         escrito.paragraph_format.space_after = Pt(8)
+        escreveu = True
+    return escreveu
 
 
 def _caixa_de_aviso(documento, alerta: Any, estilos: Estilos) -> None:
