@@ -51,11 +51,22 @@ formatados em português e um cabeçalho de comentário com o denominador. A lei
 aqui é fiel: separa os comentários das linhas de dados e não converte nada — o
 texto que está na célula do `.csv` é o texto que vai para a célula do Word.
 
+## O que sai na primeira página
+
+Título, subtítulo com `matrícula - nome`, os alertas quando houver, e o
+`TEXTO_PADRAO` — os parágrafos fixos que abrem todo relatório, definidos logo
+abaixo, em um bloco só, para serem reescritos sem se procurar código.
+
 ## O que este módulo deliberadamente não faz
 
-Não escreve prosa. Não monta uma "Tabela 1" consolidada. Não escreve apêndice
-técnico. As três foram decisões suas, e as três continuam a um argumento de
-distância — o `Relatorio` já carrega tudo o que elas precisariam.
+Não escreve prosa sobre os números. Não monta uma "Tabela 1" consolidada. Não
+escreve apêndice técnico. As três foram decisões suas, e as três continuam a um
+argumento de distância — o `Relatorio` já carrega tudo o que elas precisariam.
+
+E não imprime mais a tabela de identificação nem os rodapés de denominador das
+tabelas: as duas saíram na revisão de formatação, e o que elas diziam sobre a
+procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
+`manifesto.json` da rodada.
 """
 
 from __future__ import annotations
@@ -75,11 +86,43 @@ from .ficha import Ficha, Versao, versao_vigente
 from .ficha import ler as ler_ficha
 from .manifesto import ARQUIVO_MANIFESTO, Manifesto
 from .manifesto import ler as ler_manifesto
+from .nomes import SEPARADOR, sanitizar
 from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA, anotar
 
 PREFIXO_RELATORIO = "Relatorio_"
 
-TITULO_PADRAO = "Relatório descritivo"
+TITULO_PADRAO = "Relatório Estatístico"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  O TEXTO PADRÃO DA PRIMEIRA PÁGINA — é aqui que se escreve.
+#
+#  Uma linha da tupla, um parágrafo do documento, na ordem em que estão. Eles
+#  entram entre o subtítulo e a primeira variável, em todo relatório de todo
+#  projeto: é o texto que não muda de cliente para cliente.
+#
+#  Trocar o `xxxxx` pelo texto de verdade é a única edição necessária — nada
+#  mais no código sabe o que está escrito aqui, e a estrutura do documento não
+#  muda quando o texto crescer, encolher ou ganhar parágrafos.
+#
+#  `()` não escreve nada: é assim que a seção inteira sai.
+# ─────────────────────────────────────────────────────────────────────────────
+
+TEXTO_PADRAO: tuple[str, ...] = (
+    "xxxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx xxxxxxxx xxxxx xxxxxxxxxxx xxxxxxxx "
+    "xxxxxxxxxxxxx xxxxxx xxxxxxxxx xxxxxxxxxxxx xxxxx xxxxxxxxxx xxxxxxx "
+    "xxxxxxxxxxxxxxx xxxxxxxx xxxxx xxxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxx.",
+    "xxxxxxxx xxxxxxxxxxxxx xxxxx xxxxxxxxxx xxxxxxxxxxxx xxxxxxx xxxxxxxxxxx "
+    "xxxxx xxxxxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxxxx xxxxxxxxxx xxxxxxx "
+    "xxxxxxxxxxx xxxxxxxxxxxxx xxxxxxx xxxxx xxxxxxxxxxxxxxxx xxxxxxxxxxx "
+    "xxxxxxxx xxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx.",
+    "xxxxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxx xxxxxxxx xxxxxxxxxxxxx xxxxx "
+    "xxxxxxxxxxxx xxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx xxxxxxxx xxxxxxxxxxxxxx "
+    "xxxxxxxxxxx xxxxxxx xxxxxxxxxxxx xxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxxxx.",
+    "xxxxxxxxx xxxxxxxxxxxxxx xxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxxxxx "
+    "xxxxxxxxxxxxx xxxxxxxxxx xxxxxxx xxxxxxxxxxxxxxx xxxxxxxxxxx xxxxxxxxx "
+    "xxxxxxxxxxxxxx xxxxxxxx xxxxxxxxxxx xxxxxxxxxxxxxxx xxxxxxxxxx xxxxxxx.",
+)
 
 # A nota de comentário que todo `.csv` da Fase 5 traz na segunda linha. Ela é
 # descartada na leitura porque o título da seção já diz de qual variável se trata,
@@ -224,6 +267,7 @@ class Relatorio:
     manifesto: Manifesto
     titulo: str
     secoes: tuple[Secao, ...]
+    texto: tuple[str, ...] = ()
     fora: tuple[ForaDoRelatorio, ...] = ()
     alertas: tuple[Alerta, ...] = ()
     avisos: tuple[str, ...] = ()
@@ -234,44 +278,29 @@ class Relatorio:
         return self.ficha.raiz
 
     @property
+    def subtitulo(self) -> str:
+        """
+        `00742 - José Antônio de Sá`, embaixo do título.
+
+        Monta com o mesmo separador do `nomes.py`, e não com o nome da pasta,
+        por dois motivos. O nome da pasta passou pela `sanitizar` — perdeu a
+        barra, o dois-pontos, o que o Windows não aceita — e o documento não tem
+        essa limitação; e a matrícula e o nome são campos da ficha, que é onde
+        eles são a informação, enquanto na pasta são um caminho.
+
+        Cliente sem nome (o cadastro incompleto que o `listar` marca em amarelo)
+        sai só com a matrícula, em vez de sair com um separador solto no fim.
+        """
+        partes = [parte for parte in (self.ficha.matricula, self.ficha.nome) if parte]
+        return SEPARADOR.join(partes)
+
+    @property
     def tabelas(self) -> tuple[TabelaLida, ...]:
         return tuple(t for secao in self.secoes for t in secao.tabelas)
 
     @property
     def figuras(self) -> tuple[Figura, ...]:
         return tuple(f for secao in self.secoes for f in secao.figuras)
-
-    @property
-    def identificacao(self) -> tuple[tuple[str, str], ...]:
-        """
-        O bloco de identificação do documento: quem, qual banco, de quando.
-
-        A linha do banco não é burocracia. É a resposta, dentro do próprio
-        documento entregue, para "de qual versão saiu esse 37%?" — e é o que a
-        decisão de gerar-com-aviso exige que esteja escrito.
-        """
-        ficha = self.ficha
-        banco = self.manifesto.banco
-        gerado = self.manifesto.gerado_em
-        linhas: list[tuple[str, str]] = [
-            ("Cliente", ficha.nome or "—"),
-            ("Matrícula", ficha.matricula or "—"),
-            ("Registro", f"{ficha.record_id or '?'} · {ficha.tipo or '?'}"),
-            (
-                "Banco de dados",
-                f"{banco.get('arquivo', '—')} · "
-                f"{banco.get('linhas', '?')} linhas × {banco.get('colunas', '?')} colunas",
-            ),
-            # "na rodada", e não "Integridade": o que está no manifesto é o
-            # estado do arquivo no momento em que os números foram produzidos, e
-            # não o de agora. Sem essa palavra, um documento com o alerta de
-            # "arquivo alterado" traria, três linhas acima, um "Integridade:
-            # confere" que parece desmenti-lo.
-            ("Integridade na rodada", str(banco.get("integridade", "—"))),
-            ("Descritiva gerada em", f"{gerado:%d/%m/%Y às %H:%M}"),
-            ("Documento gerado em", f"{self.quando:%d/%m/%Y às %H:%M}"),
-        ]
-        return tuple(linhas)
 
 
 @dataclass(frozen=True)
@@ -386,6 +415,12 @@ def preparar_relatorio(
         manifesto=manifesto,
         titulo=titulo,
         secoes=secoes,
+        # O texto padrão entra no `Relatorio` como dado, e não é lido pelo
+        # `documento.py` da constante. É o que mantém a divisão da fase: quem
+        # escreve o `.docx` não sabe de onde o texto veio, e um dia em que ele
+        # passar a vir do `projeto.yaml` ou de um arquivo por cliente, só esta
+        # linha muda.
+        texto=TEXTO_PADRAO,
         fora=tuple(
             ForaDoRelatorio(
                 variavel=str(entrada.get("variavel", "")),
@@ -478,8 +513,6 @@ def nome_do_relatorio(matricula: str, quando: date) -> str:
     é digitada por outra pessoa, em outro sistema, e o que vem de fora não monta
     caminho.
     """
-    from .nomes import sanitizar
-
     limpa = sanitizar(str(matricula)) or "sem_matricula"
     limpa = Path(limpa).name
     return f"{PREFIXO_RELATORIO}{limpa}_{quando:%Y-%m-%d}.docx"

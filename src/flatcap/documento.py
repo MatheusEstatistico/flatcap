@@ -30,10 +30,10 @@ estilo, e vence o primeiro que existir no modelo:
     peça       procura, nesta ordem                         se não achar nenhum
     ────────────────────────────────────────────────────────────────────────────
     título     FlatCap Titulo · Title                       negrito 20
+    subtítulo  FlatCap Subtitulo · Subtitle                 13, cinza
     seção      FlatCap Secao · Heading 1                    negrito 14
     corpo      FlatCap Corpo · Normal                       o padrão do modelo
     legenda    FlatCap Legenda · Caption                    itálico 9, cinza
-    nota       FlatCap Nota · Caption                       itálico 8,5, cinza
     tabela     FlatCap Tabela · Table Grid                  bordas escritas à mão
 
 A fila existe porque o modelo institucional vem depois, e vem de fora. Um
@@ -61,10 +61,9 @@ alternadas. A numeração é contínua e separada — `Tabela 1`, `Tabela 2`,
 `Figura 1` — porque é assim que se cita um número no corpo de um e-mail: "veja a
 Tabela 3".
 
-**As notas do `.csv` viram uma linha pequena embaixo da tabela.** São os
-denominadores, e a resposta do roteiro para *"quando o cliente lê 45%, ele precisa
-saber se o denominador incluiu os casos sem resposta"* precisa viajar junto da
-tabela — não do arquivo que ficou no disco.
+**A primeira página é título, subtítulo, alertas e o texto padrão.** Nessa ordem:
+o alerta vem antes do texto de abertura porque ele é a única coisa da página que
+pode fazer alguém parar de enviar o documento.
 
 **A última linha da tabela sai em negrito quando é o `Total`.** Uma tabela de
 frequência é lida de cima para baixo até o total; é a linha em que o olho para.
@@ -90,16 +89,16 @@ from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 if TYPE_CHECKING:  # só para as anotações: importar `relatorio` aqui criaria um ciclo
-    from .relatorio import Relatorio, Secao, TabelaLida
+    from .relatorio import Relatorio, TabelaLida
 
 # As filas de estilo. O primeiro nome de cada uma é o do FlatCap, que só existe
 # se você o criou no modelo; o segundo é o nativo do Word, que existe em quase
 # todo `.docx`; o terceiro degrau é a formatação à mão, mais abaixo.
 ESTILO_TITULO = ("FlatCap Titulo", "FlatCap Título", "Title")
+ESTILO_SUBTITULO = ("FlatCap Subtitulo", "FlatCap Subtítulo", "Subtitle")
 ESTILO_SECAO = ("FlatCap Secao", "FlatCap Seção", "Heading 1")
 ESTILO_CORPO = ("FlatCap Corpo", "Normal")
 ESTILO_LEGENDA = ("FlatCap Legenda", "Caption")
-ESTILO_NOTA = ("FlatCap Nota", "FlatCap Legenda", "Caption")
 ESTILO_TABELA = ("FlatCap Tabela", "Table Grid")
 
 ARQUIVO_TEMPLATE = "template.docx"
@@ -124,6 +123,12 @@ _ROTULO_TOTAL = "Total"
 # um relatório que parece defeituoso sem que nada esteja errado. Um modelo
 # institucional manda no lugar disto: aqui só se decide o que ninguém decidiu.
 FONTE = "Calibri"
+
+# Até este tamanho, a tabela não se parte na quebra de página. Acima dele, ela
+# se parte e o cabeçalho se repete — uma distribuição no tempo de dois anos tem
+# 24 linhas, e forçá-la inteira para a página seguinte deixaria meia página em
+# branco para não ganhar nada.
+_LINHAS_PARA_MANTER_JUNTA = 12
 
 # A largura da primeira coluna das tabelas, em fração da mancha. A primeira
 # coluna é rótulo — `(abaixo da primeira faixa)`, `Ensino fundamental` — e as
@@ -152,10 +157,10 @@ class Estilos:
     """
 
     titulo: str | None = None
+    subtitulo: str | None = None
     secao: str | None = None
     corpo: str | None = None
     legenda: str | None = None
-    nota: str | None = None
     tabela: str | None = None
 
 
@@ -186,13 +191,23 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
         tamanho=20,
         negrito=True,
         cor=TINTA,
-        espaco_depois=4,
+        espaco_depois=2,
     )
 
-    _identificacao(documento, relatorio, estilos)
+    if relatorio.subtitulo:
+        _paragrafo(
+            documento,
+            relatorio.subtitulo,
+            estilos.subtitulo,
+            tamanho=13,
+            cor=TINTA_SECUNDARIA,
+            espaco_depois=16,
+        )
 
     for alerta in relatorio.alertas:
         _caixa_de_aviso(documento, alerta, estilos)
+
+    _texto_padrao(documento, relatorio, estilos)
 
     numero_tabela = 0
     numero_figura = 0
@@ -209,7 +224,6 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
             espaco_depois=2,
         )
         cabecalho.paragraph_format.keep_with_next = True
-        _linha_da_variavel(documento, secao, estilos)
 
         for tabela in secao.tabelas:
             numero_tabela += 1
@@ -287,31 +301,27 @@ def _documento_padrao():
 # As peças do documento
 
 
-def _identificacao(documento, relatorio: Relatorio, estilos: Estilos) -> None:
+def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> None:
     """
-    Quem, qual banco, de quando. Uma tabela de duas colunas, sem bordas.
+    Os parágrafos fixos que abrem todo relatório.
 
-    A linha do banco é a que importa e é o motivo de este bloco existir: é a
-    resposta, dentro do documento entregue, para "de qual versão saíram estes
-    números?". Sem ela, a decisão de gerar o relatório mesmo quando a rodada está
-    velha seria uma decisão sem contrapartida.
+    O texto vem no `Relatorio`, e não de uma constante lida aqui: quem escreve o
+    documento não sabe de onde ele veio, e no dia em que ele passar a vir do
+    `projeto.yaml` ou de um arquivo por cliente, este módulo não muda.
+
+    Sem estilo próprio de propósito. É texto corrido, e texto corrido é o estilo
+    `FlatCap Corpo` — que é justamente o que se ajusta no Word para mudar a cara
+    de todos os relatórios de uma vez.
     """
-    linhas = relatorio.identificacao
-    tabela = documento.add_table(rows=len(linhas), cols=2)
-    tabela.style = None
-    tabela.alignment = WD_TABLE_ALIGNMENT.LEFT
-    tabela.autofit = True
-
-    for posicao, (rotulo, valor) in enumerate(linhas):
-        esquerda = tabela.cell(posicao, 0).paragraphs[0]
-        _texto(esquerda, rotulo, tamanho=_NOTA_PT, cor=TINTA_APAGADA, estilo=estilos.corpo)
-        direita = tabela.cell(posicao, 1).paragraphs[0]
-        _texto(direita, valor, tamanho=_NOTA_PT, cor=TINTA_SECUNDARIA, estilo=estilos.corpo)
-        for celula in (tabela.cell(posicao, 0), tabela.cell(posicao, 1)):
-            celula.paragraphs[0].paragraph_format.space_after = Pt(0)
-
-    _fixar_larguras(tabela, (Cm(4.2), _largura_util(documento) - Cm(4.2)))
-    documento.add_paragraph()
+    for paragrafo in relatorio.texto:
+        if not paragrafo.strip():
+            continue
+        escrito = documento.add_paragraph()
+        if estilos.corpo:
+            escrito.style = estilos.corpo
+        _texto(escrito, paragrafo.strip(), aplicar_estilo=False)
+        escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        escrito.paragraph_format.space_after = Pt(8)
 
 
 def _caixa_de_aviso(documento, alerta: Any, estilos: Estilos) -> None:
@@ -349,36 +359,6 @@ def _caixa_de_aviso(documento, alerta: Any, estilos: Estilos) -> None:
 
     _fixar_larguras(tabela, (_largura_util(documento),))
     documento.add_paragraph()
-
-
-def _linha_da_variavel(documento, secao: Secao, estilos: Estilos) -> None:
-    """
-    Uma linha de contexto embaixo do título da seção: n, faltantes e tipo.
-
-    É a única frase que o documento escreve sozinho, e ela não interpreta nada —
-    conta. Os números vêm do manifesto, que os recebeu da mesma contagem que
-    escreveu as tabelas, então não há como esta linha discordar da tabela logo
-    abaixo dela.
-    """
-    partes = [f"{secao.preenchidos} caso(s) com informação"]
-    if secao.faltantes:
-        proporcao = secao.faltantes / secao.n if secao.n else 0.0
-        partes.append(
-            f"{secao.faltantes} sem informação "
-            f"({str(round(proporcao * 100, 1)).replace('.', ',')}%)"
-        )
-    partes.append(f"de {secao.n} linha(s) do banco")
-
-    paragrafo = documento.add_paragraph()
-    _texto(
-        paragrafo,
-        " · ".join(partes),
-        tamanho=_NOTA_PT,
-        cor=TINTA_APAGADA,
-        estilo=estilos.nota or estilos.corpo,
-    )
-    paragrafo.paragraph_format.space_after = Pt(6)
-    paragrafo.paragraph_format.keep_with_next = True
 
 
 def _escrever_tabela(
@@ -429,11 +409,14 @@ def _escrever_tabela(
             paragrafo.paragraph_format.space_after = Pt(0)
 
     _repartir_larguras(quadro, _largura_util(documento), tabela.largura)
+    _manter_junta(quadro)
 
-    if tabela.notas:
-        _nota(documento, " · ".join(tabela.notas), estilos)
-    else:
-        documento.add_paragraph().paragraph_format.space_after = Pt(4)
+    # As notas do `.csv` — os dois denominadores, a convenção de fechamento das
+    # faixas — são lidas pelo `relatorio.py` e **não** são impressas: saíram na
+    # revisão de formatação. Elas continuam no arquivo que a Fase 5 escreveu, e
+    # os dois denominadores continuam nomeados no cabeçalho da tabela ("% dos
+    # válidos" e "% do total"), que é onde a distinção precisa mesmo aparecer.
+    documento.add_paragraph().paragraph_format.space_after = Pt(4)
 
 
 def _repartir_larguras(quadro, largura_util: int, colunas: int) -> None:
@@ -520,23 +503,6 @@ def _legenda(documento, texto: str, estilos: Estilos) -> None:
     # Sem isto, `Figura 2. Escolaridade` termina uma página e a figura começa a
     # seguinte — e quem lê passa a página procurando o que a legenda prometeu.
     paragrafo.paragraph_format.keep_with_next = True
-
-
-def _nota(documento, texto: str, estilos: Estilos) -> None:
-    paragrafo = documento.add_paragraph()
-    proprio = bool(estilos.nota)
-    if proprio:
-        paragrafo.style = estilos.nota
-    _texto(
-        paragrafo,
-        texto,
-        tamanho=_NOTA_PT,
-        italico=not proprio,
-        cor=TINTA_APAGADA,
-        aplicar_estilo=not proprio,
-    )
-    paragrafo.paragraph_format.space_before = Pt(2)
-    paragrafo.paragraph_format.space_after = Pt(8)
 
 
 # Peças de baixo nível
@@ -630,10 +596,10 @@ def _resolver_estilos(documento) -> Estilos:
 
     return Estilos(
         titulo=primeiro(ESTILO_TITULO),
+        subtitulo=primeiro(ESTILO_SUBTITULO),
         secao=primeiro(ESTILO_SECAO),
         corpo=primeiro(ESTILO_CORPO),
         legenda=primeiro(ESTILO_LEGENDA),
-        nota=primeiro(ESTILO_NOTA),
         tabela=primeiro(ESTILO_TABELA),
     )
 
@@ -703,6 +669,27 @@ def _salvar_atomico(documento, caminho: Path) -> None:
 
 
 # XML que a API do python-docx não expõe
+
+
+def _manter_junta(quadro) -> None:
+    """
+    Impede que uma tabela curta se parta na quebra de página.
+
+    Uma tabela de frequência de cinco linhas partida entre duas páginas — as
+    categorias em uma e o `Total` na outra — é lida como duas tabelas incompletas.
+    O `keep_with_next` vai em todas as linhas menos a última: na última, ele
+    arrastaria junto o parágrafo seguinte, que é a legenda da figura.
+
+    Acima de `_LINHAS_PARA_MANTER_JUNTA` a tabela se parte de propósito, e é o
+    cabeçalho repetido que resolve a leitura do outro lado.
+    """
+    linhas = quadro.rows
+    if len(linhas) > _LINHAS_PARA_MANTER_JUNTA:
+        return
+    for linha in list(linhas)[:-1]:
+        for celula in linha.cells:
+            for paragrafo in celula.paragraphs:
+                paragrafo.paragraph_format.keep_with_next = True
 
 
 def _repetir_cabecalho(linha) -> None:
@@ -857,18 +844,20 @@ def _definir_estilos(documento) -> None:
     secao.paragraph_format.space_before = Pt(14)
     secao.paragraph_format.space_after = Pt(2)
 
+    subtitulo = criar("FlatCap Subtitulo", "Subtitle")
+    subtitulo.font.name = FONTE
+    subtitulo.font.size = Pt(13)
+    subtitulo.font.bold = False
+    subtitulo.font.italic = False
+    subtitulo.font.color.rgb = TINTA_SECUNDARIA
+    subtitulo.paragraph_format.space_after = Pt(16)
+
     legenda = criar("FlatCap Legenda", "Caption")
     legenda.font.name = FONTE
     legenda.font.size = Pt(_LEGENDA_PT)
     legenda.font.bold = True
     legenda.font.italic = False
     legenda.font.color.rgb = TINTA_SECUNDARIA
-
-    nota = criar("FlatCap Nota", "Caption")
-    nota.font.name = FONTE
-    nota.font.size = Pt(_NOTA_PT)
-    nota.font.italic = True
-    nota.font.color.rgb = TINTA_APAGADA
 
 
 __all__ = [
