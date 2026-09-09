@@ -172,6 +172,36 @@ class Ficha:
         return self.dados[-1] if self.dados else None
 
 
+def versao_vigente(ficha: Ficha) -> Versao | None:
+    """
+    A versão do banco que vale hoje: a de maior número de sequência.
+
+    Não é `ficha.dados[-1]`. A ordem da lista é a ordem em que as versões foram
+    registradas, e a ficha é editada à mão — uma entrada acrescentada fora de
+    ordem faria a última da lista deixar de ser a mais nova. O número do prefixo,
+    esse, é o índice da versão por construção da Fase 3.
+
+    Empate (duas entradas sem prefixo reconhecível) resolve pela ordem da lista,
+    que é a melhor informação que sobra.
+
+    Mora aqui desde a Fase 6, e não no `banco.py`, onde nasceu. A pergunta "qual
+    versão vale?" se responde lendo a ficha: não precisa do `pandas`, não abre
+    arquivo nenhum. Deixá-la no módulo que importa o `pandas` obrigava o
+    `relatorio.py` — que existe justamente para **não** abrir o banco — a pagar
+    meio segundo de partida para consultar uma lista que ele já tinha na mão. O
+    `banco.py` reexporta o nome, então nenhum chamador mudou.
+    """
+    if not ficha.dados:
+        return None
+    return max(
+        ficha.dados,
+        key=lambda versao: (
+            versao.sequencia if versao.sequencia is not None else -1,
+            ficha.dados.index(versao),
+        ),
+    )
+
+
 # Localização do projeto no disco
 
 

@@ -62,6 +62,7 @@ from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arqui
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .descritiva import Descritiva, PlanoDescritiva
     from .perfil import Achado, Perfil, PlanoPerfil
+    from .relatorio import PlanoRelatorio, Relatorio
 
 app = typer.Typer(
     name="flatcap",
@@ -159,7 +160,16 @@ def doctor(
   tabela.add_row("REDCAP_TOKEN", OK, cfg.token_mascarado)
   tabela.add_row("FLATCAP_ROOT", OK, str(cfg.root))
   tabela.add_row("Leitura do projeto.yaml", OK, IMPLEMENTACAO)
-  tabela.add_row("Leitura de bancos", OK, _versoes_de_leitura())
+
+  instaladas, faltando = _bibliotecas()
+  linha = " · ".join(f"{nome} {versao}" for nome, versao in instaladas)
+  if faltando:
+    quais = ", ".join(f"`{nome}`" for nome in faltando)
+    tabela.add_row(
+      "Leitura de bancos", FALHA, f"falta {quais} — instaladas: {linha or '(nenhuma)'}"
+    )
+  else:
+    tabela.add_row("Leitura de bancos", OK, linha)
 
   # 2. Conexão com o REDCap
   try:
@@ -173,25 +183,61 @@ def doctor(
   tabela.add_row("Conexão REDCap", OK, f"{titulo} (id {projeto.get('project_id', '?')})")
 
   console.print(tabela)
+
+  # A instalação incompleta é diagnosticada **depois** da tabela inteira, e não
+  # no lugar dela: saber que a rede está de pé faz parte do diagnóstico mesmo
+  # quando falta biblioteca. O `doctor` é o comando que responde "o que está
+  # errado?" — ele não pode morrer no meio do próprio diagnóstico.
+  if faltando:
+    quais = ", ".join(f"`{nome}`" for nome in faltando)
+    raise _abortar(
+      "Instalação incompleta",
+      f"Falta {quais}. Sem isso o FlatCap não abre o banco, não desenha os "
+      "gráficos ou não escreve o relatório.\n\n"
+      "Da raiz do repositório, com o .venv ativado:\n\n"
+      '    pip install -e ".[dev]"'
+    )
+
   console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
 
-def _versoes_de_leitura() -> str:
+# As bibliotecas que abrem o banco, desenham os gráficos e escrevem o documento.
+# A ordem é a do fluxo: ler, desenhar, entregar.
+_BIBLIOTECAS = ("pandas", "openpyxl", "matplotlib", "docx")
+
+# `import docx` é o pacote `python-docx`, e o nome de instalação não é o nome de
+# import. Quem lê "falta `docx`" no terminal vai procurar por `docx` no pip e
+# instalar outro pacote — que existe, e não é este.
+_NOME_NO_PIP = {"docx": "python-docx"}
+
+
+def _bibliotecas() -> tuple[list[tuple[str, str]], list[str]]:
   """
-  Quais versões abrem o banco do cliente e desenham os gráficos hoje.
+  Quais versões abrem o banco, desenham os gráficos e escrevem o documento hoje.
 
   Registrar isso no `doctor` é barato e evita a pergunta mais difícil de
   responder da Fase 5: um gráfico saiu diferente do que saía antes — mudaram os
   dados ou mudou a biblioteca? A resposta completa está no `manifesto.json` de
   cada rodada; esta linha é a de agora, para comparar com ela.
-  """
-  import matplotlib
-  import openpyxl
-  import pandas
 
-  return (
-    f"pandas {pandas.__version__} · openpyxl {openpyxl.__version__} · "
-    f"matplotlib {matplotlib.__version__}"
-  )
+  Cada import é tentado por si, e a falta de uma não esconde as outras. Foi um
+  defeito real: numa máquina sem `matplotlib` o comando estourava com
+  `ModuleNotFoundError` em vez de dizer o que faltava — e escapou dos testes
+  porque a máquina que os roda é a única em que ele nunca falha.
+  """
+  import importlib
+
+  instaladas: list[tuple[str, str]] = []
+  faltando: list[str] = []
+  for nome in _BIBLIOTECAS:
+    try:
+      modulo = importlib.import_module(nome)
+    except ImportError:
+      faltando.append(_NOME_NO_PIP.get(nome, nome))
+      continue
+    instaladas.append(
+      (_NOME_NO_PIP.get(nome, nome), getattr(modulo, "__version__", "?"))
+    )
+  return instaladas, faltando
 
 @app.command()
 def listar(
@@ -1269,6 +1315,353 @@ def _arvore_da_descritiva(plano: PlanoDescritiva) -> Tree:
     )
   )
 
+  arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+  return arvore
+
+
+# flatcap relatorio
+
+@app.command()
+def relatorio(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+  ),
+  template: Path | None = typer.Option(
+    None, "--template", metavar = "ARQUIVO",
+    help = "Um .docx para herdar estilos, cabeçalho e capa. Sem isso, o "
+           "template.docx da pasta do projeto ou do FLATCAP_ROOT."
+  ),
+  titulo: str | None = typer.Option(
+    None, "--titulo", metavar = "TEXTO",
+    help = "O título na primeira linha do documento."
+  ),
+  rapido: bool = typer.Option(
+    False, "--rapido",
+    help = "Não reconfere o sha256 do banco. Útil com bancos muito grandes."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Monta o relatório .docx a partir da descritiva.
+
+  Percorre o `manifesto.json` da rodada vigente e monta um documento com uma
+  seção por variável: a tabela, as notas de denominador e a figura, na ordem do
+  dicionário. Não abre o banco e não recalcula nada — os números do documento
+  são, letra por letra, os dos `.csv` que estão em `3. Análises/descritiva/`.
+
+  O documento sai na raiz da pasta do projeto como
+  `Relatorio_<matrícula>_AAAA-MM-DD.docx`, e o relatório anterior vai para
+  `2. Versões antigas/`.
+
+  Quando a rodada já não descreve o que está na pasta — banco novo, arquivo
+  alterado, dicionário mexido — o documento é gerado assim mesmo, com o aviso
+  escrito dentro dele.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+  """
+  # Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê o
+  # manifesto e os `.csv` da rodada, e é só isso. O `python-docx` entra só na
+  # execução, dentro do `executar_relatorio`.
+  from .manifesto import ManifestoError
+  from .relatorio import (
+    TITULO_PADRAO,
+    RelatorioError,
+    executar_relatorio,
+    preparar_relatorio,
+  )
+
+  cfg = _configuracao(env)
+
+  try:
+    raiz = localizar_projeto(cfg.root, identificador)
+    plano = preparar_relatorio(
+      raiz,
+      template = template,
+      conferir = not rapido,
+      titulo = titulo or TITULO_PADRAO,
+    )
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except DicionarioError as erro:
+    raise _abortar("Dicionário", str(erro)) from erro
+  except ManifestoError as erro:
+    raise _abortar("Manifesto da descritiva", str(erro)) from erro
+  except RelatorioError as erro:
+    raise _abortar("Relatório", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", str(erro)) from erro
+
+  console.print(_cabecalho_do_relatorio(plano))
+  console.print(_tabela_do_relatorio(plano.relatorio))
+  for bloco in _alertas_no_terminal(plano.relatorio):
+    console.print(bloco)
+  for bloco in _fora_do_relatorio(plano.relatorio):
+    console.print(bloco)
+  for aviso in plano.relatorio.avisos:
+    erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+  console.print(_arvore_do_relatorio(plano))
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+      "Repita com [bold]--sim[/bold] para gerar o documento."
+    )
+    return
+
+  try:
+    resultado = executar_relatorio(plano)
+  except RelatorioError as erro:
+    raise _abortar("Relatório", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.raiz}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "O que já tinha sido feito foi desfeito, inclusive o arquivamento do "
+      "relatório anterior — confira a pasta antes de rodar de novo."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  for _, para in resultado.arquivados:
+    console.print(
+      Text(f"\nRelatório anterior arquivado em {PASTA_ANTIGAS}/{para.name}", style = "dim")
+    )
+
+  console.print(f"\n[green]Relatório escrito.[/green] {resultado.caminho.name}")
+  if plano.relatorio.alertas:
+    console.print(
+      Text(
+        f"O documento saiu com {len(plano.relatorio.alertas)} aviso(s) dentro dele. "
+        "Leia antes de enviar.",
+        style = "yellow",
+      )
+    )
+
+
+@app.command()
+def template(
+  saida: Path | None = typer.Option(
+    None, "--saida", metavar = "ARQUIVO",
+    help = "Onde escrever. Sem isso, template.docx na raiz do FLATCAP_ROOT."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
+
+  O modelo sai com o corpo vazio e com os estilos `FlatCap Titulo`,
+  `FlatCap Secao`, `FlatCap Corpo`, `FlatCap Legenda` e `FlatCap Nota` já
+  definidos. Ajuste-os no Word — fonte, cor, tamanho —, ponha o logotipo no
+  cabeçalho e salve. Todo relatório gerado daí em diante sai com essa cara, sem
+  uma linha de Python.
+
+  Tudo o que você escrever no corpo do modelo aparece **antes** do relatório, em
+  todo relatório. É assim que uma capa institucional continua sendo a capa.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+  """
+  from .documento import ARQUIVO_TEMPLATE, escrever_template
+
+  cfg = _configuracao(env)
+  destino = Path(saida) if saida is not None else cfg.root / ARQUIVO_TEMPLATE
+
+  existe = destino.exists()
+  console.print(
+    Text.assemble(
+      ("Modelo ", "dim"), (str(destino), "bold"),
+      ("\n", ""),
+      (
+        "Existe e será substituído — os seus ajustes no Word se perdem."
+        if existe
+        else "Novo.",
+        "yellow" if existe else "dim",
+      ),
+    )
+  )
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi escrito.\n"
+      "Repita com [bold]--sim[/bold] para gravar o modelo."
+    )
+    return
+
+  try:
+    escrever_template(destino)
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco", f"Falhei ao escrever {destino}.\nDetalhe técnico: {erro}"
+    ) from erro
+
+  console.print(f"\n[green]Modelo escrito.[/green] {destino}")
+  console.print(
+    Text(
+      "Abra no Word, ajuste os estilos `FlatCap *` e o cabeçalho, e salve. O "
+      "relatório procura este arquivo na pasta do projeto e depois no "
+      "FLATCAP_ROOT.",
+      style = "dim",
+    )
+  )
+
+
+def _cabecalho_do_relatorio(plano: PlanoRelatorio) -> Text:
+  """
+  Quem, de qual rodada, sobre qual banco, com qual modelo.
+  """
+  relatorio = plano.relatorio
+  ficha = relatorio.ficha
+  manifesto = relatorio.manifesto
+
+  cabecalho = Text.assemble(
+    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+    "\n",
+    ("Descritiva ", "dim"), (f"{manifesto.gerado_em:%d/%m/%Y %H:%M}", "bold"),
+    ("  ·  ", "dim"), ("banco ", "dim"),
+    (str(manifesto.banco.get("arquivo", "?")), ""),
+    ("  ·  ", "dim"),
+    (f"{len(relatorio.secoes)} variável(is)", ""),
+    ("  ·  ", "dim"),
+    (f"{plano.total_tabelas} tabela(s) e {plano.total_figuras} figura(s)", ""),
+    "\n",
+    ("Modelo ", "dim"),
+    (
+      str(plano.template) if plano.template else "(nenhum — estilos padrão)",
+      "" if plano.template else "dim",
+    ),
+  )
+  return cabecalho
+
+
+def _tabela_do_relatorio(relatorio: Relatorio) -> Table:
+  """
+  Uma linha por seção do documento, com os arquivos que entram nela.
+
+  É a mesma coluna de arquivos da descritiva, e serve para a mesma conferência:
+  saber de qual variável saiu cada tabela **antes** de abrir o documento.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("#", justify = "right", no_wrap = True)
+  tabela.add_column("Variável", overflow = "fold")
+  tabela.add_column("Tipo", no_wrap = True)
+  tabela.add_column("n", justify = "right", no_wrap = True)
+  tabela.add_column("Faltantes", justify = "right", no_wrap = True)
+  tabela.add_column("No documento", overflow = "fold")
+
+  for posicao, secao in enumerate(relatorio.secoes, start = 1):
+    proporcao = secao.faltantes / secao.n if secao.n else 0.0
+    faltantes = Text("—", style = "dim")
+    if secao.faltantes:
+      faltantes = Text(
+        f"{secao.faltantes} ({proporcao * 100:.0f}%)",
+        style = "yellow" if proporcao >= 0.2 else "",
+      )
+
+    nomes = [t.arquivo for t in secao.tabelas] + [f.arquivo for f in secao.figuras]
+    tabela.add_row(
+      Text(str(posicao)),
+      Text(secao.rotulo),
+      Text(secao.tipo),
+      Text(str(secao.preenchidos)),
+      faltantes,
+      Text(" · ".join(nomes), style = "dim"),
+    )
+
+  return tabela
+
+
+def _alertas_no_terminal(relatorio: Relatorio) -> list[Panel]:
+  """
+  Os avisos que também vão para dentro do documento.
+
+  Aparecem aqui **e** lá de propósito: o terminal você vê agora, o documento é o
+  que sobra depois de o arquivo ser anexado a um e-mail.
+  """
+  if not relatorio.alertas:
+    return []
+
+  corpo = Text()
+  for posicao, alerta in enumerate(relatorio.alertas):
+    if posicao:
+      corpo.append("\n\n")
+    corpo.append(alerta.titulo, style = "bold")
+    if alerta.detalhe:
+      corpo.append("\n")
+      corpo.append(alerta.detalhe, style = "")
+  return [
+    Panel(
+      corpo,
+      title = f"Vai escrito no documento ({len(relatorio.alertas)})",
+      border_style = "yellow",
+    )
+  ]
+
+
+def _fora_do_relatorio(relatorio: Relatorio) -> list[Panel]:
+  """
+  As variáveis que a descritiva deixou de fora, e por quê.
+
+  Não entram no `.docx` — são diagnóstico seu, não conteúdo do cliente —, mas
+  aparecem aqui pelo mesmo motivo da Fase 5: "não está no relatório" e "ninguém
+  reparou que ela existia" são coisas diferentes.
+  """
+  if not relatorio.fora:
+    return []
+
+  corpo = Text()
+  for posicao, item in enumerate(relatorio.fora):
+    if posicao:
+      corpo.append("\n")
+    corpo.append(item.variavel, style = "bold")
+    corpo.append(" — ")
+    corpo.append(item.motivo)
+  return [
+    Panel(
+      corpo,
+      title = f"Fora do documento ({len(relatorio.fora)})",
+      border_style = "dim",
+    )
+  ]
+
+
+def _arvore_do_relatorio(plano: PlanoRelatorio) -> Tree:
+  """
+  Desenha o que `executar_relatorio` escreveria, lendo o próprio plano.
+  """
+  arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+  if plano.arquivamentos:
+    ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+    for _, para in plano.arquivamentos:
+      ramo.add(Text.assemble((para.name, "yellow"), ("   recebe o anterior", "dim")))
+
+  arvore.add(
+    Text.assemble(
+      (plano.destino.name, "bold green"),
+      (
+        "   novo" if not plano.arquivamentos else "   refeito",
+        "dim",
+      ),
+    )
+  )
   arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
   return arvore
 

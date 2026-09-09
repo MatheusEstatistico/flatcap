@@ -42,6 +42,12 @@ PASTA_ANTIGAS = SUBPASTAS[1]  # para onde a versão anterior é rodada na Fase 3
 PASTA_ANALISES = SUBPASTAS[2] # onde a Fase 5 escreve a pasta `descritiva/`
 # O .docx da Fase 6 fica na raiz da pasta do projeto — não há `4. Relatórios/`.
 
+# A rodada da descritiva. Mora aqui, e não no `descritiva.py` onde nasceu, desde
+# a Fase 6: o desenho da pasta é assunto deste módulo, e o `relatorio.py` precisa
+# saber onde a rodada está sem importar o módulo que carrega o `pandas` para
+# calculá-la. O `descritiva.py` reexporta o nome, então nenhum chamador mudou.
+PASTA_DESCRITIVA = "descritiva"
+
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
 STATUS_INICIAL = "novo"

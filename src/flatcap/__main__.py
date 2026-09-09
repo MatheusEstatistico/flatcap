@@ -1,7 +1,8 @@
 """
 Permite rodar `python -m flatcap` sem depender do executável instalado.
- 
-Útil quando o .venv não está ativado ou quando algo deu errado com o entry point declarado no pyproject.toml.
+
+Útil quando o .venv não está ativado ou quando algo deu errado com o entry point
+declarado no pyproject.toml.
 """
 
 from flatcap.cli import app

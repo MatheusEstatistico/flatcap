@@ -4,24 +4,23 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flatcap"
-version = "0.6.0"
+version = "1.0.0"
 description = "Orquestra o flúxo de atendimento estatístico: REDCap -> pastas -> descritiva -> relatorio.docx"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Matheus Fernandes", email = "matheusdfernandes@gmail.com" }]
 
 dependencies = [
-    "typer>=0.12",
-    "rich>=13.7",
-    "requests>=2.32",
-    "pandas>=2.2",
-    "openpyxl>=3.1",
-    # Fase 5: os .png da descritiva. Fica isolado em graficos.py e e importado so
-    # na hora de desenhar — `descritiva --sem-graficos` nao paga o custo de carrega-lo.
-    "matplotlib>=3.8",
-    "pyyaml>=6.0",
-    "python-dotenv>=1.0",
-    "ruamel.yaml>=0.18",
+  "typer",
+  "rich",
+  "requests",
+  "pandas>=2.2",
+  "openpyxl",
+  "pyyaml",
+  "ruamel.yaml",
+  "python-dotenv",
+  "matplotlib",
+  "python-docx>=1.1",      # <- a dependência nova da fase
 ]
 
 [project.optional-dependencies]
@@ -66,3 +65,4 @@ markers = [
 # 
 # 
 addopts = "-m 'not e2e'"
+

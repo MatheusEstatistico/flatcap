@@ -119,9 +119,7 @@ from .manifesto import (
     Manifesto,
     texto_do_manifesto,
 )
-from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, anotar
-
-PASTA_DESCRITIVA = "descritiva"
+from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA, anotar
 
 # Nada nesta fase sorteia coisa nenhuma — uma descritiva é contagem, e contagem
 # não tem aleatoriedade. A semente existe declarada e registrada no manifesto

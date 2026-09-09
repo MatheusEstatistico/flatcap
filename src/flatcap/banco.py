@@ -53,7 +53,7 @@ from pathlib import Path
 import pandas as pd
 
 from .dados import ItemDaLinha, linha_do_tempo
-from .ficha import Ficha, Versao
+from .ficha import Versao, versao_vigente
 from .projeto import PASTA_ANTIGAS, PASTA_DADOS, tamanho_legivel
 
 EXTENSOES_SUPORTADAS = (".xlsx", ".csv")
@@ -231,27 +231,12 @@ def caminho_da_versao(raiz: Path, versao: Versao) -> Path | None:
     return None
 
 
-def versao_vigente(ficha: Ficha) -> Versao | None:
-    """
-    A versão que vale hoje: a de maior número de sequência.
-
-    Não é `ficha.dados[-1]`. A ordem da lista é a ordem em que as versões foram
-    registradas, e a ficha é editada à mão — uma entrada acrescentada fora de
-    ordem faria a última da lista deixar de ser a mais nova. O número do prefixo,
-    esse, é o índice da versão por construção da Fase 3.
-
-    Empate (duas entradas sem prefixo reconhecível) resolve pela ordem da lista,
-    que é a melhor informação que sobra.
-    """
-    if not ficha.dados:
-        return None
-    return max(
-        ficha.dados,
-        key=lambda versao: (
-            versao.sequencia if versao.sequencia is not None else -1,
-            ficha.dados.index(versao),
-        ),
-    )
+# `versao_vigente` desceu para o `ficha.py` na Fase 6 e continua acessível daqui
+# como `banco.versao_vigente`, porque é deste módulo que os chamadores a importam
+# desde a Fase 4. O motivo da mudança de casa está na docstring dela: responder
+# "qual versão vale?" é ler a ficha, e o `relatorio.py` precisa dessa resposta sem
+# carregar o `pandas`. Mesma manobra que a Fase 5 fez com `formato_de_data`, na
+# direção contrária.
 
 
 def abrir(raiz: Path, aba: str | None = None, conferir: bool = True) -> Banco:
