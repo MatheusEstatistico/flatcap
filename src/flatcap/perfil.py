@@ -97,6 +97,25 @@ NOTA = "nota"  # fica registrado, não exige conversa
 
 _ORDEM_GRAVIDADE = (CORRIGIR, CONFIRMAR, NOTA)
 
+# Os achados cujos valores **vão deixar de existir** quando o banco for
+# corrigido. É um eixo diferente da gravidade, e confundir os dois foi um
+# defeito real: `variacao_de_grafia` é `CONFIRMAR` (a decisão é do cliente) e
+# mesmo assim as quatro grafias somem quando ele padroniza. Propor uma ordem de
+# categorias sobre valores voláteis enche o `dicionario.csv` de linha para
+# apagar — e, como a fusão nunca reescreve linha existente, elas ficam lá para
+# sempre e reaparecem no relatório com `n = 0`.
+#
+# Todo achado de gravidade CORRIGIR entra aqui por definição. Os de CONFIRMAR
+# entram um a um, e a lista é conferida por teste: um detector novo não pode
+# ficar sem classificação.
+CODIGOS_VOLATEIS: frozenset[str] = frozenset(
+    {
+        "variacao_de_grafia",
+        "espaco_sobrando",
+        "sentinela_textual",
+    }
+)
+
 _TITULOS = {
     CORRIGIR: "Corrigir antes de começar",
     CONFIRMAR: "Confirmar com o cliente",
@@ -826,11 +845,13 @@ def _achados_mistos(nome: str, serie: pd.Series) -> tuple[Achado, ...]:
     """
     Tipos misturados na mesma coluna: número e texto convivendo.
 
-    Só é detectável em coluna `object`, que é onde o `pandas` guarda o que não
-    conseguiu uniformizar. Uma coluna que ele conseguiu ler inteira como texto
-    não tem mistura para encontrar.
+    A pergunta é quantas naturezas convivem na coluna, e quem responde é
+    `_tipos_de` — nunca o `dtype`. O `dtype` diz como o `pandas` guardou, o que
+    é outra coisa: no pandas 2 toda coluna de texto é `object`, no pandas 3 só
+    a que ele não conseguiu uniformizar. Perguntar pelo `dtype` acerta em uma
+    das duas versões e erra na outra, em silêncio.
     """
-    if serie.dtype != object:
+    if _tipos_de(serie) < 2:
         return ()
 
     preenchidos = serie.dropna()
@@ -961,11 +982,16 @@ def _categorias_sugeridas(
     """
     A ordem proposta para `categorias_ordem`: da mais frequente para a menos.
 
-    Coluna que precisa ser corrigida antes não recebe proposta nenhuma: os
-    valores que ela tem hoje — `120` e `não realizado` na mesma coluna, `Sim` e
-    `sim ` contados em separado — são exatamente os que vão deixar de existir
-    quando o cliente corrigir. Propor uma ordem sobre eles é encher o arquivo de
-    linha para apagar.
+    Coluna cujos valores vão mudar não recebe proposta nenhuma: `120` e
+    `não realizado` na mesma coluna, `Sim` e `sim ` contados em separado, são
+    exatamente os que vão deixar de existir quando o cliente corrigir. Propor
+    uma ordem sobre eles é encher o arquivo de linha para apagar.
+
+    O critério é `CODIGOS_VOLATEIS`, e **não** a gravidade. Os dois eixos se
+    parecem e não são o mesmo: `variacao_de_grafia` é `CONFIRMAR`, porque a
+    escolha de qual grafia vale é do cliente — e as outras três somem assim que
+    ele escolher. Barrar só por `CORRIGIR` deixava passar justamente o exemplo
+    que este parágrafo cita.
 
     Frequência decrescente porque é a ordem em que uma tabela descritiva nominal
     se lê. Escala ordinal — Fundamental, Médio, Superior — sai errada de
@@ -978,7 +1004,10 @@ def _categorias_sugeridas(
     """
     if tipo != CATEGORICA or not categorias or unicos > LIMITE_CATEGORIAS:
         return ()
-    if any(achado.gravidade == CORRIGIR for achado in achados):
+    if any(
+        achado.gravidade == CORRIGIR or achado.codigo in CODIGOS_VOLATEIS
+        for achado in achados
+    ):
         return ()
     if any("|" in valor for valor, _ in categorias):
         return ()
@@ -1025,7 +1054,13 @@ def _tipo_lido(serie: pd.Series) -> str:
         return "data"
     if _e_numerica(serie):
         return "inteiro" if _so_inteiros(serie.dropna()) else "decimal"
-    if serie.dtype == object:
+    # `_tipos_de` e não `serie.dtype == object`: o dtype responde "como o pandas
+    # guardou isto", e a pergunta é "quantas naturezas convivem aqui". No pandas
+    # 2 toda coluna de texto é `object`, e a resposta pelo dtype marcava **todas**
+    # as categóricas do banco como `misto` — em vermelho, no documento que vai
+    # para a reunião. No pandas 3 o mesmo código acerta por acidente, porque
+    # texto puro passou a ter dtype `str`.
+    if _tipos_de(serie) > 1:
         return "misto"
     return "texto"
 
