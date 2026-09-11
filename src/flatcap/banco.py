@@ -439,18 +439,43 @@ def _ler_csv(caminho: Path) -> tuple[pd.DataFrame, Leitura]:
 def _decodificar(bruto: bytes) -> tuple[str, str]:
     """
     Descobre a codificação da amostra. Devolve o nome e o texto decodificado.
+
+    A amostra é um prefixo de 64 KiB cortado num byte qualquer, e é aí que mora
+    a armadilha: quando o corte cai **dentro** de um caractere de dois bytes, o
+    UTF-8 estrito falha na sequência truncada — e a falha é justamente o teste
+    que decide a codificação. O palpite caía em cp1252 e o arquivo inteiro era
+    lido em cp1252, entregando `SÃ£o Paulo` à tabela, ao `dicionario.csv` e ao
+    documento do cliente.
+
+    Recuar até a última linha inteira remove a única fonte de falso negativo
+    sem enfraquecer o teste: um `.csv` é feito de linhas, e nenhum caractere
+    atravessa um `\\n`.
     """
     if bruto.startswith(b"\xef\xbb\xbf"):
-        return "utf-8-sig", bruto[3:].decode("utf-8", errors="replace")
+        bruto = bruto[3:]
+        return "utf-8-sig", _ate_a_ultima_linha(bruto).decode("utf-8", errors="replace")
 
+    amostra = _ate_a_ultima_linha(bruto)
     for nome in _CODIFICACOES:
         try:
             # `strict` de propósito: o erro é o que descarta o palpite.
-            return nome, bruto.decode(nome)
+            return nome, amostra.decode(nome)
         except UnicodeDecodeError:
             continue
 
-    return "latin-1", bruto.decode("latin-1", errors="replace")
+    return "latin-1", amostra.decode("latin-1", errors="replace")
+
+
+def _ate_a_ultima_linha(bruto: bytes) -> bytes:
+    """
+    O prefixo cortado no último `\\n`, ou ele inteiro se não houver nenhum.
+
+    Arquivo de uma linha só — cabeçalho sem dados, ou um `.csv` menor que a
+    amostra e sem quebra final — devolve o que veio: não há o que recuar, e
+    encurtar até zero seria pior do que arriscar o corte.
+    """
+    fim = bruto.rfind(b"\n")
+    return bruto[: fim + 1] if fim > 0 else bruto
 
 
 def _separador(amostra: str) -> str:
