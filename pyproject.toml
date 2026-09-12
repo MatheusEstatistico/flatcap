@@ -14,7 +14,7 @@ dependencies = [
   "typer",
   "rich",
   "requests",
-  "pandas>=2.2",
+  "pandas>=3.0",
   "openpyxl",
   "pyyaml",
   "ruamel.yaml",
