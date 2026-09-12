@@ -53,6 +53,7 @@ esta implementação de YAML por outra precisa levá-la junto.
 from __future__ import annotations
 
 import os
+import re
 import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -383,7 +384,71 @@ def acrescentar_versao(raiz: Path, versao: Versao) -> None:
 # Backend: ruamel.yaml
 
 
-def _construtor() -> YAML:
+# O `indent()` do ruamel vale para o documento inteiro — não há como preservar o
+# recuo de cada lista separadamente. Então a escolha é entre impor um estilo e
+# adotar o que o arquivo já usa. Impor era o que transformava um
+# `  - descritiva` escrito à mão em `- descritiva`: YAML idêntico, e um diff
+# gratuito num arquivo que o cabeçalho da ficha promete não mexer.
+RECUO_PADRAO = 0  # o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
+
+# Uma chave que termina em `|` ou `>` abre um bloco literal. O `[-+]?\d*` cobre
+# os indicadores (`|-`, `>+`, `|2`) e o `(#.*)?` o comentário na mesma linha.
+_ABRE_BLOCO = re.compile(r"[|>][-+]?\d*\s*(#.*)?$")
+
+
+def _recuo_das_listas(texto: str) -> int:
+    """
+    Em que coluna, em relação à chave que as contém, este arquivo escreve o `-`.
+
+    Devolve `0` para o estilo que o `flatcap novo` grava::
+
+        dados:
+        - arquivo: 00_redcap_2026-09-01_banco.xlsx
+
+    e `2` para o que se escreve à mão sem pensar::
+
+        analises:
+          - descritiva
+
+    Vence a **primeira** lista do arquivo. Um arquivo que mistura os dois estilos
+    não tem como manter os dois — o recuo do ruamel é do documento inteiro — e na
+    ficha do FlatCap `analises:` vem antes de `dados:`, então quem vence é o bloco
+    que você editou à mão. É o lado certo de errar: a lista `dados:` é escrita
+    pela ferramenta e ninguém decora a coluna dela.
+
+    Linha dentro de bloco literal (`objetivos: |`) é pulada: um `- ` ali é prosa
+    do cliente, não item de lista.
+    """
+    pilha: list[int] = []
+    bloco: int | None = None
+
+    for linha in texto.splitlines():
+        conteudo = linha.lstrip()
+        coluna = len(linha) - len(conteudo)
+
+        if bloco is not None:
+            if not conteudo or coluna > bloco:
+                continue
+            bloco = None
+
+        if not conteudo or conteudo.startswith("#"):
+            continue
+
+        if conteudo.startswith("- ") or conteudo == "-":
+            pai = next((c for c in reversed(pilha) if c < coluna), 0)
+            return coluna - pai
+
+        while pilha and pilha[-1] >= coluna:
+            pilha.pop()
+        pilha.append(coluna)
+
+        if _ABRE_BLOCO.search(conteudo):
+            bloco = coluna
+
+    return RECUO_PADRAO
+
+
+def _construtor(recuo_da_lista: int = RECUO_PADRAO) -> YAML:
     """
     O leitor/escritor round-trip, configurado.
 
@@ -393,11 +458,15 @@ def _construtor() -> YAML:
     deixaria de bater com o registro. E `width` alto impede que o ruamel quebre
     um nome de arquivo longo em duas linhas: é YAML válido, mas ilegível em um
     arquivo feito para ser aberto no editor.
+
+    O `recuo_da_lista` é o único parâmetro porque é a única coisa aqui que não se
+    decide no código: ela vem do arquivo que está sendo reescrito. Ver
+    `_recuo_das_listas`.
     """
     yaml = YAML(typ="rt")
     yaml.preserve_quotes = True
     yaml.width = 4096
-    yaml.indent(mapping=2, sequence=2, offset=0)
+    yaml.indent(mapping=2, sequence=recuo_da_lista + 2, offset=recuo_da_lista)
     yaml.representer.add_representer(type(None), _representar_nulo)
     return yaml
 
@@ -425,8 +494,13 @@ def _carregar_documento(caminho: Path):
 def _gravar_documento(caminho: Path, documento) -> None:
     import io
 
+    # O recuo é lido do arquivo que está no disco, e não do documento carregado:
+    # o ruamel prende os comentários aos dados, mas não a coluna em que as listas
+    # foram escritas.
+    recuo = _recuo_das_listas(_ler_texto(caminho)) if caminho.exists() else RECUO_PADRAO
+
     buffer = io.StringIO()
-    _construtor().dump(documento, buffer)
+    _construtor(recuo).dump(documento, buffer)
     escrever_atomico(caminho, buffer.getvalue())
 
 
@@ -594,6 +668,12 @@ def _diagnostico(texto: str, caminho: Path, erro: Exception) -> str:
     no cabeçalho). O YAML gerado é sintaticamente impossível, e a mensagem crua
     do parser fala de `<document start>` — que não diz nada a quem abrir o
     arquivo e vir um `/` inofensivo na primeira linha.
+
+    O `reparar_fichas.py`, que consertava todas as pastas de uma vez, foi
+    aposentado quando a migração da Fase 3 terminou. Este diagnóstico **não** vai
+    junto: a ficha quebrada reaparece toda vez que alguém restaura uma pasta de um
+    backup anterior à 0.4.0, e aí o conserto é manual — e precisa estar escrito
+    aqui, porque não há mais script para indicar.
     """
     primeira = next((linha for linha in texto.splitlines() if linha.strip()), "")
     if primeira.strip() == "/":
@@ -602,8 +682,9 @@ def _diagnostico(texto: str, caminho: Path, erro: Exception) -> str:
             "É um defeito conhecido das versões do `flatcap novo` anteriores à "
             "0.4.0: o cabeçalho de comentários saía com um `/` antes do primeiro "
             "`#`, e isso torna o arquivo inteiro ilegível.\n\n"
-            "Conserto: apague a linha que contém só `/`. Para consertar todas as "
-            "pastas de uma vez, rode `python reparar_fichas.py`.\n\n"
+            "Conserto: abra o arquivo em um editor de texto, apague a primeira "
+            "linha — a que contém só `/` — e salve em UTF-8. A barra é a única "
+            "coisa errada; o resto da ficha está intacto.\n\n"
             f"Detalhe técnico: {erro}"
         )
     return (
