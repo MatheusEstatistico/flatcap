@@ -24,9 +24,23 @@ from pathlib import Path
 import yaml
 
 from .config import Config
-from .modelo import CAMPO_ANEXO, CAMPOS_REDCAP, Cliente, normalizar
+from .modelo import (
+    CAMPO_ANEXO,
+    CAMPO_FINALIDADE,
+    CAMPOS_REDCAP,
+    Cliente,
+    mapa_de_rotulos,
+    normalizar,
+)
 from .nomes import NomeInvalidoError, localizar_pasta, nome_pasta, sanitizar
-from .redcap import ArquivoAusenteError, ArquivoRedcap, exportar_arquivo, exportar_registros
+from .redcap import (
+    ArquivoAusenteError,
+    ArquivoRedcap,
+    RedcapError,
+    exportar_arquivo,
+    exportar_metadados,
+    exportar_registros,
+)
 
 SUBPASTAS: tuple[str, ...] = (
     "1. Dados originais",
@@ -260,10 +274,31 @@ def _buscar_cliente(cfg: Config, record_id: str) -> Cliente:
             "Rode `flatcap listar` para ver os record_id disponíveis."
         )
 
-    cliente = normalizar(registros[0])
+    cliente = normalizar(registros[0], _rotulos_do_formulario(cfg))
     # O `record_id` normalizado vem do corpo da resposta; se por alguma razão vier
     # vazio, o que o usuário digitou é a melhor identificação que temos.
     return cliente if cliente.record_id else replace(cliente, record_id=pedido)
+
+def _rotulos_do_formulario(cfg: Config) -> dict[str, dict[str, str]]:
+    """
+    Os rótulos das opções do `fin`, para que a ficha guarde texto e não código.
+
+    Uma segunda chamada à API, e é a única do fluxo que pode falhar sozinha: há
+    token do REDCap com permissão de exportar registros e sem permissão de
+    exportar o dicionário de variáveis. Falhar aqui derrubaria o `flatcap novo`
+    inteiro por causa de uma linha da primeira página, então a falha é engolida
+    e a `finalidade` sai vazia.
+
+    Vazia, e não com o código cru: `finalidade: 2` na ficha é um valor que
+    ninguém consegue ler e que ninguém percebe estar errado, enquanto o campo em
+    branco cai no alerta `texto_ausente` do relatório e aparece na sua frente.
+    """
+    try:
+        metadados = exportar_metadados(cfg, fields=[CAMPO_FINALIDADE])
+    except RedcapError:
+        return {}
+    return mapa_de_rotulos(metadados, campos=[CAMPO_FINALIDADE])
+
 
 def _conferir_identificacao(cliente: Cliente) -> None:
     """
@@ -368,6 +403,34 @@ class _SemAncoras(yaml.SafeDumper):
     def ignore_aliases(self, data: object) -> bool:  # noqa: ARG002
         return True
 
+
+def _texto_em_bloco(dumper: yaml.SafeDumper, dado: str) -> yaml.ScalarNode:
+    """
+    Texto com quebra de linha sai como bloco literal, e não entre aspas.
+
+    Sem isso os `objetivos` do cliente saem assim:
+
+        objetivos: "Objetivo geral: avaliar o perfil.\\n\\nObjetivos específicos:\\n..."
+
+    que é YAML perfeitamente válido e ilegível num arquivo cujo cabeçalho convida
+    a editá-lo. Com isso saem assim:
+
+        objetivos: |
+          Objetivo geral: avaliar o perfil.
+
+          Objetivos específicos:
+          ...
+
+    O PyYAML só aceita o bloco literal se nenhuma linha terminar em espaço e não
+    houver `\\r` no meio — quem garante isso é o `modelo._texto_longo`, na
+    fronteira onde o texto entra.
+    """
+    estilo = "|" if "\n" in dado else None
+    return dumper.represent_scalar("tag:yaml.org,2002:str", dado, style=estilo)
+
+
+_SemAncoras.add_representer(str, _texto_em_bloco)
+
 _CABECALHO_YAML = """
 # projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.
 #
@@ -377,6 +440,15 @@ _CABECALHO_YAML = """
 #   prazo     10 dias úteis contados da reunião. A data da reunião está no
 #             calendário, não no REDCap — preencha depois de agendá-la.
 #   status    novo | em_analise | entregue
+#
+#   finalidade  para que o cliente pediu a análise — o campo `fin` do
+#   objetivos   formulário, e o `obj1`, como ele escreveu. Os dois saem
+#               impressos na primeira página de todo relatório deste projeto,
+#               então corrija aqui o que vier truncado, abreviado ou com erro
+#               de digitação: o que está escrito neste arquivo é o que o
+#               cliente vai ler. `null` faz o documento sair com um marcador
+#               visível e um aviso dentro dele, e não em silêncio.
+#
 #   analises  o que foi combinado na reunião. A Fase 7 lê esta lista para
 #             saber quais módulos rodar.
 #   dados     uma entrada por versão do banco, em ordem cronológica.
@@ -406,6 +478,11 @@ def _texto_projeto_yaml(cliente: Cliente, banco: ArquivoPlanejado | None, hoje:d
         "criado_em": hoje,
         "prazo": None,
         "status": STATUS_INICIAL,
+        # `or None` para que o campo em branco saia `finalidade: null`, do mesmo
+        # jeito que o `prazo` — uma linha terminada em dois-pontos parece uma
+        # linha que alguém começou e não terminou.
+        "finalidade": cliente.finalidade or None,
+        "objetivos": cliente.objetivos or None,
         "analises": [],
         "dados": dados,
     }

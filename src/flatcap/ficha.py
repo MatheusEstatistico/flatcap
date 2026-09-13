@@ -144,9 +144,18 @@ class Ficha:
     """
     O conteúdo do `projeto.yaml` que o FlatCap precisa conhecer.
 
-    Deliberadamente **não** carrega tudo o que está no arquivo. `prazo`,
-    `status` e `analises` são seus, e as fases seguintes leem o que precisarem.
-    O que entra aqui é o mínimo para identificar o projeto e versionar o banco.
+    Deliberadamente **não** carrega tudo o que está no arquivo. `prazo` e
+    `analises` são seus, e as fases seguintes leem o que precisarem. O que entra
+    aqui é o mínimo para identificar o projeto e versionar o banco.
+
+    A exceção são `finalidade` e `objetivos`, e ela tem uma regra por trás: entra
+    aqui o que alguma camada de cima **imprime**. Os dois saem na primeira página
+    de todo relatório, e o `relatorio.py` existe justamente para não abrir o banco
+    nem falar com o REDCap — se ele não pudesse lê-los da ficha, não teria de onde.
+
+    Os dois têm default vazio porque ficha criada antes deste campo existir
+    continua abrindo. Vazio não é erro: é o que faz o documento sair com o
+    marcador e o alerta `texto_ausente`, em vez de sair mais curto em silêncio.
     """
 
     raiz: Path
@@ -156,6 +165,8 @@ class Ficha:
     tipo: str
     status: str
     dados: tuple[Versao, ...]
+    finalidade: str = ""
+    objetivos: str = ""
 
     @property
     def versao_redcap(self) -> Versao | None:
@@ -335,6 +346,8 @@ def ler(raiz: Path) -> Ficha:
         tipo=_texto(documento, "tipo"),
         status=_texto(documento, "status"),
         dados=_versoes(documento, caminho),
+        finalidade=_texto(documento, "finalidade"),
+        objetivos=_texto(documento, "objetivos"),
     )
 
 

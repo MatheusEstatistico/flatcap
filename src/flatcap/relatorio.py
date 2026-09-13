@@ -53,9 +53,22 @@ texto que está na célula do `.csv` é o texto que vai para a célula do Word.
 
 ## O que sai na primeira página
 
-Título, subtítulo com `matrícula - nome`, os alertas quando houver, e o
-`TEXTO_PADRAO` — os parágrafos fixos que abrem todo relatório, definidos logo
-abaixo, em um bloco só, para serem reescritos sem se procurar código.
+Título, subtítulo com `matrícula - nome`, os alertas quando houver, e a
+**abertura** — três pedaços que `montar_abertura` junta, nesta ordem:
+
+    1. o `TEXTO_PADRAO`, os parágrafos fixos que abrem todo relatório de todo
+       projeto, definidos logo abaixo em um bloco só para serem reescritos sem
+       se procurar código;
+    2. a **finalidade** do estudo;
+    3. os **objetivos**, geral e específicos.
+
+Os dois últimos vêm da ficha, que os recebeu do formulário do REDCap (`fin` e
+`obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir à mão,
+porque o `projeto.yaml` é seu.
+
+Campo da ficha em branco não encolhe a página em silêncio: vira um marcador
+visível **e** um `Alerta` de código `texto_ausente`. Nada disso fere a regra da
+casa: ler a ficha é ler YAML, não é abrir o banco.
 
 ## O que este módulo deliberadamente não faz
 
@@ -87,7 +100,13 @@ from .ficha import ler as ler_ficha
 from .manifesto import ARQUIVO_MANIFESTO, Manifesto
 from .manifesto import ler as ler_manifesto
 from .nomes import SEPARADOR, sanitizar
-from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA, anotar
+from .projeto import (
+    ARQUIVO_PROJETO,
+    PASTA_ANALISES,
+    PASTA_ANTIGAS,
+    PASTA_DESCRITIVA,
+    anotar,
+)
 
 PREFIXO_RELATORIO = "Relatorio_"
 
@@ -95,34 +114,24 @@ TITULO_PADRAO = "Relatório Estatístico"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  O TEXTO PADRÃO DA PRIMEIRA PÁGINA — é aqui que se escreve.
+#  O TEXTO FIXO DA PRIMEIRA PÁGINA — é aqui que se escreve.
 #
-#  Uma linha da tupla, um parágrafo do documento, na ordem em que estão. Eles
-#  entram entre o subtítulo e a primeira variável, em todo relatório de todo
-#  projeto: é o texto que não muda de cliente para cliente.
+#  Uma linha da tupla, um parágrafo do documento, na ordem em que estão. É a
+#  parte que não muda de cliente para cliente, e ela abre a página: a finalidade
+#  e os objetivos, que são deste projeto, vêm logo depois.
 #
-#  Trocar o `xxxxx` pelo texto de verdade é a única edição necessária — nada
-#  mais no código sabe o que está escrito aqui, e a estrutura do documento não
-#  muda quando o texto crescer, encolher ou ganhar parágrafos.
+#  `()` é o estado de hoje: ainda não escrito. A primeira página continua saindo
+#  — com a finalidade e os objetivos —, só ainda não tem a parte institucional.
+#  Escrever é acrescentar strings aqui, e nada mais: nada no código sabe o que
+#  está escrito, e a estrutura do documento não muda quando o texto crescer,
+#  encolher ou ganhar parágrafos.
 #
-#  `()` não escreve nada: é assim que a seção inteira sai.
+#  O que **não** se faz é deixar um parágrafo de mentira guardando o lugar. Um
+#  `xxxxx` ou um `[a definir]` esquecido aqui não é feio: é um defeito que
+#  atravessa a conferência e chega impresso na mão de um professor de medicina.
 # ─────────────────────────────────────────────────────────────────────────────
 
-TEXTO_PADRAO: tuple[str, ...] = (
-    "xxxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx xxxxxxxx xxxxx xxxxxxxxxxx xxxxxxxx "
-    "xxxxxxxxxxxxx xxxxxx xxxxxxxxx xxxxxxxxxxxx xxxxx xxxxxxxxxx xxxxxxx "
-    "xxxxxxxxxxxxxxx xxxxxxxx xxxxx xxxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxx.",
-    "xxxxxxxx xxxxxxxxxxxxx xxxxx xxxxxxxxxx xxxxxxxxxxxx xxxxxxx xxxxxxxxxxx "
-    "xxxxx xxxxxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxxxx xxxxxxxxxx xxxxxxx "
-    "xxxxxxxxxxx xxxxxxxxxxxxx xxxxxxx xxxxx xxxxxxxxxxxxxxxx xxxxxxxxxxx "
-    "xxxxxxxx xxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx.",
-    "xxxxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxx xxxxxxxx xxxxxxxxxxxxx xxxxx "
-    "xxxxxxxxxxxx xxxxxxxxxxx xxxxxxx xxxxxxxxxxxxxx xxxxxxxx xxxxxxxxxxxxxx "
-    "xxxxxxxxxxx xxxxxxx xxxxxxxxxxxx xxxxxxxxxxxxx xxxxxxxxx xxxxxxxxxxxxx.",
-    "xxxxxxxxx xxxxxxxxxxxxxx xxxxxxxxxxx xxxxxxxxx xxxxxxx xxxxxxxxxxxxx "
-    "xxxxxxxxxxxxx xxxxxxxxxx xxxxxxx xxxxxxxxxxxxxxx xxxxxxxxxxx xxxxxxxxx "
-    "xxxxxxxxxxxxxx xxxxxxxx xxxxxxxxxxx xxxxxxxxxxxxxxx xxxxxxxxxx xxxxxxx.",
-)
+TEXTO_PADRAO: tuple[str, ...] = ()
 
 # A nota de comentário que todo `.csv` da Fase 5 traz na segunda linha. Ela é
 # descartada na leitura porque o título da seção já diz de qual variável se trata,
@@ -410,17 +419,23 @@ def preparar_relatorio(
     if aviso_dicionario:
         avisos.append(aviso_dicionario)
 
+    # Por último de propósito: os quatro alertas acima falam da validade dos
+    # números, e este fala do acabamento do documento. Um alerta de dado errado
+    # não deve ficar abaixo de um alerta de texto por preencher.
+    alerta_texto = _conferir_texto(ficha)
+    if alerta_texto is not None:
+        alertas.append(alerta_texto)
+
     relatorio = Relatorio(
         ficha=ficha,
         manifesto=manifesto,
         titulo=titulo,
         secoes=secoes,
-        # O texto padrão entra no `Relatorio` como dado, e não é lido pelo
-        # `documento.py` da constante. É o que mantém a divisão da fase: quem
-        # escreve o `.docx` não sabe de onde o texto veio, e um dia em que ele
-        # passar a vir do `projeto.yaml` ou de um arquivo por cliente, só esta
-        # linha muda.
-        texto=TEXTO_PADRAO,
+        # O texto entra no `Relatorio` como dado, e o `documento.py` não lê
+        # constante nenhuma. É o que mantém a divisão da fase — e é o que fez
+        # esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
+        # primeira página passaria a vir do `projeto.yaml`, é este.
+        texto=montar_abertura(ficha),
         fora=tuple(
             ForaDoRelatorio(
                 variavel=str(entrada.get("variavel", "")),
@@ -734,7 +749,109 @@ def ler_tabela(caminho: Path, especie: str = "", titulo: str = "") -> TabelaLida
     )
 
 
+# A primeira página
+
+
+ROTULO_FINALIDADE = "Finalidade do estudo: "
+
+# O que ocupa o lugar de um campo que veio em branco.
+#
+# Não é `[NULL]`, e a escolha tem três razões, em ordem de importância. O risco
+# real não é o marcador ser feio: é ele **escapar** para a entrega, e aí ele
+# precisa ser legível para quem abrir o documento sem nunca ter ouvido falar do
+# FlatCap. `[NULL]` é vocabulário de banco de dados. E as aspas angulares fazem
+# o que o colchete não faz: é impossível confundir isto com o texto do cliente.
+#
+# O marcador nunca vem sozinho — o `Alerta` de código `texto_ausente` sobe junto,
+# e é ele a caixa amarela no alto da página. O marcador é para o seu olho na
+# releitura; o alerta é o que sobrevive ao arquivo ser anexado a um e-mail.
+_MARCADOR = "«a preencher: {}»"
+
+_FINALIDADE_AUSENTE = _MARCADOR.format("a finalidade do estudo")
+_OBJETIVOS_AUSENTES = _MARCADOR.format("o objetivo geral e os objetivos específicos")
+
+
+def montar_abertura(
+    ficha: Ficha, texto_padrao: tuple[str, ...] = TEXTO_PADRAO
+) -> tuple[str, ...]:
+    """
+    Os parágrafos da primeira página: o texto fixo, a finalidade, os objetivos.
+
+    A ordem é a da leitura. O parágrafo institucional enquadra, a finalidade diz
+    para que o estudo serve, e os objetivos dizem o que se quer saber — do geral
+    para o particular, que é como um cliente lê a própria primeira página.
+
+    Campo em branco não some: vira marcador. Uma seção que simplesmente encolhe é
+    uma falta em que ninguém repara, e é o mesmo argumento que a Fase 4 usou para
+    imprimir a codificação no `perfil.md` — a única forma de descobrir que a
+    escolha foi errada é vê-la escrita.
+
+    Recebe a `Ficha`, e não a `Config`: montar a primeira página é ler YAML, não
+    é falar com o REDCap. O teste em subprocesso que afirma que este módulo não
+    carrega `pandas` nem `matplotlib` continua valendo, e o `texto_padrao`
+    injetável existe para o teste poder afirmar a composição sem depender do que
+    estiver escrito na constante hoje.
+    """
+    partes: list[str] = list(texto_padrao)
+
+    if ficha.finalidade:
+        partes.append(f"{ROTULO_FINALIDADE}{ficha.finalidade.rstrip(' .')}.")
+    else:
+        partes.append(f"{ROTULO_FINALIDADE}{_FINALIDADE_AUSENTE}")
+
+    partes.extend(_paragrafos(ficha.objetivos) or (_OBJETIVOS_AUSENTES,))
+    return tuple(partes)
+
+
+def _paragrafos(texto: str) -> tuple[str, ...]:
+    """
+    Cada quebra de linha do campo `notes` vira um parágrafo do documento.
+
+    Quebra de linha ali é intenção: numa caixa de texto do REDCap a linha quebra
+    sozinha ao chegar na borda, e só existe um `\\n` onde a pessoa apertou Enter.
+    Linha em branco entre dois parágrafos é descartada — parágrafo vazio no Word
+    é um espaço que ninguém pediu e que reaparece na revisão como "sobrou uma
+    linha aqui".
+    """
+    return tuple(parte.strip() for parte in re.split(r"\r?\n", texto or "") if parte.strip())
+
+
 # As conferências
+
+
+def _conferir_texto(ficha: Ficha) -> Alerta | None:
+    """
+    Quais campos da primeira página vieram em branco.
+
+    É a quinta conferência da fase, e a única que não fala de dados: as outras
+    quatro perguntam se a rodada ainda descreve a pasta, esta pergunta se o
+    documento está pronto para ser enviado. Ela não recusa nada, pelo mesmo
+    motivo das outras — o documento sai, com o aviso dentro dele.
+    """
+    faltando = [
+        nome
+        for nome, valor in (
+            ("finalidade", ficha.finalidade),
+            ("objetivos", ficha.objetivos),
+        )
+        if not valor
+    ]
+    if not faltando:
+        return None
+
+    quais = " e ".join(f"`{nome}`" for nome in faltando)
+    return Alerta(
+        codigo="texto_ausente",
+        titulo="a primeira página está com campo por preencher",
+        detalhe=(
+            f"{quais} da ficha deste projeto está em branco, e o documento saiu com "
+            "um marcador visível no lugar do texto.\n"
+            "Esse texto vem do formulário do REDCap (`fin` e `obj1`) na hora em que "
+            "a pasta é criada. Projeto criado antes disso, ou campo que o cliente "
+            f"deixou em branco, se resolve escrevendo direto no `{ARQUIVO_PROJETO}` "
+            "— o arquivo é seu, e o FlatCap não sobrescreve o que você escreveu."
+        ),
+    )
 
 
 def _conferir_banco(
@@ -996,6 +1113,7 @@ __all__ = [
     "TabelaLida",
     "executar_relatorio",
     "ler_tabela",
+    "montar_abertura",
     "nome_do_relatorio",
     "preparar_relatorio",
     "relatorios_na_pasta",
