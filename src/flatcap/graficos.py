@@ -75,7 +75,7 @@ TINTA_SECUNDARIA = "#52514e"
 TINTA_APAGADA = "#898781"
 GRADE = "#e1e0d9"
 BASE = "#c3c2b7"
-SERIE = "#2a78d6"
+SERIE = "#4b9b69"
 
 LARGURA_POLEGADAS = 6.3  # ~16 cm: a largura útil de uma página A4 com margens
 ALTURA_PADRAO = 3.4
