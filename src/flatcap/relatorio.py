@@ -112,6 +112,14 @@ PREFIXO_RELATORIO = "Relatorio_"
 
 TITULO_PADRAO = "Relatório Estatístico"
 
+# O mesmo nome que `documento.ARQUIVO_TEMPLATE`, repetido aqui porque importar o
+# `documento.py` no topo traria o `python-docx` junto — e a simulação deste
+# comando não escreve documento nenhum. É a única duplicação deliberada do
+# módulo; a limpeza natural é a constante descer para o `projeto.py`, que é o
+# dono do desenho da pasta, e o `documento.py` reexportar o nome — o mesmo
+# caminho que `versao_vigente` e `PASTA_DESCRITIVA` já fizeram.
+_ARQUIVO_TEMPLATE = "template.docx"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 #  O TEXTO FIXO DA PRIMEIRA PÁGINA — é aqui que se escreve.
@@ -592,11 +600,21 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
     Qual `.docx` empresta os estilos, e nesta ordem.
 
     1. o `--template` que você passou;
-    2. o `template.docx` da **pasta do projeto**, para o cliente que exige um
+    2. o `template.docx` da **pasta do projeto**, para o trabalho que exige um
        modelo próprio;
-    3. o `template.docx` do `FLATCAP_ROOT`, que é onde o modelo institucional
+    3. o `template.docx` da **pasta do cliente**, que vale para todos os
+       projetos dele — o degrau novo da 1.1.0;
+    4. o `template.docx` do `FLATCAP_ROOT`, que é onde o modelo institucional
        mora — fora do repositório, como todo o resto que não é código;
-    4. nenhum: o documento sai com os estilos padrão do `documento.py`.
+    5. nenhum: o documento sai com os estilos padrão do `documento.py`.
+
+    **Esta função tinha um degrau a menos e teria quebrado em silêncio.** Até a
+    1.0.0 `raiz.parent` era o `FLATCAP_ROOT`; com a pasta do projeto um nível
+    abaixo, `raiz.parent` passou a ser a pasta do cliente, e o modelo
+    institucional deixaria de ser encontrado — sem erro, sem aviso, só com todo
+    relatório saindo de repente sem o logotipo. O degrau que se ganha no meio é
+    a parte boa do acidente: um cliente com identidade visual própria agora tem
+    onde guardar o modelo dele.
 
     O modelo mora fora do repositório de propósito. Ele carrega logotipo e
     identidade visual da instituição, muda sem pedir licença a ninguém, e é
@@ -612,7 +630,13 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
         return caminho
 
     raiz = Path(raiz)
-    for candidato in (raiz / "template.docx", raiz.parent / "template.docx"):
+    candidatos = [raiz / _ARQUIVO_TEMPLATE, raiz.parent / _ARQUIVO_TEMPLATE]
+    # O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
+    # de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
+    if raiz.parent.parent != raiz.parent:
+        candidatos.append(raiz.parent.parent / _ARQUIVO_TEMPLATE)
+
+    for candidato in candidatos:
         if candidato.is_file():
             return candidato
     return None
