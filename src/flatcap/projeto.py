@@ -10,6 +10,33 @@ solicitação nova. A separação interna é a regra da casa:
 
 É o que faz o `--dry-run` valer alguma coisa: os dois modos percorrem o mesmo
 `Plano`, o modo simulação apenas não chama `executar`.
+
+## O que mudou na 1.1.0: a pasta do cliente deixou de ser a pasta do projeto
+
+    FLATCAP_ROOT/
+    └── 00742 - José Antônio de Sá/      do CLIENTE — pode já existir
+        └── Projeto 006/                 do PROJETO — é esta que o `novo` cria
+            ├── projeto.yaml
+            ├── historico.md
+            ├── 1. Dados originais/
+            ├── 2. Versões antigas/
+            └── 3. Análises/
+
+O mesmo cliente volta ao REDCap com um estudo novo, e o formulário lhe dá um
+`record_id` novo. Antes, a segunda solicitação batia na recusa "já existe pasta
+para essa matrícula" e não tinha para onde ir.
+
+**A idempotência mudou de sujeito, e não de regra.** Ela continua sendo "o
+`novo` nunca escreve sobre pasta existente" — o que mudou é qual pasta responde
+pela pergunta. Pasta do cliente já existente passou a ser o caso normal (é o
+cliente que voltou) e é reaproveitada; quem faz o comando sair com código 0
+avisando é a pasta `Projeto NNN`.
+
+Uma consequência que vale registrar: a pasta do cliente é reaproveitada **como
+ela estiver no disco**, mesmo que o nome não seja mais o que `nome_pasta`
+produziria hoje — nome corrigido à mão, grafia arrumada depois. É a mesma
+decisão da Fase 2 (a matrícula é a parte que não muda), e é o que impede o
+FlatCap de criar uma segunda pasta para um cliente que já tem uma.
 """
 
 from __future__ import annotations
@@ -32,7 +59,16 @@ from .modelo import (
     mapa_de_rotulos,
     normalizar,
 )
-from .nomes import NomeInvalidoError, localizar_pasta, nome_pasta, sanitizar
+from .nomes import (
+    PREFIXO_PROJETO,
+    SEPARADOR_ROTULO,
+    NomeInvalidoError,
+    localizar_pasta,
+    localizar_projeto_por_record,
+    nome_do_projeto,
+    nome_pasta,
+    sanitizar,
+)
 from .redcap import (
     ArquivoAusenteError,
     ArquivoRedcap,
@@ -84,6 +120,18 @@ class RegistroNaoEncontradoError(ProjetoError):
     """
 
 
+class LayoutAntigoError(ProjetoError):
+    """
+    A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
+    à 1.1.0, de quando um cliente tinha um projeto só.
+
+    Recusa e não conserta: mover pasta do usuário é operação que o FlatCap
+    nunca fez sozinho, e a mensagem diz exatamente o que mover. O `ficha.py`
+    tem um erro homônimo, com o mesmo texto, para o mesmo diagnóstico do lado
+    de quem só lê o disco — ver `texto_da_migracao`.
+    """
+
+
 class ClienteIncompletoError(ProjetoError):
     """
     O registro existe, mas não dá para nomear a pasta a partir dele.
@@ -96,9 +144,14 @@ class ClienteIncompletoError(ProjetoError):
 
 class ProjetoExistenteError(ProjetoError):
     """
-    Já existe pasta para essa matrícula. Nada foi mudado. 
+    Já existe pasta para **este projeto**. Nada foi mudado.
 
-    O caminho fica gravado em `.pasta`, isso previne erros de quando a pasta é criada manualmente. 
+    Até a 1.0.0 a pergunta era "esta matrícula já tem pasta?". Agora é "este
+    `record_id` já tem pasta?", porque a matrícula passou a poder ter várias:
+    recusar pela matrícula tornaria impossível criar o segundo projeto de um
+    cliente, que é justamente o caso que esta versão existe para atender.
+
+    O caminho fica gravado em `.pasta`, isso previne erros de quando a pasta é criada manualmente.
     """
 
     def __init__(self, mensagem: str, pasta: Path) -> None:
@@ -146,10 +199,22 @@ class Plano:
     projeto_yaml: str
     historico_md: str
     quando: datetime
+    pasta_cliente: Path | None = None
+    cliente_novo: bool = True
 
     @property
     def tem_anexo(self) -> bool:
         return self.banco is not None
+
+    @property
+    def pasta_do_cliente(self) -> Path:
+        """
+        A pasta do cliente, que é onde a pasta do projeto vai morar.
+
+        Deduzida da raiz quando não vier no plano: `pasta_cliente` tem default
+        para que um `Plano` montado à mão em teste antigo continue válido.
+        """
+        return self.pasta_cliente if self.pasta_cliente is not None else self.raiz.parent
 
 
 @dataclass(frozen = True)
@@ -184,9 +249,9 @@ def preparar(
     quando = agora or datetime.now()
     cliente = _buscar_cliente(cfg, record_id)
     _conferir_identificacao(cliente)
-    raiz = _destino(cfg, cliente)
+    pasta_cliente, raiz, cliente_novo = _destino(cfg, cliente)
     anexo = _baixar_anexo(cfg, cliente)
-    return _montar_plano(cliente, raiz, anexo, quando)
+    return _montar_plano(cliente, pasta_cliente, raiz, cliente_novo, anexo, quando)
 
 def executar(plano: Plano) -> Resultado:
     """
@@ -194,6 +259,12 @@ def executar(plano: Plano) -> Resultado:
     """
     criados: list[Path] = []
     avisos: list[str] = []
+
+    # `parents=True` cria a pasta do cliente quando ela não existe e a aceita
+    # quando existe — mas continua estourando `FileExistsError` se a **última**
+    # pasta do caminho já estiver lá. É exatamente a regra que se quer aqui: o
+    # cliente que voltou reaproveita a pasta dele, e o projeto repetido recusa.
+    cliente_novo = plano.cliente_novo and not plano.pasta_do_cliente.exists()
 
     try:
         plano.raiz.mkdir(parents=True)
@@ -203,7 +274,9 @@ def executar(plano: Plano) -> Resultado:
             "Nada foi alterado. Rode `flatcap novo` de novo para ver o estado atual.",
             plano.raiz,
         ) from erro
-    
+
+    if cliente_novo:
+        criados.append(plano.pasta_do_cliente)
     criados.append(plano.raiz)
 
     for subpasta in plano.subpastas:
@@ -320,35 +393,115 @@ def _conferir_identificacao(cliente: Cliente) -> None:
         "O `flatcap listar` marca em amarelo os cadastros incompletos."
     )
 
-def _destino(cfg: Config, cliente: Cliente) -> Path:
+def _destino(cfg: Config, cliente: Cliente) -> tuple[Path, Path, bool]:
     """
-    Decide onde a pasta vai ficar e garante que ainda não existe. A conferência é por matrícula, via
-    `localizar_pasta`.
+    Decide onde a pasta vai ficar. Devolve (pasta do cliente, raiz, cliente é novo).
+
+    Três conferências, nesta ordem, e cada uma responde a uma pergunta diferente:
+
+    1. **O cliente já tem pasta?** Por matrícula, via `localizar_pasta`. Se tem,
+       é reaproveitada — é o cliente voltando com um trabalho novo, e é o caso
+       que esta versão existe para atender. Se não tem, o nome é montado agora.
+
+    2. **A pasta do cliente ainda está no formato antigo?** `projeto.yaml` na
+       raiz dela quer dizer que a migração para dois níveis não chegou ali.
+       Criar `Projeto NNN` dentro mesmo assim deixaria a pasta com duas fichas
+       em níveis diferentes, e a busca do `ficha.localizar_projeto` passaria a
+       encontrar a nova e ignorar a antiga — a história do primeiro trabalho
+       some da vista sem nada dizer que sumiu. Recusa, com o conserto escrito.
+
+    3. **Este `record_id` já tem pasta em algum lugar?** Não só dentro desta
+       pasta de cliente: em todo o root. É o caso da matrícula corrigida no
+       REDCap depois de a pasta existir — a busca por matrícula não acha mais o
+       cliente, e sem esta conferência o mesmo trabalho ganharia duas pastas,
+       cada uma com metade da história.
     """
-    existente = localizar_pasta(Path(cfg.root), cliente.matricula)
-    if existente is not None:
-        raise ProjetoExistenteError(
-            f"Já existe pasta para a matrícula {cliente.matricula}:\n"
-            f"  {existente}\n"
-            "Nada foi alterado. O `novo` nunca escreve sobre pasta existente",
-            existente,
-        )
+    root = Path(cfg.root)
+
+    pasta_cliente = localizar_pasta(root, cliente.matricula)
+    cliente_novo = pasta_cliente is None
+
+    if pasta_cliente is None:
+        try:
+            pasta_cliente = root / nome_pasta(cliente.matricula, cliente.nome)
+        except NomeInvalidoError as erro:
+            raise ClienteIncompletoError(
+                f"Da matrícula {cliente.matricula!r} do registro {cliente.record_id} não\n"
+                "sobrou nada depois da limpeza de caracteres.\n"
+                "Corrija o registro no REDCap."
+            ) from erro
+    elif (pasta_cliente / ARQUIVO_PROJETO).exists():
+        raise LayoutAntigoError(texto_da_migracao(pasta_cliente))
 
     try:
-        destino = Path(cfg.root) / nome_pasta(cliente.matricula, cliente.nome)
+        destino = pasta_cliente / nome_do_projeto(cliente.record_id)
     except NomeInvalidoError as erro:
         raise ClienteIncompletoError(
-            f"Da matrícula {cliente.matricula!r} do registro {cliente.record_id} não\n"
-            "sobrou nada depois da limpeza de caracteres.\n"
-            "Corrija o registro no REDCap."
+            f"O registro {cliente.record_id!r} não tem um `record_id` que sirva de\n"
+            "nome de pasta. A pasta do projeto é nomeada por ele.\n"
+            "Confira o registro no REDCap."
         ) from erro
 
     if destino.exists():
         raise ProjetoExistenteError(
-            f"Já existe algo neste caminho: {destino}\nNada foi alterado.",
+            f"Já existe pasta para o registro {cliente.record_id}:\n"
+            f"  {destino}\n"
+            "Nada foi alterado. O `novo` nunca escreve sobre pasta existente.",
             destino,
         )
-    return destino
+
+    noutro_lugar = localizar_projeto_por_record(root, cliente.record_id)
+    if noutro_lugar is not None:
+        raise ProjetoExistenteError(
+            f"O registro {cliente.record_id} já tem pasta, em outro cliente:\n"
+            f"  {noutro_lugar}\n"
+            f"E a matrícula {cliente.matricula} deste registro aponta para:\n"
+            f"  {pasta_cliente}\n\n"
+            "Nada foi alterado. Isso costuma ser a matrícula corrigida no REDCap "
+            "depois de a pasta ter sido criada. Renomeie a pasta do cliente para a "
+            "matrícula nova — a pasta do projeto, dentro dela, não muda.",
+            noutro_lugar,
+        )
+
+    return pasta_cliente, destino, cliente_novo
+
+
+def texto_da_migracao(pasta_do_cliente: Path, record_id: str = "") -> str:
+    """
+    O diagnóstico da pasta que ficou no formato de antes da 1.1.0.
+
+    Mora aqui, e é usado também pelo `ficha.py`, porque a mensagem descreve o
+    **desenho da pasta**, que é assunto deste módulo. Cada um dos dois levanta o
+    seu próprio erro — a regra da casa continua sendo um erro por módulo —, e
+    nenhum dos dois reescreve o texto por conta própria: duas versões da mesma
+    instrução de conserto é como uma delas fica desatualizada.
+    """
+    alvo = nome_do_projeto(record_id) if sanitizar(str(record_id)) else f"{PREFIXO_PROJETO}NNN"
+    numero = (
+        ""
+        if sanitizar(str(record_id))
+        else "\n  (NNN é o `record_id` que está escrito no `projeto.yaml` dessa pasta)"
+    )
+    subpastas = "\n".join(f"      {nome}/" for nome in SUBPASTAS)
+    return (
+        f"A pasta {Path(pasta_do_cliente).name} está no formato anterior à versão "
+        f"1.1.0, com o {ARQUIVO_PROJETO} na raiz dela.\n\n"
+        "A partir da 1.1.0 um cliente pode ter mais de um projeto, então a pasta "
+        "do cliente virou um contêiner e cada projeto mora em uma subpasta "
+        "própria:\n\n"
+        f"  {Path(pasta_do_cliente).name}/\n"
+        f"  └── {alvo}/{numero}\n"
+        f"      {ARQUIVO_PROJETO}\n"
+        f"      {ARQUIVO_HISTORICO}\n"
+        f"{subpastas}\n\n"
+        f"Conserto: crie a pasta `{alvo}` dentro de "
+        f"`{Path(pasta_do_cliente).name}` e mova para dentro dela tudo o que está "
+        "lá hoje — as três subpastas numeradas, o `projeto.yaml`, o "
+        "`historico.md`, o `perfil.md`, o `dicionario.csv` e os `.docx` de "
+        "relatório.\n"
+        "A exceção é o `template.docx`: deixado na pasta do cliente, ele passa a "
+        "valer para todos os projetos dele."
+    )
 
 def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
     """
@@ -361,7 +514,9 @@ def _baixar_anexo(cfg: Config, cliente: Cliente) -> ArquivoRedcap | None:
 
 def _montar_plano(
     cliente: Cliente,
+    pasta_cliente: Path,
     raiz: Path,
+    cliente_novo: bool,
     anexo: ArquivoRedcap | None,
     quando: datetime,
 ) -> Plano:
@@ -370,7 +525,7 @@ def _montar_plano(
     """
     hoje = quando.date()
     banco = None
-    
+
     if anexo is not None:
         banco = ArquivoPlanejado(
             caminho=raiz / PASTA_DADOS / nome_do_banco(anexo, hoje, cliente.record_id),
@@ -386,6 +541,8 @@ def _montar_plano(
         projeto_yaml=_texto_projeto_yaml(cliente, banco, hoje),
         historico_md=_texto_historico(cliente, banco, quando),
         quando=quando,
+        pasta_cliente=pasta_cliente,
+        cliente_novo=cliente_novo,
     )
 
 
@@ -499,8 +656,15 @@ def _texto_projeto_yaml(cliente: Cliente, banco: ArquivoPlanejado | None, hoje:d
 def _texto_historico(cliente: Cliente, banco: ArquivoPlanejado | None, quando: datetime) -> str:
     """
     Monta o `historico.md` com a primeira linha de log já escrita.
+
+    O título carrega cliente **e** projeto desde a 1.1.0: um `historico.md` que
+    se apresentasse só como `Projeto 006` não diria de quem ele é, e o arquivo
+    existe justamente para ser aberto seis meses depois.
     """
-    titulo = nome_pasta(cliente.matricula, cliente.nome)
+    titulo = (
+        f"{nome_pasta(cliente.matricula, cliente.nome)}"
+        f"{SEPARADOR_ROTULO}{nome_do_projeto(cliente.record_id)}"
+    )
 
     if banco is not None:
         acao = (
