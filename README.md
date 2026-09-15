@@ -14,9 +14,21 @@ Automatizar o que é repetitivo e mecânico (baixar, nomear, versionar, formatar
 ---
 
 ## Instalação 
-
 Requer **Python 3.11+**
+Requer **Git**
+Requer **_**
 
+
+### Linux Debian-based 
+
+
+
+### Windows 
+
+
+
+### MacOS 
+Não são bem-vindos aqui! 
 
 
 ## configurações 
