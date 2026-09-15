@@ -10,9 +10,9 @@ Automatizar o que é repetitivo e mecânico (baixar, nomear, versionar, formatar
 ---
 
 ## Instalação 
-Requer **Python 3.11+**
-Requer **Git**
-Requer **_**
+Requer **Python 3.11+** <br>
+Requer **Git** <br>
+Requer **_** <br>
 
 ```bash
 git clone git@github.com:<usuario>/flatcap.git
@@ -23,8 +23,7 @@ pip install -e ".[dev]"
 ```
  
 ## Configuração 
-Copie `.env.example` para `.env` e preencha:
-
+Copie `.env.example` para `.env` e preencha: 
 ```env
 REDCAP_API_URL=https://<servidor-institucional>/redcap/api/
 REDCAP_TOKEN=
