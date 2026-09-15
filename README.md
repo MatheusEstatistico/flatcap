@@ -6,7 +6,7 @@ Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap:
 ## Princípio norteador 
 Automatizar o que é repetitivo e mecânico (baixar, nomear, versionar, formatar) e manter manual o que é decisão técnica (o que analisar, como tratar cada variável, qual construção de modelo será feita). Tudo que é automatizado fica documentado em disco, para que qualquer projeto possa ser reaberto meses depois e compreendido sem depender da memória.
 
-> A documentação completa pode ser encontrada em [`Doc.Fletcap`]().
+> A documentação completa pode ser encontrada em [`Doc.Flatcap`]().
 ---
 
 ## Instalação 
