@@ -137,6 +137,36 @@ MINIMO_PARA_FAIXAS = 4   # abaixo disso, quartil não descreve nada
 CASAS_RESUMO = 2         # casas decimais das estatísticas
 CASAS_PERCENTUAL = 1
 
+# As medidas do resumo de uma numérica, e a ordem em que saem na tabela.
+#
+# O `.csv` do resumo é **vertical**: `estatistica;valor`, uma linha por medida.
+# Não é detalhe de formatação — é o que faz o resumo caber em qualquer página sem
+# espremer coluna nenhuma, e é por isso que este é o único arquivo da fase cuja
+# primeira coluna não é um valor observado.
+#
+# `faltantes`, `mínimo` e `máximo` saíram da tabela por decisão de apresentação,
+# não de cálculo: os três continuam calculados, continuam no `manifesto.json`
+# (em `detalhes.resumo` e no campo `faltantes` do item) e continuam na tabela que
+# o `flatcap descritiva` imprime no terminal. O que muda é o que o cliente lê.
+#
+# Acrescentar uma medida de volta é uma linha aqui — e mais nada no pacote.
+MEDIDAS_DO_RESUMO: tuple[tuple[str, str], ...] = (
+    ("n", "n"),
+    ("média", "media"),
+    ("mediana", "mediana"),
+    ("DP", "desvio"),
+    ("Q1", "q1"),
+    ("Q3", "q3"),
+)
+
+# As que se escrevem sem casa decimal: são contagens, não medidas.
+_MEDIDAS_INTEIRAS = frozenset({"n", "faltantes"})
+
+# A glosa da sigla, no título do artefato — que é o texto da legenda no `.docx`.
+# É o lugar mais barato de dizer o que é `DP`: o título já é escrito aqui e já
+# vai impresso acima da tabela, sem mecanismo novo em lugar nenhum. `""` tira.
+GLOSA_DO_RESUMO = " (DP = desvio-padrão)"
+
 FAIXAS_QUARTIS = "quartis"
 FAIXAS_DICIONARIO = "dicionario"
 
@@ -711,24 +741,30 @@ def _descrever_numerica(
     avisos: list[str] = []
 
     resumo = _resumo_numerico(valores)
+    medidas: dict[str, float] = {"n": preenchidos, "faltantes": faltantes, **resumo}
     tabela_resumo = Tabela(
         nome=f"resumo_{slug}.csv",
         especie="resumo",
         variavel=linha.variavel,
-        titulo=f"Resumo — {linha.rotulo or linha.variavel}",
+        titulo=f"Resumo — {linha.rotulo or linha.variavel}{GLOSA_DO_RESUMO}",
         colunas=("estatistica", "valor"),
-        linhas=(
-            ("n válidos", str(preenchidos)),
-            ("faltantes", str(faltantes)),
-            ("mínimo", _numero(resumo["minimo"])),
-            ("q1", _numero(resumo["q1"])),
-            ("mediana", _numero(resumo["mediana"])),
-            ("q3", _numero(resumo["q3"])),
-            ("máximo", _numero(resumo["maximo"])),
-            ("média", _numero(resumo["media"])),
-            ("desvio padrão", _numero(resumo["desvio"])),
+        linhas=tuple(
+            (
+                rotulo,
+                str(int(medidas[chave]))
+                if chave in _MEDIDAS_INTEIRAS
+                else _numero(medidas[chave]),
+            )
+            for rotulo, chave in MEDIDAS_DO_RESUMO
+            if chave in medidas
         ),
-        notas=(f"denominador: {preenchidos} válidos de {total} linhas.",),
+        notas=(
+            f"denominador: {preenchidos} válidos de {total} linhas "
+            f"({faltantes} faltante(s)).",
+            "DP = desvio-padrão. Q1 e Q3 = primeiro e terceiro quartis.",
+            f"mínimo {_numero(resumo['minimo'])} · máximo {_numero(resumo['maximo'])} "
+            "— calculados e fora da tabela por decisão de apresentação.",
+        ),
     )
 
     tabelas = [tabela_resumo]

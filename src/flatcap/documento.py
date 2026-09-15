@@ -109,6 +109,25 @@ TINTA_SECUNDARIA = RGBColor(0x52, 0x51, 0x4E)
 TINTA_APAGADA = RGBColor(0x89, 0x87, 0x81)
 FUNDO_AVISO = "FBEFC8"  # o amarelo do painel de aviso da CLI, em papel
 BORDA = "C3C2B7"
+TINTA_LINHA = "0B0B0B"  # as réguas da tabela, na mesma tinta do texto
+
+# O fundo da linha `Total`.
+#
+# Esta cor mora no código, e não no `template.docx`, e a exceção tem motivo. O
+# Word sabe pintar a última linha de uma tabela — é a banda «Última linha» do
+# estilo. Mas a última linha nem sempre é o `Total`: no resumo de uma numérica
+# ela é `Q3`, e a banda pintaria o desvio-padrão de verde. O destaque depende do
+# **conteúdo** da célula, e conteúdo é justamente o que o estilo não enxerga.
+#
+# O texto por cima é escrito em `TINTA`, e isso também precisa ser dito. Sem cor
+# explícita o Word usa a cor «automática», que ele inverte para branco sobre
+# fundo escuro — e branco sobre este verde dá contraste 3,4:1, abaixo dos 4,5:1
+# que se pede para texto de corpo. Em preto o contraste é 6,2:1.
+FUNDO_TOTAL = "4B9B69"
+
+# As três linhas da tabela: topo, sob o cabeçalho, base. Nenhuma vertical.
+_REGUA_GROSSA = 12  # oitavos de ponto — topo e base
+_REGUA_FINA = 4     # sob o cabeçalho
 
 _CORPO_PT = 10.5
 _LEGENDA_PT = 9
@@ -394,7 +413,7 @@ def _escrever_tabela(
         quadro.style = estilos.tabela
     else:
         quadro.style = None
-        _bordas_da_tabela(quadro, cor=BORDA)
+        _bordas_de_tres_linhas(quadro, cor=TINTA_LINHA)
     quadro.alignment = WD_TABLE_ALIGNMENT.LEFT
 
     for posicao, nome in enumerate(tabela.colunas):
@@ -411,6 +430,8 @@ def _escrever_tabela(
         destaque = bool(valores) and valores[0].strip() == _ROTULO_TOTAL
         for posicao in range(tabela.largura):
             valor = valores[posicao] if posicao < len(valores) else ""
+            if destaque:
+                _sombrear(linha.cells[posicao], FUNDO_TOTAL)
             paragrafo = linha.cells[posicao].paragraphs[0]
             _texto(
                 paragrafo,
@@ -469,10 +490,12 @@ def _fixar_larguras(quadro, larguras) -> None:
     documento que sai certo em um e torto no outro é um documento que ainda dá
     trabalho.
     """
+    # `autofit = False` já escreve `<w:tblLayout w:type="fixed"/>` no lugar certo
+    # do `tblPr`. Acrescentar outro à mão deixava dois no mesmo elemento, o
+    # segundo depois do `tblLook` — documento inválido pelo esquema do OOXML, que
+    # o Word abre assim mesmo e um validador recusa. Estava em toda tabela de
+    # todo relatório já entregue.
     quadro.autofit = False
-    disposicao = OxmlElement("w:tblLayout")
-    disposicao.set(qn("w:type"), "fixed")
-    quadro._tbl.tblPr.append(disposicao)
 
     for posicao, largura in enumerate(larguras):
         quadro.columns[posicao].width = largura
@@ -698,13 +721,27 @@ def _manter_junta(quadro) -> None:
     Acima de `_LINHAS_PARA_MANTER_JUNTA` a tabela se parte de propósito, e é o
     cabeçalho repetido que resolve a leitura do outro lado.
     """
-    linhas = quadro.rows
-    if len(linhas) > _LINHAS_PARA_MANTER_JUNTA:
-        return
-    for linha in list(linhas)[:-1]:
+    linhas = list(quadro.rows)
+
+    def prender(linha) -> None:
         for celula in linha.cells:
             for paragrafo in celula.paragraphs:
                 paragrafo.paragraph_format.keep_with_next = True
+
+    if len(linhas) <= _LINHAS_PARA_MANTER_JUNTA:
+        for linha in linhas[:-1]:
+            prender(linha)
+        return
+
+    # A tabela longa parte, e é o cabeçalho repetido que resolve a leitura do
+    # outro lado. Com uma exceção: o `Total`. Sozinho no alto de uma página,
+    # embaixo do cabeçalho repetido, ele vira uma página que só tem um título e
+    # uma faixa verde — e quem lê volta atrás procurando os números que somam
+    # nela. As duas categorias antes dele vão junto, o que basta para a faixa
+    # nunca aparecer desacompanhada.
+    if len(linhas) >= 4 and linhas[-1].cells[0].text.strip() == _ROTULO_TOTAL:
+        prender(linhas[-2])
+        prender(linhas[-3])
 
 
 def _repetir_cabecalho(linha) -> None:
@@ -731,22 +768,67 @@ def _sombrear(celula, cor: str) -> None:
 
 def _bordas_da_tabela(tabela, cor: str, espessura: int = 4) -> None:
     """
-    Bordas escritas à mão, para quando o modelo não tem estilo de tabela.
+    Uma borda em volta de tudo. Serve a caixa de aviso, que é uma célula só.
+    """
+    _escrever_bordas(
+        tabela,
+        {
+            lado: (espessura, cor)
+            for lado in ("top", "left", "bottom", "right", "insideH", "insideV")
+        },
+    )
 
-    É o último degrau da fila de estilos. Um modelo institucional em que ninguém
-    nunca inseriu uma tabela não traz a definição do `Table Grid` — o Word só
-    grava os estilos que o documento usou —, e sem isto o relatório sairia com
-    tabelas sem nenhuma linha separando as colunas.
+
+def _bordas_de_tres_linhas(quadro, cor: str) -> None:
+    """
+    Topo, sob o cabeçalho, base. Nenhuma vertical.
+
+    É o último degrau da fila para as tabelas do relatório, e ele mudou junto com
+    o estilo `FlatCap Tabela` que o `flatcap template` grava: os dois precisam ter
+    a mesma cara, senão um projeto sem modelo sai com uma tabela diferente da de
+    todos os outros — que é exatamente o tipo de diferença que ninguém percebe até
+    o cliente pôr dois relatórios lado a lado.
+    """
+    _escrever_bordas(quadro, {"top": (_REGUA_GROSSA, cor), "bottom": (_REGUA_GROSSA, cor)})
+    for celula in quadro.rows[0].cells:
+        propriedades = celula._tc.get_or_add_tcPr()
+        bordas = OxmlElement("w:tcBorders")
+        bordas.append(_lado_da_borda("bottom", _REGUA_FINA, cor))
+        propriedades.append(bordas)
+
+
+def _lado_da_borda(nome: str, espessura: int, cor: str) -> OxmlElement:
+    elemento = OxmlElement(f"w:{nome}")
+    elemento.set(qn("w:val"), "single" if espessura else "none")
+    elemento.set(qn("w:sz"), str(espessura))
+    elemento.set(qn("w:space"), "0")
+    elemento.set(qn("w:color"), cor)
+    return elemento
+
+
+def _escrever_bordas(tabela, lados: dict[str, tuple[int, str]]) -> None:
+    """
+    Escreve `w:tblBorders`, com `none` explícito no que não foi pedido.
+
+    O `none` precisa ser escrito: sem ele, o lado herda a borda do estilo de
+    tabela do modelo, e uma tabela de três linhas herdaria as verticais de um
+    `Table Grid` institucional sem nada no código dizendo de onde elas vieram.
     """
     propriedades = tabela._tbl.tblPr
+    antigo = propriedades.find(qn("w:tblBorders"))
+    if antigo is not None:
+        propriedades.remove(antigo)
+
     bordas = OxmlElement("w:tblBorders")
     for lado in ("top", "left", "bottom", "right", "insideH", "insideV"):
-        elemento = OxmlElement(f"w:{lado}")
-        elemento.set(qn("w:val"), "single")
-        elemento.set(qn("w:sz"), str(espessura))
-        elemento.set(qn("w:space"), "0")
-        elemento.set(qn("w:color"), cor)
-        bordas.append(elemento)
+        espessura, cor = lados.get(lado, (0, "auto"))
+        bordas.append(_lado_da_borda(lado, espessura, cor))
+
+    # `tblBorders` vem antes de `tblLayout` e `tblLook` no esquema do OOXML.
+    for filho in propriedades:
+        if filho.tag.split("}")[-1] in {"shd", "tblLayout", "tblCellMar", "tblLook"}:
+            filho.addprevious(bordas)
+            return
     propriedades.append(bordas)
 
 
@@ -873,6 +955,71 @@ def _definir_estilos(documento) -> None:
     legenda.font.bold = True
     legenda.font.italic = False
     legenda.font.color.rgb = TINTA_SECUNDARIA
+
+    _estilo_de_tabela(documento)
+
+
+def _estilo_de_tabela(documento) -> None:
+    """
+    Cria `FlatCap Tabela` — as três linhas, dentro do modelo.
+
+    É o estilo que faltava. A fila do `_resolver_estilos` procura `FlatCap Tabela`
+    antes de `Table Grid`, mas o `flatcap template` nunca escreveu nenhum dos dois:
+    o resultado é que "ajuste a borda da tabela no Word" não tinha onde acontecer —
+    não havia estilo para abrir, e a tabela caía no `Table Grid` nativo, que é a
+    grade completa.
+
+    Com ele no modelo, a borda passa a ser sua: abra o `template.docx`, mude o
+    estilo, e todo relatório muda. O código deixa de tocar em borda de tabela —
+    que é o que o contrato deste módulo promete.
+
+    O XML é escrito à mão porque o `python-docx` não expõe borda de estilo de
+    tabela. São duas peças: o `w:tblPr` do estilo, que vale para a tabela inteira,
+    e a banda `firstRow`, que é como o OOXML diz "a régua fina vai sob o
+    cabeçalho" sem precisar saber quantas linhas a tabela tem.
+    """
+    from docx.enum.style import WD_STYLE_TYPE
+
+    estilos = documento.styles
+    if "FlatCap Tabela" in {estilo.name for estilo in estilos}:
+        return
+
+    estilo = estilos.add_style("FlatCap Tabela", WD_STYLE_TYPE.TABLE)
+    estilo.font.name = FONTE
+    estilo.font.size = Pt(_TABELA_PT)
+    estilo.font.color.rgb = TINTA
+
+    tabela = OxmlElement("w:tblPr")
+    bordas = OxmlElement("w:tblBorders")
+    for lado in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        espessura = _REGUA_GROSSA if lado in ("top", "bottom") else 0
+        bordas.append(_lado_da_borda(lado, espessura, TINTA_LINHA))
+    tabela.append(bordas)
+    tabela.append(_margens_da_celula())
+    estilo._element.append(tabela)
+
+    banda = OxmlElement("w:tblStylePr")
+    banda.set(qn("w:type"), "firstRow")
+    celula = OxmlElement("w:tcPr")
+    sob_o_cabecalho = OxmlElement("w:tcBorders")
+    sob_o_cabecalho.append(_lado_da_borda("bottom", _REGUA_FINA, TINTA_LINHA))
+    celula.append(sob_o_cabecalho)
+    banda.append(celula)
+    estilo._element.append(banda)
+
+
+def _margens_da_celula(cm: float = 0.12) -> OxmlElement:
+    """
+    O respiro entre a régua e o texto. Sem ele a tabela de três linhas fica
+    apertada — sem verticais, é o espaço que separa as colunas.
+    """
+    margens = OxmlElement("w:tblCellMar")
+    for nome, fator in (("top", 1.0), ("start", 1.6), ("bottom", 1.0), ("end", 1.6)):
+        elemento = OxmlElement(f"w:{nome}")
+        elemento.set(qn("w:w"), str(int(cm * fator * 567)))
+        elemento.set(qn("w:type"), "dxa")
+        margens.append(elemento)
+    return margens
 
 
 __all__ = [
