@@ -1,4 +1,4 @@
-# flatcap
+# FlatCap 
 Ferramenta de automação de processos estatísticos com Python e REDCap.
 
 Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap:
@@ -38,15 +38,15 @@ FLATCAP_ROOT=
 | Chave | Onde obter |
 |---|---|
 | `REDCAP_API_URL` | Página **API Playground** do projeto. **Não** é o link curto do survey. |
-| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. É por projeto **e** por usuário. Precisa de permissão para exportar **registros, metadados e arquivos**. |
-| `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. Fica **fora** do repositório. |
+| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. Precisa de permissão para exportar **registros, metadados e arquivos**. |
+| `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. |
 
 
 ## Comandos disponíveis  
-| Comando | Fase | Função |
-|---|---|---|
-| `flatcap doctor` | Testa credenciais, conexão e `FLATCAP_ROOT` |
-| `flatcap listar -n N` | Lista os clientes do REDCap e o status local de cada um |
+| Comando | Função |
+|---|---|
+| `flatcap doctor` | Testa credenciais, conexão e `FLATCAP_ROOT`. |
+| `flatcap listar -n N` | Lista os clientes do REDCap e o status local de cada um. |
 
 > Comandos que escrevem em disco **simulam por padrão**. Use `--sim` para executar de fato.
 
