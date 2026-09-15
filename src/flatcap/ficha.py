@@ -63,8 +63,14 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
 
-from .nomes import localizar_pasta, sanitizar
-from .projeto import ARQUIVO_PROJETO
+from .nomes import (
+    PREFIXO_PROJETO,
+    localizar_pasta,
+    projetos_do_cliente,
+    rotulo_do_projeto,
+    sanitizar,
+)
+from .projeto import ARQUIVO_PROJETO, texto_da_migracao
 
 IMPLEMENTACAO = "ruamel.yaml (round-trip — preserva comentários e formatação)"
 
@@ -97,6 +103,42 @@ class FichaAusenteError(FichaError):
 
     Acontece com pasta criada à mão, antes do FlatCap existir. Não é erro do
     usuário: é um projeto que ainda não foi adotado pela ferramenta.
+    """
+
+    def __init__(self, mensagem: str, pasta: Path) -> None:
+        super().__init__(mensagem)
+        self.pasta = pasta
+
+
+class ProjetoAmbiguoError(FichaError):
+    """
+    A matrícula pedida tem mais de um projeto, e nenhum deles é "o" projeto.
+
+    **Não é erro de disco**, e a distinção importa: até a 1.0.0 dois achados
+    para o mesmo identificador só podiam ser pasta duplicada, e a mensagem
+    mandava resolver no disco. Desde a 1.1.0 é o caso normal de um cliente com
+    dois trabalhos, e o que falta é o usuário dizer de qual deles ele está
+    falando — por isso a lista dos projetos viaja no erro, em `.projetos`.
+
+    `record_id` repetido continua sendo erro de disco, e sai por
+    `ProjetoNaoEncontradoError` como antes: ele é único por construção do
+    REDCap, e dois iguais querem dizer pasta copiada.
+    """
+
+    def __init__(self, mensagem: str, projetos: tuple[Path, ...]) -> None:
+        super().__init__(mensagem)
+        self.projetos = projetos
+
+
+class LayoutAntigoError(FichaError):
+    """
+    A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
+    à 1.1.0.
+
+    Homônimo do erro de `projeto.py` de propósito: é o mesmo diagnóstico visto
+    de dois lados (quem cria a pasta e quem a procura), e a regra da casa é um
+    erro por módulo, para que a CLI capture a classe daquela camada. O texto é
+    um só, e mora em `projeto.texto_da_migracao`.
     """
 
     def __init__(self, mensagem: str, pasta: Path) -> None:
@@ -229,12 +271,36 @@ def localizar_projeto(root: Path, identificador: str) -> Path:
     `projeto.yaml`. Aceitar os dois identificadores não é conveniência gratuita:
     o `record_id` é o que aparece no `flatcap listar` e o que você tem em mãos
     logo depois de criar a pasta; a matrícula é o que está no nome da pasta e o
-    que você tem em mãos seis meses depois, olhando para o disco. Os dois
-    identificam o mesmo projeto, e qual deles está à mão depende do dia.
+    que você tem em mãos seis meses depois, olhando para o disco.
+
+    ## O que a 1.1.0 mudou aqui
+
+    A varredura desceu um nível: era `FLATCAP_ROOT/*/projeto.yaml` e passou a
+    ser `FLATCAP_ROOT/*/Projeto */projeto.yaml`.
+
+    E os dois identificadores deixaram de ser equivalentes, porque um deles
+    deixou de ser único. **O `record_id` identifica o projeto; a matrícula
+    identifica a pessoa.** Daí a ordem de resolução:
+
+    1. bate por `record_id` em um projeto → é esse, e ponto;
+    2. bate por `record_id` em mais de um → pasta duplicada no disco, que é
+       erro de verdade: o REDCap não emite dois registros com o mesmo número;
+    3. bate por matrícula em um projeto → é esse (o caso comum, do cliente que
+       só tem um trabalho — a busca por matrícula continua servindo para ele);
+    4. bate por matrícula em vários → `ProjetoAmbiguoError`, com a lista. Não é
+       falha: é o usuário tendo dado o nome da pessoa quando a pergunta era
+       sobre o trabalho.
+
+    O `record_id` vence a matrícula quando os dois batem porque ele é o mais
+    específico dos dois — e porque a única forma de isso acontecer é uma
+    matrícula que por acaso tem o mesmo número de um registro.
 
     Raises:
-        ProjetoNaoEncontradoError: nada bateu.
+        ProjetoNaoEncontradoError: nada bateu, ou `record_id` duplicado.
+        ProjetoAmbiguoError: a matrícula tem mais de um projeto.
+        LayoutAntigoError: a pasta do cliente está no formato anterior à 1.1.0.
         FichaAusenteError: a pasta foi encontrada pelo nome, mas não tem ficha.
+        FichaInvalidaError: há ficha que não abre, e pode ser justamente a pedida.
     """
     root = Path(root)
     procurado = sanitizar(str(identificador))
@@ -244,57 +310,77 @@ def localizar_projeto(root: Path, identificador: str) -> Path:
             "`flatcap listar`) ou a matrícula do cliente."
         )
 
-    achados: list[Path] = []
-    ilegiveis: list[tuple[Path, FichaInvalidaError]] = []
+    projetos, ilegiveis, antigas = _varrer(root)
 
-    for pasta in sorted(p for p in root.iterdir() if p.is_dir()):
-        if not caminho_da_ficha(pasta).exists():
-            continue
-        try:
-            ficha = ler(pasta)
-        except FichaInvalidaError as erro:
-            ilegiveis.append((pasta, erro))
-            continue
-        if procurado in {ficha.record_id, ficha.matricula}:
-            achados.append(pasta)
-
-    if len(achados) == 1:
-        return achados[0]
-
-    if len(achados) > 1:
-        lista = "\n".join(f"  {p}" for p in achados)
+    por_record = [
+        pasta for pasta, ficha in projetos if _mesmo_record(ficha.record_id, procurado)
+    ]
+    if len(por_record) == 1:
+        return por_record[0]
+    if len(por_record) > 1:
+        lista = "\n".join(f"  {p}" for p in por_record)
         raise ProjetoNaoEncontradoError(
-            f"Mais de uma pasta responde por {identificador!r}:\n{lista}\n"
-            "Duas fichas com o mesmo record_id ou a mesma matrícula é sinal de "
-            "pasta duplicada. Resolva no disco antes de continuar."
+            f"Mais de um projeto tem o record_id {identificador!r}:\n{lista}\n\n"
+            "O REDCap não emite dois registros com o mesmo número, então isto é "
+            "pasta duplicada — copiada de outro projeto e não editada, quase "
+            "sempre. Resolva no disco antes de continuar: a ficha de cada pasta "
+            "precisa dizer de qual registro ela é."
         )
 
-    # Nada bateu. Antes de dizer "não existe", a busca pelo nome da pasta: a
-    # matrícula está no nome, e a pasta pode ter sido criada à mão.
+    por_matricula = [
+        pasta for pasta, ficha in projetos if ficha.matricula == procurado
+    ]
+    if len(por_matricula) == 1:
+        return por_matricula[0]
+    if len(por_matricula) > 1:
+        raise ProjetoAmbiguoError(
+            _mensagem_ambigua(identificador, projetos, por_matricula),
+            tuple(por_matricula),
+        )
+
+    # Nada bateu. Antes de dizer "não existe", os três diagnósticos que dizem o
+    # que fazer, em vez de mandar o usuário procurar erro de digitação.
+
+    # 1. A pasta do cliente ficou no formato de antes da 1.1.0.
+    for pasta_cliente, ficha_antiga in antigas:
+        if ficha_antiga is None:
+            continue
+        if _mesmo_record(ficha_antiga.record_id, procurado) or (
+            ficha_antiga.matricula == procurado
+        ):
+            raise LayoutAntigoError(
+                texto_da_migracao(pasta_cliente, ficha_antiga.record_id), pasta_cliente
+            )
+
+    # 2. A pasta existe pelo nome, e não tem projeto dentro.
     pasta = localizar_pasta(root, procurado)
     if pasta is not None:
         for candidata, erro in ilegiveis:
-            if candidata == pasta:
+            if candidata.parent == pasta:
                 raise erro
+        if (pasta / ARQUIVO_PROJETO).exists():
+            raise LayoutAntigoError(texto_da_migracao(pasta), pasta)
         raise FichaAusenteError(
-            f"Encontrei a pasta {pasta.name}, mas ela não tem {ARQUIVO_PROJETO}.\n"
+            f"Encontrei a pasta {pasta.name}, e ela não tem nenhum projeto dentro "
+            f"com {ARQUIVO_PROJETO}.\n"
             "Pastas criadas à mão, antes do FlatCap, não têm ficha — e sem ficha "
             "não há onde registrar as versões do banco.\n"
-            "Crie a pasta pelo `flatcap novo` ou copie um `projeto.yaml` de outro "
-            "projeto e ajuste os campos de identificação.",
+            "Crie o projeto pelo `flatcap novo`, ou monte a subpasta "
+            f"`{PREFIXO_PROJETO}NNN` à mão e copie para dentro dela um "
+            f"`{ARQUIVO_PROJETO}` de outro projeto, ajustando os campos de "
+            "identificação.",
             pasta,
         )
 
-    # Uma ficha ilegível não é uma nota de rodapé: enquanto houver uma, a busca
-    # não pode afirmar que o projeto não existe — ele pode ser justamente aquele
-    # que não deu para ler. Então o erro que sobe é o diagnóstico da ficha
-    # quebrada, que diz o que fazer, e não um "não encontrei" que manda o usuário
-    # procurar erro de digitação onde não há.
+    # 3. Uma ficha ilegível não é uma nota de rodapé: enquanto houver uma, a
+    # busca não pode afirmar que o projeto não existe — ele pode ser justamente
+    # aquele que não deu para ler. Então o erro que sobe é o diagnóstico da ficha
+    # quebrada, que diz o que fazer, e não um "não encontrei".
     if ilegiveis:
         pasta, erro = ilegiveis[0]
         raise FichaInvalidaError(
-            f"Não consegui ler a ficha de {pasta.name}, então não dá para afirmar "
-            f"se {identificador!r} é este projeto ou nenhum.\n\n{erro}"
+            f"Não consegui ler a ficha de {rotulo_do_projeto(pasta)}, então não dá "
+            f"para afirmar se {identificador!r} é este projeto ou nenhum.\n\n{erro}"
             + (
                 f"\n\nOutras {len(ilegiveis) - 1} ficha(s) também estão ilegíveis."
                 if len(ilegiveis) > 1
@@ -306,7 +392,129 @@ def localizar_projeto(root: Path, identificador: str) -> Path:
     raise ProjetoNaoEncontradoError(
         f"Nenhum projeto com record_id ou matrícula {identificador!r} em {root}.\n"
         "Confira o identificador no `flatcap listar`, ou a matrícula no nome da "
-        "pasta."
+        "pasta do cliente e o número no nome da pasta do projeto."
+    )
+
+
+def projetos_da_matricula(root: Path, matricula: str) -> tuple[Path, ...]:
+    """
+    Todos os projetos de um cliente, em ordem, lendo as fichas.
+
+    Pública porque é a pergunta que a `ProjetoAmbiguoError` responde, e porque a
+    Fase 8 — o painel de todos os projetos — vai precisar exatamente disto. Lê
+    as fichas, ao contrário do `nomes.projetos_do_cliente`, que só olha nomes:
+    aqui a matrícula vem da ficha, então uma pasta renomeada à mão continua
+    sendo encontrada.
+    """
+    procurado = sanitizar(str(matricula))
+    if not procurado:
+        return ()
+    projetos, _, _ = _varrer(Path(root))
+    return tuple(pasta for pasta, ficha in projetos if ficha.matricula == procurado)
+
+
+def _varrer(
+    root: Path,
+) -> tuple[
+    list[tuple[Path, Ficha]],
+    list[tuple[Path, FichaInvalidaError]],
+    list[tuple[Path, Ficha | None]],
+]:
+    """
+    Percorre o `FLATCAP_ROOT` inteiro e devolve o que encontrou, em três listas:
+    os projetos legíveis, as fichas que não abrem, e as pastas de cliente que
+    ficaram no formato anterior à 1.1.0.
+
+    Duas voltas, e não um `rglob`, para que a profundidade seja explícita: um
+    `projeto.yaml` só conta como projeto no segundo nível. Isso é o que impede
+    uma ficha esquecida dentro de `2. Versões antigas/` de ser confundida com um
+    projeto — e é o que permite reconhecer o layout antigo em vez de ignorá-lo.
+    """
+    projetos: list[tuple[Path, Ficha]] = []
+    ilegiveis: list[tuple[Path, FichaInvalidaError]] = []
+    antigas: list[tuple[Path, Ficha | None]] = []
+
+    if not root.is_dir():
+        return projetos, ilegiveis, antigas
+
+    for pasta_cliente in sorted(p for p in root.iterdir() if p.is_dir()):
+        if caminho_da_ficha(pasta_cliente).exists():
+            try:
+                antigas.append((pasta_cliente, ler(pasta_cliente)))
+            except FichaError:
+                # A ficha antiga não abrir não impede o diagnóstico de layout;
+                # só tira dele o número do projeto a criar.
+                antigas.append((pasta_cliente, None))
+
+        for pasta_projeto in projetos_do_cliente(pasta_cliente):
+            if not caminho_da_ficha(pasta_projeto).exists():
+                continue
+            try:
+                projetos.append((pasta_projeto, ler(pasta_projeto)))
+            except FichaInvalidaError as erro:
+                ilegiveis.append((pasta_projeto, erro))
+
+    return projetos, ilegiveis, antigas
+
+
+def _mesmo_record(da_ficha: str, procurado: str) -> bool:
+    """
+    O `record_id` da ficha é o que o usuário digitou?
+
+    Igualdade de texto, e — quando os dois são número — igualdade de valor. O
+    segundo caso existe porque a pasta se chama `Projeto 006` e o `listar`
+    mostra `6`: digitar o que está na frente dos olhos tem de funcionar nos dois
+    casos.
+
+    A matrícula **não** recebe o mesmo tratamento, e a assimetria é deliberada:
+    lá o zero à esquerda é parte do identificador. A matrícula `00742` não é a
+    matrícula `742`, e tratá-las como iguais faria a busca entregar a pasta de
+    outra pessoa.
+    """
+    if not da_ficha or not procurado:
+        return False
+    if da_ficha == procurado:
+        return True
+    if da_ficha.isdigit() and procurado.isdigit():
+        return int(da_ficha) == int(procurado)
+    return False
+
+
+def _mensagem_ambigua(
+    identificador: str,
+    projetos: list[tuple[Path, Ficha]],
+    achados: list[Path],
+) -> str:
+    """
+    A lista de projetos do cliente, com o que distingue um do outro.
+
+    Status e banco vigente, e não só o número: o que o usuário precisa para
+    escolher é "qual deles é o que eu estava mexendo", e o número do registro
+    sozinho não responde isso seis meses depois.
+    """
+    fichas = {pasta: ficha for pasta, ficha in projetos}
+    nome = next((fichas[p].nome for p in achados if fichas[p].nome), "")
+
+    linhas = []
+    for pasta in achados:
+        ficha = fichas[pasta]
+        vigente = versao_vigente(ficha)
+        banco = vigente.arquivo if vigente is not None else "(sem banco ainda)"
+        linhas.append(
+            f"  {pasta.name:<16} record_id {ficha.record_id or '?':<6} "
+            f"status {ficha.status or '?':<12} {banco}"
+        )
+
+    de_quem = f" ({nome})" if nome else ""
+    exemplo = fichas[achados[0]].record_id or "?"
+    return (
+        f"A matrícula {identificador}{de_quem} tem {len(achados)} projetos, e a "
+        "matrícula não diz de qual deles você está falando.\n\n"
+        + "\n".join(linhas)
+        + "\n\nRode o comando de novo com o `record_id` em vez da matrícula:\n"
+        f"  flatcap <comando> {exemplo}\n\n"
+        "A matrícula continua funcionando para quem tem um projeto só — ela "
+        "identifica a pessoa, e o `record_id` identifica o trabalho."
     )
 
 

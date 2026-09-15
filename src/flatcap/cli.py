@@ -42,7 +42,7 @@ from .modelo import (
     mais_recentes,
     normalizar_varios,
 )
-from .nomes import localizar_pasta
+from .nomes import caminho_do_projeto, projetos_do_cliente, rotulo_do_projeto
 from .projeto import (
     ARQUIVO_HISTORICO,
     ARQUIVO_PROJETO,
@@ -50,6 +50,7 @@ from .projeto import (
     PASTA_ANTIGAS,
     PASTA_DADOS,
     ClienteIncompletoError,
+    LayoutAntigoError,
     Plano,
     ProjetoExistenteError,
     RegistroNaoEncontradoError,
@@ -281,8 +282,16 @@ def listar(
   if conferir_anexos:
     clientes = _reconferir_anexos(cfg, clientes)
 
-  console.print(_tabela_de_clientes(cfg, clientes))
-  console.print(_resumo(cfg, clientes, total))
+  # A busca no disco é feita **uma vez** por cliente e o resultado é passado
+  # adiante. A tabela e o resumo faziam a mesma varredura em separado, o que já
+  # era trabalho dobrado — e ficaria pior agora, que a busca desce dois níveis.
+  pastas = {
+    cliente.record_id: caminho_do_projeto(cfg.root, cliente.matricula, cliente.record_id)
+    for cliente in clientes
+  }
+
+  console.print(_tabela_de_clientes(clientes, pastas))
+  console.print(_resumo(clientes, pastas, total))
 
 def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
   """
@@ -313,11 +322,18 @@ def _reconferir_anexos(cfg: Config, clientes: list[Cliente]) -> list[Cliente]:
   ]
 
 
-def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
+def _tabela_de_clientes(clientes: list[Cliente], pastas: dict[str, Path | None]) -> Table:
   """
   Monta a tabela que sai do comando `listar`.
-  Valores que vêm do REDCap entram como `Text`, nunca como string crua: 
+  Valores que vêm do REDCap entram como `Text`, nunca como string crua:
       um nome com colchete viraria marcação do rich e sumiria da tela.
+
+  A coluna "Pasta local" responde **pelo projeto**, e não pelo cliente. É a
+  correção que a 1.1.0 obrigou e é o ponto em que ela se vê no dia a dia: até a
+  1.0.0 a pergunta era "esta matrícula já tem pasta?", e com um cliente podendo
+  ter vários trabalhos essa pergunta faria a segunda solicitação dele aparecer
+  como já atendida — e ela nunca viraria pasta, porque o `listar` é o comando
+  que diz o que ainda falta fazer.
   """
   tabela = Table(show_header = True, header_style = "bold")
   tabela.add_column("id", justify = "right", no_wrap = True)
@@ -328,24 +344,29 @@ def _tabela_de_clientes(cfg: Config, clientes: list[Cliente]) -> Table:
   tabela.add_column("Pasta local", overflow = "fold")
 
   for cliente in clientes:
-    pasta = localizar_pasta(cfg.root, cliente.matricula)
+    pasta = pastas.get(cliente.record_id)
     tabela.add_row(
       Text(cliente.record_id or "?"),
       Text(cliente.tipo, style = "yellow" if cliente.tipo == INDEFINIDO else ""),
       Text(cliente.matricula or "—", style = "" if cliente.matricula else "yellow"),
       Text(cliente.nome or "(sem nome)", style = "" if cliente.nome else "yellow"),
       Text("sim", style = "green") if cliente.tem_anexo else Text("não", style = "yellow"),
+      # Só o nome do projeto: a matrícula e o nome do cliente já têm coluna
+      # própria duas casas atrás, e repeti-los aqui espremeria a tabela inteira
+      # para dizer o que já está dito.
       Text(pasta.name, style = "green") if pasta else Text("—", style = "dim"),
     )
 
   return tabela
 
-def _resumo(cfg: Config, clientes: list[Cliente], total: int | None = None) -> str:
+def _resumo(
+  clientes: list[Cliente], pastas: dict[str, Path | None], total: int | None = None
+) -> str:
   """
   Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
   """
   total = len(clientes) if total is None else total
-  pendentes = [c for c in clientes if not localizar_pasta(cfg.root, c.matricula)]
+  pendentes = [c for c in clientes if not pastas.get(c.record_id)]
   sem_anexo = [c for c in clientes if not c.tem_anexo]
   incompletos = [c for c in clientes if not c.identificado]
   alunos = [c for c in clientes if c.tipo == ALUNO]
@@ -402,6 +423,8 @@ def novo(
   except ProjetoExistenteError as erro:
     _nada_a_fazer(str(erro))
     return
+  except LayoutAntigoError as erro:
+    raise _abortar("Pasta no formato antigo", str(erro)) from erro
   except (RegistroNaoEncontradoError, ClienteIncompletoError) as erro:
     raise _abortar("Solicitação", str(erro)) from erro
   except RedcapError as erro:
@@ -465,9 +488,32 @@ def _cabecalho_do_plano(plano: Plano) -> Text:
 def _arvore_do_plano(cfg: Config, plano: Plano) -> Tree:
   """
   Desenha exatamente o que `executar` criaria, lendo o próprio `Plano`.
+
+  Três níveis desde a 1.1.0, e a linha do cliente diz se ela é nova ou se já
+  estava lá. É a informação que a simulação passou a dever: "vou criar uma
+  pasta" e "vou acrescentar um projeto ao cliente que já tem dois" são coisas
+  diferentes, e só uma delas pede conferência antes do `--sim`.
   """
   arvore = Tree(Text(str(cfg.root), style = "dim"))
-  raiz = arvore.add(Text(plano.raiz.name, style = "bold green"))
+
+  if plano.cliente_novo:
+    cliente = arvore.add(
+      Text.assemble((plano.pasta_do_cliente.name, "bold green"), ("   novo", "dim"))
+    )
+  else:
+    quantos = len(projetos_do_cliente(plano.pasta_do_cliente))
+    cliente = arvore.add(
+      Text.assemble(
+        (plano.pasta_do_cliente.name, "bold"),
+        (
+          f"   já existe · {quantos} "
+          f"{_plural(quantos, 'projeto', 'projetos')} nela",
+          "dim",
+        ),
+      )
+    )
+
+  raiz = cliente.add(Text(plano.raiz.name, style = "bold green"))
 
   for subpasta in plano.subpastas:
     ramo = raiz.add(Text(f"{subpasta.name}/"))
@@ -619,7 +665,7 @@ def dados_listar(
 def _cabecalho_dos_dados(plano: PlanoDados) -> Text:
   ficha = plano.ficha
   return Text.assemble(
-    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    (rotulo_do_projeto(ficha.raiz), "bold"),
     ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
     ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
   )
@@ -628,7 +674,7 @@ def _cabecalho_dos_dados(plano: PlanoDados) -> Text:
 def _cabecalho_da_ficha(tempo: LinhaDoTempo) -> Text:
   ficha = tempo.ficha
   return Text.assemble(
-    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    (rotulo_do_projeto(ficha.raiz), "bold"),
     ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
     ("  ·  ", "dim"), (ficha.tipo or "?", ""),
     ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
@@ -889,7 +935,7 @@ def _cabecalho_do_perfil(perfil: Perfil) -> Text:
   """
   ficha = perfil.ficha
   cabecalho = Text.assemble(
-    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    (rotulo_do_projeto(ficha.raiz), "bold"),
     ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
     ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
     "\n",
@@ -1173,7 +1219,7 @@ def _cabecalho_da_descritiva(plano: PlanoDescritiva) -> Text:
   dicionario = plano.manifesto.dicionario
 
   cabecalho = Text.assemble(
-    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    (rotulo_do_projeto(ficha.raiz), "bold"),
     ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
     ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
     "\n",
@@ -1530,7 +1576,7 @@ def _cabecalho_do_relatorio(plano: PlanoRelatorio) -> Text:
   manifesto = relatorio.manifesto
 
   cabecalho = Text.assemble(
-    ("Projeto ", "dim"), (ficha.raiz.name, "bold"),
+    (rotulo_do_projeto(ficha.raiz), "bold"),
     ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
     ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
     "\n",
