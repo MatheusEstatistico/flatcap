@@ -141,7 +141,7 @@ _ROTULO_TOTAL = "Total"
 # Word — e um relatório que sai com serifa numa máquina e sem serifa na outra é
 # um relatório que parece defeituoso sem que nada esteja errado. Um modelo
 # institucional manda no lugar disto: aqui só se decide o que ninguém decidiu.
-FONTE = "Calibri"
+FONTE = "Arial"
 
 # Até este tamanho, a tabela não se parte na quebra de página. Acima dele, ela
 # se parte e o cabeçalho se repete — uma distribuição no tempo de dois anos tem
