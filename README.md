@@ -42,16 +42,11 @@ FLATCAP_ROOT=
 | `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. Fica **fora** do repositório. |
 
 
-## comandos 
+## Comandos disponíveis  
+| Comando | Fase | Função |
+|---|---|---|
+| `flatcap doctor` | Testa credenciais, conexão e `FLATCAP_ROOT` |
+| `flatcap listar -n N` | Lista os clientes do REDCap e o status local de cada um |
 
-- doctor
-- 
+> Comandos que escrevem em disco **simulam por padrão**. Use `--sim` para executar de fato.
 
-
-## opções 
-Para otimizar o funcionamento, ainda é possível ...
-
-
-
-## considerações importantes
-Vale destacar ainda que ...
