@@ -1,13 +1,9 @@
 # FlatCap 
-Ferramenta de automação de processos estatísticos com Python e REDCap.
-
-Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap:
+Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap: 
 
 **REDCap (entrada) → organização de pastas → versionamento dos bancos → análise descritiva → relatório `.docx`**.
 
-
 ## Princípio norteador 
-
 Automatizar o que é repetitivo e mecânico (baixar, nomear, versionar, formatar) e manter manual o que é decisão técnica (o que analisar, como tratar cada variável, qual construção de modelo será feita). Tudo que é automatizado fica documentado em disco, para que qualquer projeto possa ser reaberto meses depois e compreendido sem depender da memória.
 
 > A documentação completa pode ser encontrada em [`Doc.Fletcap`]().
