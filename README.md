@@ -18,39 +18,34 @@ Requer **Python 3.11+**
 Requer **Git**
 Requer **_**
 
+```bash
+git clone git@github.com:<usuario>/flatcap.git
+cd flatcap
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+```
+ 
+## Configuração 
+Copie `.env.example` para `.env` e preencha:
 
-### Linux Debian-based 
+```env
+REDCAP_API_URL=https://<servidor-institucional>/redcap/api/
+REDCAP_TOKEN=
+FLATCAP_ROOT=
+```
 
-
-
-### Windows 
-
-
-
-### MacOS 
-Não são bem-vindos aqui! 
-
-
-## configurações 
-Para iniciar é preciso ... 
-
-
-
-## funcionamento
-Tudo pelo terminal 
-
+| Chave | Onde obter |
+|---|---|
+| `REDCAP_API_URL` | Página **API Playground** do projeto. **Não** é o link curto do survey. |
+| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. É por projeto **e** por usuário. Precisa de permissão para exportar **registros, metadados e arquivos**. |
+| `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. Fica **fora** do repositório. |
 
 
 ## comandos 
 
-- doctor: 
-
-- listar: 
-
-- novo: 
-
+- doctor
 - 
-
 
 
 ## opções 
