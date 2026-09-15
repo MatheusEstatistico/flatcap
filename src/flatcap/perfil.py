@@ -86,6 +86,7 @@ from .dicionario import (
 from .dicionario import ler as ler_dicionario
 from .ficha import Ficha, escrever_atomico
 from .ficha import ler as ler_ficha
+from .nomes import rotulo_do_projeto
 from .projeto import anotar, tamanho_legivel
 
 ARQUIVO_PERFIL = "perfil.md"
@@ -1251,7 +1252,10 @@ def texto_do_perfil(perfil: Perfil, fusao: Fusao) -> str:
 
 def _md_cabecalho(perfil: Perfil) -> str:
     ficha = perfil.ficha
-    titulo = ficha.raiz.name
+    # `rotulo_do_projeto` e não `raiz.name`: desde a 1.1.0 o nome da pasta é
+    # `Projeto 006`, que não identifica ninguém — e este título encabeça o
+    # documento impresso que vai para a mesa da reunião.
+    titulo = rotulo_do_projeto(ficha.raiz)
 
     if perfil.confere is True:
         integridade = "confere com o `sha256` registrado na ficha"
