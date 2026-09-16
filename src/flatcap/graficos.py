@@ -59,6 +59,33 @@ import matplotlib
 # comando morre por um motivo que não tem nada a ver com estatística.
 matplotlib.use("Agg")
 
+# A fonte dos gráficos.
+#
+# Arial primeiro, e a ordem é a correção: a lista anterior começava por
+# `DejaVu Sans`, que vem dentro do próprio matplotlib e por isso está **sempre**
+# instalado — o Arial nunca chegava a ser tentado. O resultado era um relatório
+# com o texto em uma fonte e as figuras em outra, sem nada no código dizendo que
+# a escolha tinha sido essa.
+#
+# Os três nomes do meio são rede, na ordem em que fazem sentido: `Liberation
+# Sans` tem as mesmas métricas do Arial e é o que existe em Linux, `Helvetica`
+# cobre o macOS, e o `DejaVu Sans` fecha a lista porque não desenhar é pior do
+# que desenhar com outra fonte.
+FONTE = ("Arial", "Liberation Sans", "Helvetica", "DejaVu Sans", "sans-serif")
+
+# Aqui em cima, e não dentro de `_figura`, por dois motivos. O primeiro é que
+# `rcParams` é estado global do processo, e escrevê-lo a cada figura é reconfigurar
+# a biblioteca uma vez por gráfico para dizer sempre a mesma coisa. O segundo é a
+# ordem: no código anterior a configuração vinha **depois** do `plt.subplots`, que
+# já criou os objetos de texto dos eixos. Isso funciona porque o matplotlib só
+# resolve a fonte na hora de desenhar — conferido —, mas é uma garantia que ele
+# não documenta, e é o tipo de coisa que muda de versão sem release note.
+#
+# E, principalmente: configuração de aparência mora no alto do arquivo, com a
+# paleta, onde se acha sem procurar.
+matplotlib.rcParams["font.family"] = "sans-serif"
+matplotlib.rcParams["font.sans-serif"] = list(FONTE)
+
 import matplotlib.pyplot as plt  # noqa: E402 - obrigatoriamente depois do `use`
 from matplotlib.ticker import MaxNLocator  # noqa: E402
 
@@ -87,14 +114,33 @@ _ESPESSURA_COLUNA = 0.78  # a série no tempo é lida como um perfil, e pede men
 _LIMITE_ROTULOS_COLUNAS = 12  # acima disso o eixo carrega os valores
 _LARGURA_ROTULO = 28  # caracteres antes de quebrar o rótulo de uma categoria
 
-_FONTE = ["DejaVu Sans", "Arial", "sans-serif"]
-
 
 def versao_do_matplotlib() -> str:
     """
     A versão que desenhou. Vai para o `ambiente` do manifesto.
     """
     return matplotlib.__version__
+
+
+def fonte_dos_graficos() -> str:
+    """
+    A fonte que o matplotlib **de fato** resolveu — não a que foi pedida.
+
+    Existe porque esta é a falha mais silenciosa do módulo: sem o Arial instalado,
+    o matplotlib escreve um aviso em `stderr`, que ninguém lê, e desenha com o
+    próximo nome da lista. O gráfico sai bonito, com a fonte errada, e a única
+    forma de descobrir é pôr a figura ao lado do texto do documento e reparar.
+
+    É a mesma ideia da codificação impressa no `perfil.md`: a única forma de saber
+    que a escolha foi outra é vê-la escrita. Levar isto para o `ambiente` do
+    manifesto é uma linha no `descritiva._ambiente`, e é o que responde, no dia em
+    que uma rodada antiga sair com outra cara, se mudou a máquina ou mudou o
+    código.
+    """
+    from matplotlib import font_manager
+
+    caminho = font_manager.findfont(font_manager.FontProperties(family=list(FONTE)))
+    return font_manager.FontProperties(fname=caminho).get_name()
 
 
 def desenhar(grafico: Grafico, caminho: Path) -> Path:
@@ -256,8 +302,6 @@ def _figura(altura: float):
     figura, eixo = plt.subplots(figsize=(LARGURA_POLEGADAS, altura), dpi=DPI)
     figura.patch.set_facecolor(SUPERFICIE)
     eixo.set_facecolor(SUPERFICIE)
-    plt.rcParams["font.family"] = "sans-serif"
-    plt.rcParams["font.sans-serif"] = _FONTE
     return figura, eixo
 
 
@@ -290,7 +334,12 @@ def _titulo(eixo, grafico: Grafico) -> None:
         grafico.titulo,
         loc="left",
         fontsize=11,
-        fontweight="semibold",
+        # `bold`, e não `semibold`: o Arial tem Regular e Bold e mais nada. Um
+        # peso 600 pedido a uma família que não o tem é resolvido pelo matplotlib
+        # por aproximação, e a aproximação muda conforme as fontes instaladas na
+        # máquina — o mesmo banco sairia com o título mais gordo no seu Windows
+        # do que no de outra pessoa.
+        fontweight="bold",
         color=TINTA,
         # Folga suficiente para o subtítulo caber embaixo **e** para o rabo de um
         # `_` no nome da variável não cair em cima dele — nome de coluna de banco
