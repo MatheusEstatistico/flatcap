@@ -76,6 +76,7 @@ fixo.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -102,6 +103,14 @@ ESTILO_LEGENDA = ("FlatCap Legenda", "Caption")
 ESTILO_TABELA = ("FlatCap Tabela", "Table Grid")
 
 ARQUIVO_TEMPLATE = "template.docx"
+
+# A folha de decisões que mora ao lado do modelo.
+#
+# Existe porque um `.docx` é binário: não aceita comentário, não entra no Git e
+# não conta a ninguém por que está do jeito que está. O corpo do modelo também
+# não serve para isso — ele é impresso em todo relatório. Então as razões moram
+# em um arquivo de texto ao lado, que é onde a próxima pessoa vai olhar.
+ARQUIVO_DECISOES = "template-decisoes.md"
 
 # A mesma paleta do `graficos.py`, para que a figura e a página não briguem.
 TINTA = RGBColor(0x0B, 0x0B, 0x0B)
@@ -141,7 +150,15 @@ _ROTULO_TOTAL = "Total"
 # Word — e um relatório que sai com serifa numa máquina e sem serifa na outra é
 # um relatório que parece defeituoso sem que nada esteja errado. Um modelo
 # institucional manda no lugar disto: aqui só se decide o que ninguém decidiu.
+#
+# É a mesma do `graficos.FONTE`, e tem de continuar sendo: o texto do documento e
+# os rótulos das figuras ficam a dois centímetros um do outro na mesma página.
 FONTE = "Arial"
+
+# O que vai escrito no cabeçalho do modelo padrão. Uma linha, discreta, no canto
+# direito — é onde a identidade institucional entra sem custar uma página inteira.
+# Quem tiver logotipo troca esta linha por ele, no Word.
+CABECALHO_PADRAO = "Assessoria estatística"
 
 # Até este tamanho, a tabela não se parte na quebra de página. Acima dele, ela
 # se parte e o cabeçalho se repete — uma distribuição no tempo de dois anos tem
@@ -317,10 +334,11 @@ def _documento_padrao():
         _rodape_com_pagina(secao)
 
     normal = documento.styles["Normal"]
-    normal.font.name = FONTE
+    _fonte_do_estilo(normal)
     normal.font.size = Pt(_CORPO_PT)
     normal.paragraph_format.space_after = Pt(6)
 
+    _fixar_tema(documento)
     _definir_estilos(documento)
     return documento
 
@@ -888,13 +906,93 @@ def escrever_template(caminho: Path) -> Path:
     documento = _documento_padrao()
 
     cabecalho = documento.sections[0].header.paragraphs[0]
-    trecho = cabecalho.add_run("Assessoria estatística")
+    trecho = cabecalho.add_run(CABECALHO_PADRAO)
     trecho.font.size = Pt(_NOTA_PT)
     trecho.font.color.rgb = TINTA_APAGADA
     cabecalho.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
+    # As propriedades do arquivo são o único lugar de dentro do `.docx` em que
+    # cabe uma explicação: elas aparecem no Word em Arquivo → Informações, não são
+    # impressas, e o `_propriedades` as reescreve em cada relatório gerado — então
+    # o que está escrito aqui não tem como vazar para o documento do cliente.
+    propriedades = documento.core_properties
+    propriedades.title = "Modelo de relatório do FlatCap"
+    propriedades.comments = _NOTA_DO_MODELO
+
     _salvar_atomico(documento, caminho)
+    _escrever_decisoes(caminho.parent / ARQUIVO_DECISOES)
     return caminho
+
+
+# O `dc:description` do OOXML tem limite de 255 caracteres — daí a nota ser um
+# ponteiro para a folha de decisões, e não a explicação inteira.
+_NOTA_DO_MODELO = (
+    "Modelo de relatório do FlatCap. As razões de cada decisão estão em "
+    f"{ARQUIVO_DECISOES}, nesta pasta — leia antes de mexer. A aparência se ajusta "
+    "nos estilos FlatCap *, pelo Word. O corpo deste arquivo sai impresso em todo "
+    "relatório: deixe-o vazio."
+)
+
+
+def _escrever_decisoes(caminho: Path) -> Path:
+    """
+    Escreve a folha de decisões ao lado do modelo, se ela ainda não existir.
+
+    **Não sobrescreve.** O `.docx` é regerável e o comando avisa que vai
+    substituí-lo; este arquivo é texto que alguém escreveu, e a segunda coisa que
+    um usuário faz com ele é acrescentar as decisões da própria instituição.
+    Perder isso em um `flatcap template --sim` distraído seria o mesmo defeito que
+    a fusão do `dicionario.csv` existe para impedir.
+    """
+    caminho = Path(caminho)
+    if not caminho.exists():
+        caminho.write_text(_TEXTO_DAS_DECISOES, encoding="utf-8", newline="\n")
+    return caminho
+
+
+def _fonte_do_estilo(estilo, nome: str = FONTE) -> None:
+    """
+    Escreve a fonte nos quatro atributos do `w:rFonts`, e não só em dois.
+
+    O `style.font.name` do `python-docx` preenche `w:ascii` e `w:hAnsi` — o texto
+    latino comum — e deixa `w:cs` e `w:eastAsia` como estavam. Um caractere que
+    caia em um desses é desenhado com a fonte do **tema**, no meio de um parágrafo
+    que deveria ser todo da mesma fonte. Acontece pouco e é impossível de
+    diagnosticar quando acontece.
+
+    Os atributos `*Theme` são removidos no mesmo movimento: quando os dois
+    convivem, quem vence depende da versão do Word.
+    """
+    propriedades = estilo._element.get_or_add_rPr()
+    fontes = propriedades.get_or_add_rFonts()
+    for atributo in ("w:ascii", "w:hAnsi", "w:cs", "w:eastAsia"):
+        fontes.set(qn(atributo), nome)
+    for tema in ("w:asciiTheme", "w:hAnsiTheme", "w:cstheme", "w:eastAsiaTheme"):
+        if fontes.get(qn(tema)) is not None:
+            del fontes.attrib[qn(tema)]
+
+
+def _fixar_tema(documento) -> None:
+    """
+    Põe a mesma fonte também no tema do documento.
+
+    O tema é o que o Word usa para todo estilo que **não** diz a fonte dele. O que
+    vem no modelo base do `python-docx` traz `minorFont` Cambria e `majorFont`
+    Calibri — uma serifa esperando a vez. Os estilos `FlatCap *` dizem a fonte
+    deles e não dependem do tema; o `Título 1` nativo, o `Legenda` nativo e
+    qualquer estilo que alguém aplique à mão no Word dependem.
+
+    Sem isto o modelo é um arquivo em que a fonte muda sozinha quando o usuário
+    mexe em outra coisa — e ele não tem como descobrir por quê.
+    """
+    marca = re.compile(r'(<a:(?:majorFont|minorFont)>\s*<a:latin typeface=")[^"]*"')
+    for parte in documento.part.package.iter_parts():
+        if "theme" not in str(parte.partname):
+            continue
+        xml = parte.blob.decode("utf-8")
+        novo, quantos = marca.subn(rf'\1{FONTE}"', xml)
+        if quantos:
+            parte._blob = novo.encode("utf-8")
 
 
 def _definir_estilos(documento) -> None:
@@ -903,9 +1001,20 @@ def _definir_estilos(documento) -> None:
 
     Herdar importa: um estilo criado do zero não tem fonte, tamanho nem idioma, e
     o Word preenche esses buracos com o que estiver por perto — o que faz o
-    documento mudar de cara quando você mexe em outra coisa. Herdando de `Normal`
-    e dos títulos nativos, cada estilo começa exatamente igual ao que o Word já
-    faria, e a personalização é uma diferença explícita a partir dali.
+    documento mudar de cara quando você mexe em outra coisa. Herdando de `Normal`,
+    cada estilo começa igual ao corpo do documento, e a personalização é uma
+    diferença explícita a partir dali.
+
+    **De qual nativo se herda é decisão, não detalhe.** O `Titulo` e o `Subtitulo`
+    herdavam do `Title` e do `Subtitle` do Word, e vinha junto o que ninguém pediu:
+    o `Title` traz uma régua azul embaixo do título, e o `Subtitle` traz
+    espacejamento entre letras. Os dois apareciam em todo relatório entregue, e
+    nenhum deles está escrito em lugar nenhum do código — herança é isso.
+
+    Os dois passaram a herdar de `Normal`. Ficaram de herança nativa só os dois em
+    que ela paga: `FlatCap Secao` de `Heading 1`, que é o que põe o nome da
+    variável no painel de navegação do Word e num sumário, e `FlatCap Legenda` de
+    `Caption`, que é o estilo que o Word usa para legenda de tabela e figura.
     """
     from docx.enum.style import WD_STYLE_TYPE
 
@@ -922,35 +1031,36 @@ def _definir_estilos(documento) -> None:
         return novo
 
     corpo = criar("FlatCap Corpo", "Normal")
-    corpo.font.name = FONTE
+    _fonte_do_estilo(corpo)
     corpo.font.size = Pt(_CORPO_PT)
     corpo.font.color.rgb = TINTA
     corpo.paragraph_format.space_after = Pt(6)
 
-    titulo = criar("FlatCap Titulo", "Title")
-    titulo.font.name = FONTE
+    titulo = criar("FlatCap Titulo", "Normal")
+    _fonte_do_estilo(titulo)
     titulo.font.size = Pt(20)
     titulo.font.bold = True
     titulo.font.color.rgb = TINTA
 
     secao = criar("FlatCap Secao", "Heading 1")
-    secao.font.name = FONTE
+    _fonte_do_estilo(secao)
     secao.font.size = Pt(14)
     secao.font.bold = True
     secao.font.color.rgb = TINTA
     secao.paragraph_format.space_before = Pt(14)
     secao.paragraph_format.space_after = Pt(2)
 
-    subtitulo = criar("FlatCap Subtitulo", "Subtitle")
-    subtitulo.font.name = FONTE
+    subtitulo = criar("FlatCap Subtitulo", "Normal")
+    _fonte_do_estilo(subtitulo)
     subtitulo.font.size = Pt(13)
     subtitulo.font.bold = False
     subtitulo.font.italic = False
     subtitulo.font.color.rgb = TINTA_SECUNDARIA
+    subtitulo.paragraph_format.space_before = Pt(0)
     subtitulo.paragraph_format.space_after = Pt(16)
 
     legenda = criar("FlatCap Legenda", "Caption")
-    legenda.font.name = FONTE
+    _fonte_do_estilo(legenda)
     legenda.font.size = Pt(_LEGENDA_PT)
     legenda.font.bold = True
     legenda.font.italic = False
@@ -985,7 +1095,7 @@ def _estilo_de_tabela(documento) -> None:
         return
 
     estilo = estilos.add_style("FlatCap Tabela", WD_STYLE_TYPE.TABLE)
-    estilo.font.name = FONTE
+    _fonte_do_estilo(estilo)
     estilo.font.size = Pt(_TABELA_PT)
     estilo.font.color.rgb = TINTA
 
@@ -1022,7 +1132,106 @@ def _margens_da_celula(cm: float = 0.12) -> OxmlElement:
     return margens
 
 
+_TEXTO_DAS_DECISOES = '''# O modelo do relatório — o que é decisão sua, e onde ela mora
+
+> Escrito pelo `flatcap template`, e mora ao lado do `template.docx` porque um
+> `.docx` é binário: não aceita comentário, não entra no Git e não conta a
+> ninguém por que está do jeito que está.
+>
+> **Este arquivo é seu.** O `flatcap template` não o sobrescreve depois de criado
+> — acrescente aqui as decisões da sua instituição, e a data em que as tomou.
+
+## A regra que surpreende todo mundo uma vez
+
+O relatório **é** este modelo, com o conteúdo acrescentado depois. Página,
+margens, cabeçalho, rodapé, estilos **e o corpo** viajam inteiros para cada
+documento entregue.
+
+A consequência é a que pega: o que você escrever no corpo do `template.docx` sai
+impresso em todo relatório, antes do título. É assim que uma capa institucional
+funciona — e é por isso que o corpo vem vazio. Um "instruções de uso" escrito ali
+dentro chega na mão do cliente.
+
+## O que se ajusta aqui, no Word
+
+Abra o `template.docx`, mude o estilo, salve. Nenhuma linha de Python, e vale
+para todo relatório gerado daí em diante.
+
+| peça do documento | estilo |
+| --- | --- |
+| título | `FlatCap Titulo` |
+| subtítulo (`matrícula - nome`) | `FlatCap Subtitulo` |
+| nome de cada variável | `FlatCap Secao` |
+| texto corrido e células de tabela | `FlatCap Corpo` |
+| `Tabela 1. …` e `Figura 1. …` | `FlatCap Legenda` |
+| bordas e fundo das tabelas | `FlatCap Tabela` |
+
+Mais o que não é estilo: tamanho da página, margens, cabeçalho — é onde o
+logotipo entra sem custar uma página — e rodapé.
+
+Os seis nomes começam com `FlatCap` de propósito: é assim que se descobre, no
+painel de estilos do Word, quais são os que mandam. Nenhum outro estilo do
+documento é consultado pelo relatório.
+
+## O que não se ajusta aqui
+
+Isto é código. Mexer no Word não muda:
+
+| o que | onde |
+| --- | --- |
+| largura das colunas (34% na primeira) | `documento.py` |
+| alinhamento das células | `documento.py` |
+| o verde da linha `Total` | `documento.py` |
+| cabeçalho de tabela repetido, tabela que não parte | `documento.py` |
+| numeração `Tabela 1` / `Figura 1`, legenda acima | `documento.py` |
+| **os gráficos** | `graficos.py` — eles são imagem, não texto |
+| a ordem das seções | o `dicionario.csv` do projeto |
+| o texto de abertura | o `projeto.yaml` do projeto |
+
+A linha dos gráficos é a que mais custa descobrir sozinho: o `.png` já vem
+desenhado quando o documento é montado, e nenhum estilo do Word o alcança. Se a
+fonte do modelo mudar, a do `graficos.py` tem de mudar junto — senão o relatório
+sai com duas tipografias, uma no texto e outra nos eixos.
+
+## As decisões que este modelo carrega hoje
+
+- **Arial em tudo**, inclusive nos gráficos. Uma fonte só na página; o tema do
+  documento foi reescrito para que nenhum estilo possa cair numa serifa.
+- **A4, margens de 2,5 cm** — menos a inferior, 2,0 cm, para o rodapé caber sem
+  apertar a mancha.
+- **A escala de tamanhos**: título 20, nome da variável 14, subtítulo 13, corpo
+  10,5, tabela 9,5, legenda 9. É pouca variação de propósito: o documento é
+  técnico, e a hierarquia se lê pelo peso e pelo espaço, não pelo tamanho.
+- **Tabela de três linhas** — topo, sob o cabeçalho, base; nenhuma vertical. É o
+  padrão de publicação científica.
+- **Linha `Total` com fundo #4B9B69 e texto preto.** O preto é escolha medida:
+  6,2:1 de contraste, contra 3,4:1 do branco sobre o mesmo verde.
+- **Legenda acima** da tabela e da figura, numeradas em séries separadas, para
+  que "veja a Tabela 3" funcione em um e-mail.
+- **Cabeçalho discreto à direita, rodapé com o número da página.**
+
+## Antes de salvar
+
+- Não renomeie os estilos `FlatCap *`. O relatório os procura pelo nome; sem
+  eles, ele cai nos estilos nativos do Word e o documento muda de cara.
+- Deixe o corpo vazio, a menos que queira uma capa impressa em todo relatório.
+- Gere um relatório de verdade e **abra no Word**. É o passo que nenhum teste
+  substitui, e três dos quatro piores defeitos deste projeto apareceram assim.
+- Imprima uma página em preto e branco. O verde do `Total` vira um cinza médio
+  no papel, e é a única conferência que a tela não faz.
+
+## Onde este arquivo mora
+
+No `FLATCAP_ROOT`, fora do repositório e **fora de backup por padrão**. O
+`.gitignore` ignora todo `.docx`, de propósito: o modelo carrega logotipo,
+identidade visual e muda sem pedir licença a ninguém. Guardar uma cópia dele é
+sua responsabilidade — e se um `flatcap template --sim` distraído substituir o
+`template.docx`, é a cópia que salva as suas horas de Word.
+'''
+
+
 __all__ = [
+    "ARQUIVO_DECISOES",
     "ARQUIVO_TEMPLATE",
     "Estilos",
     "escrever",
