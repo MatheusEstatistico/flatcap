@@ -1,5 +1,6 @@
 """
-O `manifesto.json` — o índice de uma rodada da descritiva.
+O `manifesto.json` — o índice de uma rodada de análise, e o contrato entre uma
+análise e quem escreve os arquivos dela.
 
 O roteiro é direto sobre por que ele existe: *"o manifesto é o que torna a Fase 6
 simples. Sem ele, o gerador de relatório teria que adivinhar arquivos por nome; com
@@ -18,14 +19,46 @@ desempate é um sufixo numérico. Só o manifesto sabe qual é qual.
 dele: no dia em que um gráfico sair diferente do que saía antes, isto é o que
 responde se mudaram os dados ou mudou o `matplotlib`.
 
+## O que a Fase 7 acrescentou aqui, e por quê
+
+Até a Fase 6 havia uma análise só, e o manifesto podia falar dela sem se nomear.
+Com a segunda, três coisas mudaram de casa para cá:
+
+**`Manifesto.analise` — de qual análise é esta rodada.** Uma pasta
+`3. Análises/normalidade/` com um manifesto que não diz o que é seria um arquivo
+que depende do nome da pasta para ser interpretado — e nome de pasta é o que o
+usuário renomeia. Manifesto antigo, sem o campo, é lido como `descritiva`: era o
+que ele era.
+
+**`ItemDoManifesto.colunas` — quais colunas do banco o item usou.** O campo
+`variavel` é singular, e existe análise que não é de uma variável: uma correlação
+é um par, e uma tabela de normalidade fala de todas de uma vez. Sem este campo, a
+conferência `dicionario_mudou` do `relatorio.py` compararia `idade × imc` com as
+variáveis do dicionário, não acharia, e diria «`idade × imc` saiu da descritiva» —
+em todo relatório, para sempre. Com ele, a conferência compara a **união das
+colunas** de todas as rodadas, e a pergunta volta a ter resposta.
+
+**`Tabela` e `Grafico` — o contrato de saída de qualquer análise.** Eles moravam
+no `descritiva.py`, que importa o `pandas`. Ou cada análise nova importava de lá,
+acoplando duas análises que não têm nada a ver uma com a outra, ou os dois
+desciam para um lugar neutro. Este módulo é o lugar: ele já era dono do
+`Artefato`, e continua sem importar `pandas` nem `matplotlib`. O `descritiva.py`
+reexporta os dois nomes, então nenhum chamador mudou.
+
 ## Por que este módulo não importa o `pandas` nem o `matplotlib`
 
 Pela mesma razão que o `dicionario.py` não importa o `pandas`: o formato de um
 arquivo de índice não depende de como o banco foi lido nem de como o gráfico foi
-desenhado. A Fase 6 vai importar este módulo para montar o `.docx` e não precisa
-de nenhum dos dois para isso — nem de meio segundo de partida para descobrir.
+desenhado. A Fase 6 importa este módulo para montar o `.docx` e não precisa de
+nenhum dos dois — nem de meio segundo de partida para descobrir. Há teste em
+subprocesso que falha se qualquer um dos dois for carregado pelo `relatorio.py`.
 
-Ele também **não escreve no disco**. Monta o texto; quem grava é o `descritiva.py`,
+O `dicionario.py` entrou como import novo e **não fere essa invariante**: ele
+existe justamente por não importar `pandas`. Ele é quem sabe que o separador de
+campos é `;` e que o arquivo abre com BOM — e a `Tabela`, que agora mora aqui,
+precisa dos dois para escrever o `.csv`.
+
+Ele também **não escreve no disco**. Monta o texto; quem grava é cada análise,
 com a escrita atômica do `ficha.py`. É a mesma invariante das outras fases: o texto
 é o arquivo, e por isso a simulação pode mostrá-lo inteiro antes de existir.
 
@@ -34,19 +67,53 @@ com a escrita atômica do `ficha.py`. É a mesma invariante das outras fases: o 
 `"formato": 1` na primeira chave. Custa uma linha e compra a única coisa que um
 arquivo lido por outra versão do programa precisa: a possibilidade de ser recusado
 com uma frase em vez de interpretado errado em silêncio.
+
+**Ele continua em 1 depois da Fase 7, e isso é decisão, não esquecimento.** O
+número existe para impedir interpretação errada, e os dois campos novos não
+produzem nenhuma: uma versão anterior lendo um manifesto de descritiva escrito
+hoje encontra exatamente os campos que ela conhece, ignora `analise` e `colunas`,
+e monta o mesmo documento. Subir para 2 recusaria esse arquivo sem que houvesse o
+que recusar. O número sobe no dia em que um campo **mudar de significado** — não
+quando um campo novo aparecer.
 """
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from .dicionario import SEPARADOR_CAMPO
+
 ARQUIVO_MANIFESTO = "manifesto.json"
 
 FORMATO = 1
+
+# O nome da análise de cada rodada. Vive aqui, e não em cada módulo, porque é o
+# valor que o `relatorio.py` vai casar com a lista `analises:` da ficha — e duas
+# grafias para a mesma análise é como uma rodada deixa de aparecer no documento
+# sem que nada diga por quê.
+ANALISE_DESCRITIVA = "descritiva"
+ANALISE_NORMALIDADE = "normalidade"
+
+# A semente.
+#
+# Ela mora aqui desde a Fase 7, e não no `descritiva.py` onde nasceu, pelo mesmo
+# motivo de sempre: é um valor que **todo** manifesto registra, e um segundo
+# módulo com uma segunda semente é como duas rodadas do mesmo projeto deixam de
+# ser reproduzíveis uma contra a outra. Uma descritiva não sorteia nada e uma
+# tabela de normalidade também não; quem vai precisar dela é o bootstrap e o
+# teste de permutação, e quando precisarem ela já está escrita em todo manifesto
+# já gerado. O `descritiva.py` reexporta o nome.
+SEMENTE = 42
+
+# O BOM, o mesmo do `dicionario.csv` e pela mesma razão: é ele que faz o Excel em
+# português abrir o arquivo em UTF-8 em vez de cp1252.
+_BOM = "﻿"
 
 
 class ManifestoError(RuntimeError):
@@ -65,14 +132,112 @@ class ManifestoInvalidoError(ManifestoError):
         self.caminho = caminho
 
 
+# O contrato de saída de uma análise
+
+
+@dataclass(frozen=True)
+class Tabela:
+    """
+    Uma tabela pronta para virar `.csv`. Texto, não `DataFrame`.
+
+    O conteúdo já vem montado como linhas de texto para que o `executar` de cada
+    análise não decida mais nada e para que a simulação mostre exatamente o que
+    seria gravado — a mesma invariante do `texto_do_dicionario` da Fase 4: o texto
+    é o arquivo.
+
+    Mora aqui desde a Fase 7. Era do `descritiva.py`, e uma análise nova que
+    quisesse escrever um `.csv` teria de importar do módulo da descritiva — o que
+    acoplaria duas análises que não têm nada a ver uma com a outra, e faria a
+    segunda pagar o `pandas` só para conhecer uma `dataclass` de texto.
+    """
+
+    nome: str
+    especie: str
+    variavel: str
+    titulo: str
+    colunas: tuple[str, ...]
+    linhas: tuple[tuple[str, ...], ...]
+    notas: tuple[str, ...] = ()
+
+    def texto(self) -> str:
+        """
+        O arquivo inteiro, com o cabeçalho explicativo em linhas de comentário.
+
+        O comentário existe para o dia em que alguém abrir `freq_sexo.csv` sozinho,
+        fora de qualquer contexto, e precisar saber de qual variável e de qual
+        denominador ele fala.
+
+        Uma tabela que fala de várias variáveis — a de normalidade é a primeira —
+        deixa `variavel` vazia, e a linha `# variável:` simplesmente não sai. O
+        `relatorio.ler_tabela` já descarta essa linha na leitura, então os dois
+        casos chegam iguais ao documento.
+        """
+        buffer = io.StringIO(newline="")
+        escritor = csv.writer(
+            buffer,
+            delimiter=SEPARADOR_CAMPO,
+            lineterminator="\n",
+            quoting=csv.QUOTE_MINIMAL,
+        )
+        escritor.writerow(list(self.colunas))
+        for linha in self.linhas:
+            escritor.writerow(list(linha))
+
+        cabecalho = [f"# {self.titulo}"]
+        if self.variavel:
+            cabecalho.append(f"# variável: {self.variavel}")
+        cabecalho += [f"# {nota}" for nota in self.notas]
+        return f"{_BOM}" + "\n".join(cabecalho) + "\n" + buffer.getvalue()
+
+
+@dataclass(frozen=True)
+class Grafico:
+    """
+    Um gráfico decidido e ainda não desenhado.
+
+    Carrega os números já calculados — as contagens das barras, as bordas e as
+    alturas do histograma, os pontos do Q-Q —, e não a coluna do banco. Duas
+    consequências: o `graficos.py` não recalcula nada (e por isso não pode
+    discordar da tabela ao lado), e o plano não segura o banco inteiro na memória
+    por variável.
+
+    Os campos são a união do que cada espécie precisa, e cada uma usa os seus:
+    `categorias`/`valores`/`rotulos` nas barras e nas colunas, `bordas`/`contagens`
+    no histograma, `pontos_x`/`pontos_y`/`reta` no Q-Q. Uma `dataclass` por espécie
+    daria um despacho por tipo no `graficos.py`, que é mais código para dizer o que
+    o campo `especie` já diz.
+    """
+
+    nome: str
+    especie: str  # barras | histograma | colunas | qq
+    variavel: str
+    titulo: str
+    subtitulo: str = ""
+    rotulo_categoria: str = ""
+    rotulo_valor: str = "n"
+    categorias: tuple[str, ...] = ()
+    valores: tuple[float, ...] = ()
+    rotulos: tuple[str, ...] = ()
+    bordas: tuple[float, ...] = ()
+    contagens: tuple[int, ...] = ()
+    # O Q-Q da Fase 7. `reta` é (intercepto, inclinação) — a reta de referência,
+    # calculada por quem sabe estatística e não por quem desenha.
+    pontos_x: tuple[float, ...] = ()
+    pontos_y: tuple[float, ...] = ()
+    reta: tuple[float, float] | None = None
+
+
+# O índice da rodada
+
+
 @dataclass(frozen=True)
 class Artefato:
     """
-    Um arquivo escrito pela descritiva.
+    Um arquivo escrito por uma análise.
 
-    `especie` é o que a Fase 6 vai usar para decidir onde ele entra no documento:
-    uma `frequencia` vira tabela, um `histograma` vira figura. É por isso que ela
-    é um campo próprio e não uma dedução a partir da extensão.
+    `especie` é o que o `relatorio.py` usa para decidir onde ele entra no
+    documento: uma `frequencia` vira tabela, um `histograma` vira figura. É por
+    isso que ela é um campo próprio e não uma dedução a partir da extensão.
     """
 
     arquivo: str
@@ -92,7 +257,17 @@ class Artefato:
 @dataclass(frozen=True)
 class ItemDoManifesto:
     """
-    Uma variável descrita, com os arquivos que ela gerou.
+    Uma seção da rodada, com os arquivos que ela gerou.
+
+    Era "uma variável descrita", e a Fase 7 alargou o conceito sem mudar o campo:
+    na descritiva um item continua sendo uma variável, e em uma análise que fala de
+    várias — ou de um par — ele é **uma seção do documento**. `variavel` fica vazia
+    nesse caso, `rotulo` é o que encabeça a seção, e `colunas` diz quais colunas do
+    banco entraram.
+
+    `colunas` é o campo que faz as conferências do relatório continuarem
+    funcionando com mais de uma análise; ver a nota no topo do módulo. Item antigo,
+    sem o campo, devolve a própria `variavel` — que é o que ele sempre quis dizer.
     """
 
     variavel: str
@@ -104,10 +279,25 @@ class ItemDoManifesto:
     artefatos: tuple[Artefato, ...] = ()
     detalhes: dict[str, Any] = field(default_factory=dict)
     avisos: tuple[str, ...] = ()
+    colunas: tuple[str, ...] = ()
 
     @property
     def preenchidos(self) -> int:
         return self.n - self.faltantes
+
+    @property
+    def colunas_usadas(self) -> tuple[str, ...]:
+        """
+        As colunas do banco que este item usou.
+
+        Cai na `variavel` quando `colunas` está vazia, que é o caso de todo
+        manifesto escrito antes da Fase 7. É o que permite ao `relatorio.py`
+        fazer uma pergunta só — "quais colunas esta rodada usou?" — sem saber de
+        qual versão do FlatCap o arquivo veio.
+        """
+        if self.colunas:
+            return self.colunas
+        return (self.variavel,) if self.variavel else ()
 
     def artefato(self, especie: str) -> Artefato | None:
         for artefato in self.artefatos:
@@ -119,11 +309,15 @@ class ItemDoManifesto:
 @dataclass(frozen=True)
 class Manifesto:
     """
-    Uma rodada inteira da descritiva.
+    Uma rodada inteira de uma análise.
 
     A ordem de `itens` é a ordem das variáveis no dicionário, que por sua vez é a
-    ordem das colunas no banco. Ela é o sumário do relatório da Fase 6 — e é por
+    ordem das colunas no banco. Ela é o sumário da seção no relatório — e é por
     isso que reordenar o `dicionario.csv` reordena o documento, sem tocar em código.
+
+    `analise` tem default para que um `Manifesto` montado à mão em teste antigo
+    continue válido, e para que o arquivo escrito antes da Fase 7 seja lido como o
+    que ele era.
     """
 
     flatcap: str
@@ -137,6 +331,7 @@ class Manifesto:
     fora: tuple[dict[str, Any], ...] = ()
     avisos: tuple[str, ...] = ()
     formato: int = FORMATO
+    analise: str = ANALISE_DESCRITIVA
 
     @property
     def total_artefatos(self) -> int:
@@ -150,6 +345,22 @@ class Manifesto:
     def figuras(self) -> tuple[Artefato, ...]:
         return tuple(a for item in self.itens for a in item.artefatos if a.e_figura)
 
+    @property
+    def colunas_usadas(self) -> tuple[str, ...]:
+        """
+        Todas as colunas do banco que esta rodada tocou, sem repetir e em ordem.
+
+        É o que a conferência `dicionario_mudou` do relatório precisa perguntar
+        quando há mais de uma rodada na pasta: "as colunas de que esta rodada fala
+        ainda são analisáveis no dicionário de hoje?".
+        """
+        vistas: list[str] = []
+        for item in self.itens:
+            for coluna in item.colunas_usadas:
+                if coluna and coluna not in vistas:
+                    vistas.append(coluna)
+        return tuple(vistas)
+
     def item(self, variavel: str) -> ItemDoManifesto | None:
         for item in self.itens:
             if item.variavel == variavel:
@@ -162,9 +373,14 @@ class Manifesto:
     def como_dicionario(self) -> dict[str, Any]:
         """
         A forma serializável, na ordem em que ela sai no arquivo.
+
+        `analise` vem logo depois de `formato` de propósito: as duas primeiras
+        linhas do arquivo respondem "que arquivo é este?" e "do que ele fala?",
+        que são as duas perguntas de quem o abre sem contexto.
         """
         return {
             "formato": self.formato,
+            "analise": self.analise,
             "flatcap": self.flatcap,
             "gerado_em": self.gerado_em.isoformat(timespec="seconds"),
             "projeto": self.projeto,
@@ -178,6 +394,7 @@ class Manifesto:
                     "slug": item.slug,
                     "rotulo": item.rotulo,
                     "tipo": item.tipo,
+                    "colunas": list(item.colunas_usadas),
                     "n": item.n,
                     "faltantes": item.faltantes,
                     "artefatos": [
@@ -236,7 +453,7 @@ def ler(caminho: Path | str) -> Manifesto:
         raise ManifestoInvalidoError(
             f"Não há {ARQUIVO_MANIFESTO} em {caminho.parent}.\n"
             "Sem ele não dá para saber de qual variável saiu cada arquivo da pasta. "
-            "Rode `flatcap descritiva <id> --sim` para gerar a rodada de novo.",
+            "Rode a análise de novo para gerar a rodada.",
             caminho,
         )
 
@@ -250,8 +467,8 @@ def ler(caminho: Path | str) -> Manifesto:
         raise ManifestoInvalidoError(
             f"{caminho.name} não é um JSON válido.\n"
             "O arquivo é escrito pelo FlatCap e não é feito para ser editado à mão — "
-            "se você precisou mexer nele, apague-o e rode `flatcap descritiva` de "
-            f"novo.\nDetalhe técnico: {erro}",
+            "se você precisou mexer nele, apague-o e rode a análise de novo.\n"
+            f"Detalhe técnico: {erro}",
             caminho,
         ) from erro
 
@@ -273,8 +490,8 @@ def de_dicionario(corpo: Any, caminho: Path | None = None) -> Manifesto:
         raise ManifestoInvalidoError(
             f"Este manifesto está no formato {formato!r} e esta versão do FlatCap "
             f"conhece até o {FORMATO}.\n"
-            "Ele foi escrito por uma versão mais nova. Atualize o FlatCap, ou rode "
-            "`flatcap descritiva` de novo para regerar a rodada neste formato.",
+            "Ele foi escrito por uma versão mais nova. Atualize o FlatCap, ou rode a "
+            "análise de novo para regerar a rodada neste formato.",
             caminho,
         )
 
@@ -298,6 +515,7 @@ def de_dicionario(corpo: Any, caminho: Path | None = None) -> Manifesto:
             ),
             detalhes=dict(item.get("detalhes") or {}),
             avisos=tuple(str(aviso) for aviso in item.get("avisos", [])),
+            colunas=tuple(str(coluna) for coluna in item.get("colunas", []) if coluna),
         )
         for item in corpo.get("variaveis", [])
         if isinstance(item, dict)
@@ -305,6 +523,9 @@ def de_dicionario(corpo: Any, caminho: Path | None = None) -> Manifesto:
 
     return Manifesto(
         formato=formato,
+        # Manifesto escrito antes da Fase 7 não tem o campo, e era de uma
+        # descritiva: era a única análise que existia.
+        analise=str(corpo.get("analise") or ANALISE_DESCRITIVA),
         flatcap=str(corpo.get("flatcap", "")),
         gerado_em=_data_e_hora(corpo.get("gerado_em"), caminho),
         projeto=dict(corpo.get("projeto") or {}),
@@ -328,3 +549,22 @@ def _data_e_hora(valor: Any, caminho: Path | None) -> datetime:
             f"O campo `gerado_em` do manifesto não é uma data e hora: {valor!r}.",
             caminho,
         ) from erro
+
+
+__all__ = [
+    "ANALISE_DESCRITIVA",
+    "ANALISE_NORMALIDADE",
+    "ARQUIVO_MANIFESTO",
+    "FORMATO",
+    "SEMENTE",
+    "Artefato",
+    "Grafico",
+    "Manifesto",
+    "ManifestoError",
+    "ManifestoInvalidoError",
+    "ItemDoManifesto",
+    "Tabela",
+    "de_dicionario",
+    "ler",
+    "texto_do_manifesto",
+]

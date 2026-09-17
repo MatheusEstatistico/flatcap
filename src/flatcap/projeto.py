@@ -98,6 +98,28 @@ PASTA_ANALISES = SUBPASTAS[2] # onde a Fase 5 escreve a pasta `descritiva/`
 # calculá-la. O `descritiva.py` reexporta o nome, então nenhum chamador mudou.
 PASTA_DESCRITIVA = "descritiva"
 
+# A rodada da normalidade, a primeira análise da Fase 7. Mora ao lado da
+# descritiva pelo mesmo motivo: o desenho da pasta é assunto deste módulo, e o
+# `relatorio.py` precisa saber onde as rodadas estão sem importar os módulos que
+# carregam o `pandas` e o `scipy` para calculá-las.
+PASTA_NORMALIDADE = "normalidade"
+
+
+def pasta_da_analise(raiz: Path, analise: str) -> Path:
+    """
+    Onde mora a rodada vigente de uma análise: `3. Análises/<analise>/`.
+
+    Uma função e não uma concatenação em cada módulo, porque é aqui que a resposta
+    muda no dia em que ela mudar — e porque é ela que o `relatorio.py` vai usar
+    para varrer `3. Análises/*/` em vez de procurar uma pasta com nome fixo.
+
+    O nome da análise é o mesmo que vai escrito no `manifesto.json` (o campo
+    `analise`) e o mesmo que se escreve na lista `analises:` da ficha. Um nome só
+    para as três coisas é o que faz a lista da reunião, a pasta no disco e a ordem
+    das seções do documento se encontrarem sem tradução no meio.
+    """
+    return Path(raiz) / PASTA_ANALISES / analise
+
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
 STATUS_INICIAL = "novo"

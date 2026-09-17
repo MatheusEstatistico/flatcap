@@ -62,6 +62,7 @@ from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arqui
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .descritiva import Descritiva, PlanoDescritiva
+    from .normalidade import Normalidade, PlanoNormalidade
     from .perfil import Achado, Perfil, PlanoPerfil
     from .relatorio import PlanoRelatorio, Relatorio
 
@@ -201,9 +202,15 @@ def doctor(
 
   console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
 
-# As bibliotecas que abrem o banco, desenham os gráficos e escrevem o documento.
-# A ordem é a do fluxo: ler, desenhar, entregar.
-_BIBLIOTECAS = ("pandas", "openpyxl", "matplotlib", "docx")
+# As bibliotecas que abrem o banco, calculam, desenham e escrevem o documento.
+# A ordem é a do fluxo: ler, calcular, desenhar, entregar.
+#
+# O `scipy` entrou na Fase 7 e é a primeira dependência nova desde a Fase 6. Ele
+# está aqui pelo mesmo motivo que os outros quatro: uma biblioteca que falta
+# precisa sair como `FALHA` nesta tabela, e não como `ModuleNotFoundError` no meio
+# de um comando — foi assim que o `matplotlib` derrubou o `doctor` na Fase 5, no
+# comando que existe justamente para responder "o que está errado?".
+_BIBLIOTECAS = ("pandas", "openpyxl", "scipy", "matplotlib", "docx")
 
 # `import docx` é o pacote `python-docx`, e o nome de instalação não é o nome de
 # import. Quem lê "falta `docx`" no terminal vai procurar por `docx` no pip e
@@ -1358,6 +1365,353 @@ def _arvore_da_descritiva(plano: PlanoDescritiva) -> Tree:
       ("+ ", "green"), ("manifesto.json", "bold"),
       (f"   índice de {len(plano.descritiva.variaveis)} variável(is) e "
        f"{plano.manifesto.total_artefatos} artefato(s)", "dim"),
+    )
+  )
+
+  arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+  return arvore
+
+
+# flatcap normalidade
+
+@app.command()
+def normalidade(
+  identificador: str = typer.Argument(
+    ...,
+    help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+  ),
+  aba: str | None = typer.Option(
+    None, "--aba", metavar = "NOME",
+    help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+  ),
+  sem_graficos: bool = typer.Option(
+    False, "--sem-graficos",
+    help = "Escreve só a tabela. Mais rápido, e o matplotlib nem é carregado."
+  ),
+  rapido: bool = typer.Option(
+    False, "--rapido",
+    help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+  ),
+  sim: bool = typer.Option(
+    False, "--sim",
+    help = "Executa de fato. Sem esta opção o comando apenas simula."
+  ),
+  env: str | None = typer.Option(
+    None, "--env",
+    help = "Caminho de um .env alternativo."
+  ),
+) -> None:
+  """
+  Testa a normalidade das variáveis numéricas do dicionario.csv.
+
+  Para cada `numerica`: o teste de Shapiro-Wilk, a assimetria, a curtose e um
+  gráfico Q-Q. Tudo em `3. Análises/normalidade/`, com um `manifesto.json`.
+
+  Sai uma tabela só, com uma linha por variável — é como uma tabela de
+  pressupostos se lê. O valor-p **depende do tamanho da amostra**: com poucos
+  casos o teste quase não rejeita, e com muitos rejeita desvios irrelevantes. Por
+  isso a assimetria, a curtose e o Q-Q saem ao lado dele, e não no lugar dele.
+
+  Por padrão entram todas as numéricas. Uma lista `normalidade:` no projeto.yaml
+  restringe às variáveis que você escrever nela.
+
+  Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+  POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+  """
+  # Mesmo motivo do `perfil` e da `descritiva`: `pandas`, `scipy` e `matplotlib`
+  # custam perto de um segundo somados, e o `listar`, que roda várias vezes por
+  # dia, não deve pagar por um comando que ele não usa.
+  from .banco import BancoError
+  from .normalidade import (
+    NormalidadeError,
+    executar_normalidade,
+    preparar_normalidade,
+  )
+
+  cfg = _configuracao(env)
+
+  try:
+    raiz = localizar_projeto(cfg.root, identificador)
+    plano = preparar_normalidade(
+      raiz, aba = aba, conferir = not rapido, com_graficos = not sem_graficos
+    )
+  except FichaError as erro:
+    raise _abortar("Projeto", str(erro)) from erro
+  except BancoError as erro:
+    raise _abortar("Banco de dados", str(erro)) from erro
+  except DicionarioError as erro:
+    raise _abortar("Dicionário", str(erro)) from erro
+  except NormalidadeError as erro:
+    raise _abortar("Normalidade", str(erro)) from erro
+  except OSError as erro:
+    raise _abortar("Leitura em disco", str(erro)) from erro
+
+  console.print(_cabecalho_da_normalidade(plano))
+  console.print(_tabela_da_normalidade(plano.normalidade))
+  console.print(_nota_da_normalidade(plano.normalidade))
+  for bloco in _fora_da_normalidade(plano.normalidade):
+    console.print(bloco)
+  for aviso in plano.normalidade.avisos:
+    erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+  console.print(_arvore_da_normalidade(plano))
+
+  if not sim:
+    console.print(
+      "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+      "Repita com [bold]--sim[/bold] para gerar a pasta."
+    )
+    return
+
+  try:
+    resultado = executar_normalidade(plano)
+  except OSError as erro:
+    raise _abortar(
+      "Escrita em disco",
+      f"Falhei ao escrever em {plano.pasta}.\n"
+      f"Detalhe técnico: {erro}\n"
+      "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+      "anterior — confira a pasta antes de rodar de novo."
+    ) from erro
+
+  for aviso in resultado.avisos:
+    erro_console.print(Text(aviso, style = "yellow"))
+
+  if resultado.arquivado is not None:
+    console.print(
+      Text(
+        f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+        style = "dim",
+      )
+    )
+
+  quantos = len(plano.arquivos)
+  console.print(
+    f"\n[green]Normalidade escrita.[/green] {quantos} "
+    f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+    f"{PASTA_ANALISES}/{plano.pasta.name}"
+  )
+
+
+def _cabecalho_da_normalidade(plano: PlanoNormalidade) -> Text:
+  """
+  Quem, qual banco, se dá para confiar nele, e quantas variáveis entram.
+  """
+  normalidade = plano.normalidade
+  ficha = normalidade.ficha
+  banco = normalidade.banco
+
+  cabecalho = Text.assemble(
+    (rotulo_do_projeto(ficha.raiz), "bold"),
+    ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+    "\n",
+    ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+    ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+    ("  ·  ", "dim"),
+    (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+  )
+  if banco.leitura.aba:
+    cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+  cabecalho.append("\n")
+  if banco.confere is True:
+    cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+  elif banco.confere is False:
+    cabecalho.append(
+      Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+    )
+  else:
+    cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+  quantas = len(normalidade.variaveis)
+  cabecalho.append(
+    Text.assemble(
+      ("  ·  ", "dim"),
+      ("Shapiro-Wilk em ", "dim"),
+      (f"{quantas} numérica(s)", ""),
+      (
+        ", restrita à lista do projeto.yaml" if normalidade.pedidas else "",
+        "yellow" if normalidade.pedidas else "",
+      ),
+    )
+  )
+  return cabecalho
+
+
+def _tabela_da_normalidade(normalidade: Normalidade) -> Table:
+  """
+  Uma linha por variável, na mesma ordem e com os mesmos números do `.csv`.
+
+  O `n` vem antes de tudo de propósito: ele é o que calibra a leitura do valor-p,
+  e uma tabela que o escondesse deixaria a coluna `p` parecer uma resposta. Pelo
+  mesmo motivo a assimetria e a curtose vêm **antes** do W e do p, e não depois:
+  elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
+  """
+  tabela = Table(show_header = True, header_style = "bold")
+  tabela.add_column("Variável", overflow = "fold")
+  tabela.add_column("n", justify = "right", no_wrap = True)
+  tabela.add_column("Faltantes", justify = "right", no_wrap = True)
+  tabela.add_column("Assimetria", justify = "right", no_wrap = True)
+  tabela.add_column("Curtose", justify = "right", no_wrap = True)
+  tabela.add_column("W", justify = "right", no_wrap = True)
+  tabela.add_column("p", justify = "right", no_wrap = True)
+  tabela.add_column("Leitura", overflow = "fold")
+
+  for posicao, variavel in enumerate(normalidade.variaveis):
+    # A tabela do terminal lê as mesmas células do `.csv` que vai para o disco, e
+    # não reformata número nenhum: dois formatadores para a mesma grandeza é como
+    # o terminal passa a dizer `0.05` enquanto o arquivo diz `0,05`.
+    celulas = normalidade.tabela.linhas[posicao]
+
+    if not variavel.testada:
+      estilo_p = "dim"
+    elif variavel.rejeita:
+      estilo_p = "yellow"
+    else:
+      estilo_p = "green"
+
+    tabela.add_row(
+      Text(celulas[0]),
+      Text(celulas[1]),
+      Text(celulas[2] if variavel.faltantes else "—",
+           style = "" if variavel.faltantes else "dim"),
+      Text(celulas[3]),
+      Text(celulas[4]),
+      Text(celulas[5], style = "dim" if not variavel.testada else ""),
+      Text(celulas[6], style = estilo_p),
+      Text(celulas[7], style = "dim" if not variavel.testada else ""),
+    )
+
+  return tabela
+
+
+def _nota_da_normalidade(normalidade: Normalidade) -> Text:
+  """
+  A frase que impede a tabela de ser lida como um veredito.
+
+  Ela sai sempre, inclusive quando nada foi rejeitado, e é a mesma coisa que a nota
+  do `.csv` diz. O terminal é onde você olha a tabela pela primeira vez, e é aí que
+  a advertência serve para alguma coisa — depois de o documento estar pronto, ela
+  vira leitura de conferência.
+  """
+  from .normalidade import ALFA, MINIMO_CONFIAVEL
+
+  rejeitadas = len(normalidade.rejeitadas)
+  testadas = sum(1 for v in normalidade.variaveis if v.testada)
+  pequenas = [v for v in normalidade.variaveis if v.testada and v.n < MINIMO_CONFIAVEL]
+
+  partes = [
+    Text.assemble(
+      ("\n", ""),
+      (f"{rejeitadas} de {testadas} ", "bold"),
+      ("com a normal rejeitada ao nível de ", ""),
+      (f"{ALFA:.2f}".replace(".", ","), ""),
+      (".", ""),
+    )
+  ]
+  if pequenas:
+    partes.append(
+      Text(
+        f"{len(pequenas)} variável(is) com menos de {MINIMO_CONFIAVEL} casos: aí o "
+        "teste quase não rejeita, e «não rejeitou» não é evidência de normalidade.",
+        style = "yellow",
+      )
+    )
+  partes.append(
+    Text(
+      "O valor-p depende do n. Leia a assimetria, a curtose e o Q-Q antes de "
+      "decidir qualquer coisa a partir desta tabela.",
+      style = "dim",
+    )
+  )
+
+  corpo = Text()
+  for posicao, parte in enumerate(partes):
+    if posicao:
+      corpo.append("\n")
+    corpo.append(parte)
+  return corpo
+
+
+def _fora_da_normalidade(normalidade: Normalidade) -> list[Panel]:
+  """
+  As variáveis que não entraram, e por quê.
+
+  Aparecem pelo mesmo motivo da Fase 5, e aqui elas são quase todo o dicionário:
+  categórica, data e `ignorar` não têm normalidade a testar. Um painel `dim` com a
+  lista é o que impede a pergunta "por que `sexo` não está na tabela?".
+  """
+  if not normalidade.fora:
+    return []
+
+  corpo = Text()
+  for posicao, item in enumerate(normalidade.fora):
+    if posicao:
+      corpo.append("\n")
+    corpo.append(item.variavel, style = "bold")
+    corpo.append(" — ")
+    corpo.append(item.motivo)
+  return [
+    Panel(
+      corpo,
+      title = f"Fora da normalidade ({len(normalidade.fora)})",
+      border_style = "dim",
+    )
+  ]
+
+
+def _arvore_da_normalidade(plano: PlanoNormalidade) -> Tree:
+  """
+  Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
+  """
+  arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+  if plano.arquivamento is not None:
+    de, para = plano.arquivamento
+    quantos = len([p for p in de.iterdir()])
+    ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+    ramo.add(
+      Text.assemble(
+        (f"{para.name}/", "yellow"),
+        (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+      )
+    )
+
+  ramo = arvore.add(
+    Text.assemble(
+      (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+      ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+    )
+  )
+  ramo.add(
+    Text.assemble(
+      ("+ ", "green"), (plano.tabela.nome, ""),
+      (f"   {len(plano.normalidade.variaveis)} variável(is), uma por linha", "dim"),
+    )
+  )
+
+  if plano.com_graficos:
+    ramo.add(
+      Text.assemble(
+        ("+ ", "green"), (f"{len(plano.graficos)} gráfico(s) Q-Q .png", ""),
+      )
+    )
+    sem_figura = len(plano.normalidade.variaveis) - len(plano.graficos)
+    if sem_figura:
+      ramo.add(
+        Text(
+          f"({sem_figura} sem figura: não há reta de referência possível)",
+          style = "yellow",
+        )
+      )
+  else:
+    ramo.add(Text("(sem gráficos: --sem-graficos)", style = "yellow"))
+
+  ramo.add(
+    Text.assemble(
+      ("+ ", "green"), ("manifesto.json", "bold"),
+      (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
     )
   )
 

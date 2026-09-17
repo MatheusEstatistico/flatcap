@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "flatcap"
-version = "1.0.0"
+version = "1.2.0"
 description = "Orquestra o flúxo de atendimento estatístico: REDCap -> pastas -> descritiva -> relatorio.docx"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -20,7 +20,8 @@ dependencies = [
   "ruamel.yaml",
   "python-dotenv",
   "matplotlib",
-  "python-docx>=1.1",      # <- a dependência nova da fase
+  "python-docx>=1.1",
+  "scipy>=1.11",           # <- a dependência nova da fase
 ]
 
 [project.optional-dependencies]

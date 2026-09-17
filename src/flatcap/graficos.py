@@ -44,6 +44,27 @@ proporções com denominadores diferentes.
 elas em vez de bloco grosso; grade sólida de um passo acima do fundo, nunca
 tracejada; e nenhum texto na cor da série — rótulo e valor são tinta, a identidade
 vem da barra ao lado deles.
+
+## Este módulo desenha para qualquer análise, e nunca escolhe a pasta
+
+Vale dizer em voz alta porque parece o contrário: o `desenhar` recebe o **caminho
+como parâmetro**, e sempre recebeu. Quem decidia `3. Análises/descritiva/` era o
+`executar_descritiva`, não este arquivo. A normalidade passa
+`3. Análises/normalidade/qq_idade.png` e nada aqui muda por causa disso — foi a
+divisão da Fase 5 pagando antes de a conta chegar.
+
+O que a Fase 7 mudou foram duas coisas, e nenhuma é a pasta.
+
+**A espécie `qq`**, para a figura que acompanha o teste de normalidade.
+
+**O despacho virou um registro, e espécie desconhecida estoura.** Antes era um
+`if/elif/else` com `_colunas` no fim, o que significava que uma espécie nova
+escrita com um typo saía como **gráfico de colunas** — bonito e errado, e ninguém
+confere figura contra manifesto. Com uma análise só isso era conveniência; com
+três é o defeito silencioso que este projeto passa o tempo caçando. Estourar é o
+comportamento certo: espécie desconhecida é bug de programação, não engano do
+usuário, e a regra da casa manda bug subir com o traceback inteiro — que é também
+por que este módulo continua sem erro próprio.
 """
 
 from __future__ import annotations
@@ -89,8 +110,8 @@ matplotlib.rcParams["font.sans-serif"] = list(FONTE)
 import matplotlib.pyplot as plt  # noqa: E402 - obrigatoriamente depois do `use`
 from matplotlib.ticker import MaxNLocator  # noqa: E402
 
-if TYPE_CHECKING:  # só para a anotação: importar `descritiva` aqui criaria um ciclo
-    from .descritiva import Grafico
+if TYPE_CHECKING:  # só para a anotação; em tempo de execução nada disto é carregado
+    from .manifesto import Grafico
 
 # A paleta. Fundo, tintas e grade de um sistema de visualização conferido; a série
 # é a cor de identidade nº 1 dele. Ficam com nome aqui em cima porque trocar a cor
@@ -113,6 +134,13 @@ _ESPESSURA_BARRA = 0.58  # o resto da faixa é ar, que é o que separa as barras
 _ESPESSURA_COLUNA = 0.78  # a série no tempo é lida como um perfil, e pede menos ar
 _LIMITE_ROTULOS_COLUNAS = 12  # acima disso o eixo carrega os valores
 _LARGURA_ROTULO = 28  # caracteres antes de quebrar o rótulo de uma categoria
+
+# O ponto do Q-Q. Pequeno e sem contorno: em uma amostra de duzentos casos os
+# pontos do miolo se encostam, e um contorno escuro em cada um transformaria o
+# centro da nuvem em um borrão — que é justamente a parte que precisa ser lida
+# como uma linha reta.
+_PONTO_QQ = 9
+_ALTURA_QQ = 3.6  # um dedo a mais que o padrão: o Q-Q é lido como um quadrado
 
 
 def versao_do_matplotlib() -> str:
@@ -145,15 +173,28 @@ def fonte_dos_graficos() -> str:
 
 def desenhar(grafico: Grafico, caminho: Path) -> Path:
     """
-    Escreve o `.png` de um `Grafico`. Devolve o caminho escrito.
+    Escreve o `.png` de um `Grafico`, onde quer que o chamador tenha pedido.
+
+    O caminho é parâmetro, e é a razão de este módulo servir a qualquer análise
+    sem saber que elas existem: a descritiva passa `3. Análises/descritiva/`, a
+    normalidade passa `3. Análises/normalidade/`, e a decisão de onde o arquivo
+    mora continua sendo de quem calculou os números.
+
+    Espécie que não está no registro estoura, e de propósito — ver o topo do
+    módulo. A mensagem diz a espécie pedida e as que existem, porque o erro
+    acontece enquanto alguém escreve uma análise nova e o que ele precisa ler é
+    "você escreveu `qqplot` e o nome é `qq`".
     """
     caminho = Path(caminho)
-    if grafico.especie == "barras":
-        figura = _barras(grafico)
-    elif grafico.especie == "histograma":
-        figura = _histograma(grafico)
-    else:
-        figura = _colunas(grafico)
+
+    forma = _FORMAS.get(grafico.especie)
+    if forma is None:
+        raise ValueError(
+            f"Espécie de gráfico desconhecida: {grafico.especie!r} "
+            f"(em `{grafico.nome}`). As que existem: "
+            f"{', '.join(sorted(_FORMAS))}."
+        )
+    figura = forma(grafico)
 
     try:
         figura.savefig(
@@ -295,6 +336,86 @@ def _colunas(grafico: Grafico):
     return figura
 
 
+def _qq(grafico: Grafico):
+    """
+    Q-Q: o valor observado contra o valor que a normal previa para aquela posição.
+
+    É a figura que responde o que o valor-p não responde. O Shapiro-Wilk devolve
+    um número — "rejeita" ou "não rejeita" — que depende do tamanho da amostra: com
+    n = 30 quase nada é rejeitado, com n = 3000 quase tudo. O Q-Q mostra **onde** e
+    **quanto** a distribuição se afasta, e isso não muda com o n. Cauda pesada à
+    direita, assimetria, um caso extremo sozinho lá em cima: as três têm forma
+    própria aqui e nenhuma tem forma nenhuma em um p.
+
+    **A reta é de referência e vem calculada de fora.** Ela passa pelos quartis —
+    é a `qqline` do R —, e não é um ajuste por mínimos quadrados. A diferença
+    aparece justamente no caso em que a figura é consultada: um valor extremo
+    inclina a reta dos mínimos quadrados o bastante para o resto dos pontos parecer
+    curvo, e o que se queria ver era o valor extremo. Quem a calcula é o
+    `normalidade.py`, porque escolher a reta é decisão estatística — aqui só se
+    desenha o que chegou.
+
+    Os pontos ficam **por cima** da reta (`zorder`), porque são eles o dado; a reta
+    é a régua. E ela é tinta apagada, não a cor da série, pela regra da casa: a
+    identidade vem do dado, e nenhum outro elemento usa a cor da série.
+    """
+    figura, eixo = _figura(_ALTURA_QQ)
+
+    eixo.scatter(
+        list(grafico.pontos_x),
+        list(grafico.pontos_y),
+        s=_PONTO_QQ,
+        color=SERIE,
+        linewidths=0,
+        zorder=3,
+    )
+
+    if grafico.reta is not None and grafico.pontos_x:
+        # Os pontos primeiro, e o limite do eixo lido **deles** antes de a reta
+        # entrar. A reta é uma referência infinita cortada nos extremos do eixo x,
+        # e nos extremos ela sai do intervalo de valores que a variável tem: em uma
+        # escala de dor de 0 a 5, a reta desce até −3 e o matplotlib alargava o eixo
+        # para caber, oferecendo `−2,5` de dor a quem lê. É o mesmo defeito que o
+        # eixo de `12,5 casos` da Fase 5, e a correção é a mesma — o eixo mostra o
+        # que a variável tem, e o que sobra da reta é cortado.
+        limites = eixo.get_ylim()
+        intercepto, inclinacao = grafico.reta
+        extremos = (min(grafico.pontos_x), max(grafico.pontos_x))
+        eixo.plot(
+            extremos,
+            [intercepto + inclinacao * x for x in extremos],
+            color=TINTA_APAGADA,
+            linewidth=1.0,
+            zorder=2,
+        )
+        eixo.set_ylim(limites)
+
+    eixo.set_xlabel(
+        grafico.rotulo_categoria or "quantis esperados da normal",
+        fontsize=8.5,
+        color=TINTA_SECUNDARIA,
+    )
+    eixo.set_ylabel(grafico.rotulo_valor, fontsize=8.5, color=TINTA_SECUNDARIA)
+    # `inteiro=False`: aqui o eixo carrega os valores da variável, e `12,5 kg`
+    # existe. A regra das marcas inteiras é do eixo que conta casos.
+    _eixo_de_valores(eixo, inteiro=False)
+    _titulo(eixo, grafico)
+    return figura
+
+
+# O registro das espécies.
+#
+# Aqui embaixo, e não no topo do arquivo, porque ele nomeia funções que precisam
+# já existir. É a única coisa do módulo que a espécie nova toca: escrever
+# `_dispersao` para a correlação e acrescentar uma linha aqui é o trabalho inteiro.
+_FORMAS = {
+    "barras": _barras,
+    "histograma": _histograma,
+    "colunas": _colunas,
+    "qq": _qq,
+}
+
+
 # Peças comuns
 
 
@@ -305,14 +426,22 @@ def _figura(altura: float):
     return figura, eixo
 
 
-def _eixo_de_valores(eixo) -> None:
+def _eixo_de_valores(eixo, inteiro: bool = True) -> None:
     """
     Grade horizontal fina e sólida, atrás das barras, e nenhuma moldura.
 
     O eixo conta casos, então as marcas são inteiras: `12,5 casos` não existe, e um
     eixo que oferece meio caso faz o leitor procurar o que ele significa.
+
+    `inteiro=False` é para o eixo que **não** conta casos. No Q-Q ele carrega os
+    valores da própria variável, onde `12,5 kg` existe e é o que se quer ler —
+    forçar marcas inteiras ali daria um eixo de `70, 71, 72` em uma variável que
+    vai de 70,1 a 72,4, e a nuvem inteira caberia entre duas marcas.
     """
-    eixo.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=6))
+    if inteiro:
+        eixo.yaxis.set_major_locator(MaxNLocator(integer=True, nbins=6))
+    else:
+        eixo.yaxis.set_major_locator(MaxNLocator(nbins=6))
     eixo.grid(axis="y", color=GRADE, linewidth=0.8, linestyle="-", zorder=1)
     eixo.set_axisbelow(True)
     for lado in ("top", "right"):
