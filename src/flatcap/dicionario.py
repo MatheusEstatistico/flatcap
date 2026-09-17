@@ -35,13 +35,40 @@ Seis colunas. As cinco primeiras são as do roteiro; `no_banco` é do FlatCap.
     variavel           o nome exato da coluna no banco. É a chave.
     rotulo             como a variável aparece nas tabelas e no relatório.
     tipo               categorica | numerica | data | ignorar
-    categorias_ordem   a ordem em que as categorias aparecem, separadas por `|`
+    categorias_ordem   a ordem das categorias, separadas por `|`, e o rótulo de
+                       cada uma depois de um `=` quando a coluna for de código
     faixas             os cortes das faixas etárias e afins, separados por `|`
     no_banco           sim | nao — recalculado a cada perfil; não é decisão sua
 
 **Colunas a mais que você acrescentar são preservadas.** Se você criar uma coluna
 `nota` para anotar o que foi combinado sobre cada variável, ela volta intacta na
 gravação seguinte, na mesma posição.
+
+### O rótulo de cada categoria, e por que ele mora dentro do `categorias_ordem`
+
+Metade dos bancos chega com a categórica codificada: `sexo` vale `1` e `2`, e o
+que cada um quer dizer está na cabeça do cliente. Até a 1.2.0 não havia onde
+escrever isso, e a tabela, o gráfico e o documento saíam com `1` e `2` — a lacuna
+mais visível da ferramenta para quem lê o relatório.
+
+    sexo;Sexo;categorica;1=Feminino|2=Masculino;;sim
+    escolaridade;Escolaridade;categorica;Fundamental|Médio|Superior;;sim
+
+A regra é uma linha: **`codigo=rótulo` quando houver `=`; sem `=`, o valor é o
+próprio rótulo.** A segunda linha acima é um dicionário de antes desta versão, e
+continua valendo sem mudar um caractere — a fusão nunca toca linha preenchida,
+então o rótulo entra quando você chegar nele, e não há migração.
+
+Dentro da mesma célula, e **não** em uma sétima coluna. Uma sétima coluna ligaria
+`1|2` a `Feminino|Masculino` pela posição, e reordenar uma sem a outra poria
+`Feminino` em cima da contagem de `2` — sem erro, sem aviso, e conferível só
+lendo o banco. Na mesma célula o desalinhamento é impossível: a ordem e o rótulo
+são a mesma decisão, tomada de uma vez, na frente do cliente.
+
+**Os rótulos não vêm do REDCap.** O `DataDictionary.xlsx` descreve o formulário
+de solicitação, não o banco do cliente — que chega como anexo e não tem
+dicionário nenhum. Eles são digitados por você, na reunião, olhando a tabela
+"Valores observados" do `perfil.md`, que existe exatamente para essa pergunta.
 
 ### Por que `;` entre campos e `|` dentro das listas
 
@@ -92,6 +119,15 @@ COLUNAS: tuple[str, ...] = (
 
 SEPARADOR_CAMPO = ";"
 SEPARADOR_LISTA = "|"
+
+# Entre o valor que está no banco e o texto que sai na tabela:
+# `categorias_ordem = 1=Feminino|2=Masculino`.
+#
+# Dentro da mesma célula do `categorias_ordem`, e não em uma sétima coluna. A
+# justificativa inteira está em `_categorias`, e o resumo é que uma sétima coluna
+# ligaria `1|2` a `Feminino|Masculino` **pela posição** — e reordenar uma sem a
+# outra trocaria os rótulos no relatório sem erro nenhum.
+SEPARADOR_ROTULO = "="
 CODIFICACAO = "utf-8-sig"
 
 # O BOM vai no texto, e não na codificação da gravação, porque quem grava é o
@@ -114,6 +150,11 @@ _CABECALHO_EXPLICATIVO = (
     "#   categorias_ordem   a ordem das categorias, separadas por |",
     "#   faixas             os cortes, separados por | (ex.: 0|18|30|45|60|120)",
     "#   no_banco           preenchido pelo FlatCap; nao = a coluna sumiu do banco",
+    "#",
+    "# Coluna de código? Escreva o que cada um quer dizer, com = :",
+    "#     categorias_ordem = 1=Feminino|2=Masculino",
+    "# Antes do = vai o valor como ele está no banco; depois, como ele deve sair",
+    "# na tabela, no gráfico e no relatório. Sem =, o valor é o próprio rótulo.",
     "#",
     "# Linha que você editar não é sobrescrita: o `perfil` só acrescenta variável",
     "# nova e recalcula `no_banco`. Coluna a mais que você criar é preservada.",
@@ -151,10 +192,17 @@ class Linha:
     variavel: str
     rotulo: str = ""
     tipo: str = CATEGORICA
+    # Os **códigos**, na ordem, do jeito que eles aparecem no banco. É por eles
+    # que a descritiva casa a tabela com a coluna; o rótulo é outra coisa e mora
+    # logo abaixo.
     categorias_ordem: tuple[str, ...] = ()
     faixas: tuple[str, ...] = ()
     no_banco: bool = True
     extras: tuple[tuple[str, str], ...] = ()
+    # `(código, rótulo)`, só para os códigos que ganharam um. Pares e não `dict`
+    # porque tudo o que circula no FlatCap é imutável, e um `dict` dentro de uma
+    # `dataclass` frozen é imutável só por educação.
+    rotulos_das_categorias: tuple[tuple[str, str], ...] = ()
 
     @property
     def analisavel(self) -> bool:
@@ -162,6 +210,31 @@ class Linha:
         Se esta variável entra na descritiva da Fase 5.
         """
         return self.no_banco and self.tipo != IGNORAR
+
+    @property
+    def tem_rotulos(self) -> bool:
+        return any(rotulo for _, rotulo in self.rotulos_das_categorias)
+
+    def rotulo_de(self, codigo: str) -> str:
+        """
+        Como esta categoria se escreve na tabela e no gráfico.
+
+        Cai no próprio código quando não há rótulo, e é isso que faz uma coluna
+        de texto (`Feminino|Masculino`) e uma coluna de código
+        (`1=Feminino|2=Masculino`) atravessarem o mesmo caminho: na primeira o
+        valor **é** o rótulo, e não há nada a resolver.
+
+        Quem chama não precisa saber qual das duas está lidando — que é a razão
+        de isto ser um método aqui e não um `if` em cada lugar que imprime.
+        """
+        for chave, rotulo in self.rotulos_das_categorias:
+            if chave == codigo:
+                # `1=` (o `=` digitado e o rótulo esquecido) cai no código. O
+                # par continua guardado, porque é ele que permite à descritiva
+                # avisar que você começou a escrever e não terminou — e é ele
+                # que faz o arquivo voltar ao disco do jeito que você o deixou.
+                return rotulo or codigo
+        return codigo
 
 
 @dataclass(frozen=True)
@@ -238,12 +311,17 @@ def ler_arquivo(caminho: Path) -> tuple[Linha, ...]:
             )
         vistas[variavel] = numero
 
+        codigos, rotulos = _categorias(
+            registro.get("categorias_ordem"), variavel, numero, caminho
+        )
+
         linhas.append(
             Linha(
                 variavel=variavel,
                 rotulo=(registro.get("rotulo") or "").strip(),
                 tipo=_tipo(registro.get("tipo"), variavel, numero, caminho),
-                categorias_ordem=_lista(registro.get("categorias_ordem")),
+                categorias_ordem=codigos,
+                rotulos_das_categorias=rotulos,
                 faixas=_faixas(registro.get("faixas"), variavel, numero, caminho),
                 no_banco=_booleano(registro.get("no_banco")),
                 extras=tuple(
@@ -467,6 +545,82 @@ def _lista(valor: str | None) -> tuple[str, ...]:
     return tuple(parte.strip() for parte in bruto.split(separador) if parte.strip())
 
 
+def _categorias(
+    valor: str | None, variavel: str, numero: int, caminho: Path
+) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
+    """
+    Separa `1=Feminino|2=Masculino` no código e no rótulo de cada categoria.
+
+    Devolve `(códigos, pares)`. Os códigos são o que a descritiva compara com a
+    coluna do banco; os pares são o que ela imprime. Uma célula sem `=` devolve
+    os códigos e nenhum par — e é assim que um dicionário escrito antes desta
+    versão continua valendo sem mudar um caractere.
+
+    ## Por que o rótulo mora aqui, e não em uma sétima coluna
+
+    Foi a decisão de 17/09/2026, e o argumento é o desalinhamento. Uma sétima
+    coluna guardaria `1|2` numa célula e `Feminino|Masculino` na outra, ligadas
+    **pela posição** — e no dia em que alguém reordenasse uma e esquecesse a
+    outra, o relatório sairia com `Feminino` em cima da contagem de `2`. Sem erro,
+    sem aviso, e conferível só lendo o banco.
+
+    Na mesma célula isso é impossível por construção: a ordem e o rótulo são a
+    mesma decisão, tomada de uma vez, na frente do cliente.
+
+    ## A divisão é no primeiro `=`, e só nele
+
+    Mesma regra que o `modelo._opcoes` usa para a primeira vírgula dos rótulos do
+    REDCap, e pelo mesmo motivo: `1=Sim = confirmado` é um rótulo com `=` dentro,
+    não duas categorias. Partir em todos devolveria um rótulo cortado no meio.
+
+    Raises:
+        DicionarioInvalidoError: código repetido na mesma célula, ou `=` sem
+            código antes dele.
+    """
+    partes = _lista(valor)
+    codigos: list[str] = []
+    rotulos: list[tuple[str, str]] = []
+    vistos: set[str] = set()
+
+    for parte in partes:
+        codigo, tem_rotulo, rotulo = parte.partition(SEPARADOR_ROTULO)
+        codigo, rotulo = codigo.strip(), rotulo.strip()
+
+        if not codigo:
+            raise DicionarioInvalidoError(
+                f"A variável `{variavel}` (linha {numero} de {caminho.name}) tem uma "
+                f"categoria que começa com `{SEPARADOR_ROTULO}`: `{parte}`.\n\n"
+                "Antes do sinal vai o valor como ele está **no banco**, e depois "
+                "vai como ele deve aparecer na tabela:\n"
+                f"  1{SEPARADOR_ROTULO}Feminino{SEPARADOR_LISTA}"
+                f"2{SEPARADOR_ROTULO}Masculino\n\n"
+                "Se a coluna do banco já tem o texto, não precisa de sinal nenhum:\n"
+                f"  Feminino{SEPARADOR_LISTA}Masculino",
+                caminho,
+            )
+
+        if codigo in vistos:
+            raise DicionarioInvalidoError(
+                f"A variável `{variavel}` (linha {numero} de {caminho.name}) declara a "
+                f"categoria `{codigo}` duas vezes.\n\n"
+                "Duas linhas para a mesma categoria é ambiguidade: a descritiva não "
+                "teria como saber qual rótulo vale, nem em qual das duas posições "
+                "contar os casos. Apague a errada.\n\n"
+                "Quando a intenção é **juntar** duas categorias em uma, o caminho é "
+                "outro: dois códigos diferentes com o mesmo rótulo — "
+                f"`1{SEPARADOR_ROTULO}Sim{SEPARADOR_LISTA}2{SEPARADOR_ROTULO}Sim` —, "
+                "e aí a descritiva avisa que você agrupou, em vez de recusar.",
+                caminho,
+            )
+
+        vistos.add(codigo)
+        codigos.append(codigo)
+        if tem_rotulo:
+            rotulos.append((codigo, rotulo))
+
+    return tuple(codigos), tuple(rotulos)
+
+
 def _faixas(valor: str | None, variavel: str, numero: int, caminho: Path) -> tuple[str, ...]:
     """
     As faixas precisam ser números em ordem crescente, e é aqui que isso é conferido.
@@ -541,6 +695,7 @@ def _com_no_banco(linha: Linha, presente: bool) -> Linha:
         rotulo=linha.rotulo,
         tipo=linha.tipo,
         categorias_ordem=linha.categorias_ordem,
+        rotulos_das_categorias=linha.rotulos_das_categorias,
         faixas=linha.faixas,
         no_banco=presente,
         extras=linha.extras,
@@ -560,6 +715,13 @@ def _colunas_de(linhas: list[Linha]) -> tuple[str, ...]:
     return COLUNAS + tuple(extras)
 
 
+def _escrever_categoria(linha: Linha, codigo: str) -> str:
+    for chave, rotulo in linha.rotulos_das_categorias:
+        if chave == codigo:
+            return f"{codigo}{SEPARADOR_ROTULO}{rotulo}"
+    return codigo
+
+
 def _campo(linha: Linha, nome: str) -> str:
     if nome == "variavel":
         return linha.variavel
@@ -568,7 +730,14 @@ def _campo(linha: Linha, nome: str) -> str:
     if nome == "tipo":
         return linha.tipo
     if nome == "categorias_ordem":
-        return SEPARADOR_LISTA.join(linha.categorias_ordem)
+        # Remonta `codigo=rotulo` para os que têm rótulo, e devolve o código
+        # sozinho para os que não têm. É o que faz o arquivo voltar ao disco
+        # exatamente como você o deixou — a promessa do cabeçalho da ficha vale
+        # aqui também, e um `=` que some na primeira gravação é uma edição sua
+        # desfeita pelo programa.
+        return SEPARADOR_LISTA.join(
+            _escrever_categoria(linha, codigo) for codigo in linha.categorias_ordem
+        )
     if nome == "faixas":
         return SEPARADOR_LISTA.join(linha.faixas)
     if nome == "no_banco":

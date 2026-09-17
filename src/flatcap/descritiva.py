@@ -584,13 +584,55 @@ def _descrever_categorica(
         if ausentes:
             avisos.append(
                 f"`{linha.variavel}`: {len(ausentes)} categoria(s) do dicionário sem "
-                f"nenhum caso nesta versão do banco ({', '.join(ausentes[:5])}). "
+                f"nenhum caso nesta versão do banco "
+                f"({', '.join(linha.rotulo_de(v) for v in ausentes[:5])}). "
                 "Ficaram na tabela com n = 0."
             )
     else:
         ordem = sorted(observadas, key=lambda valor: (-observadas[valor], valor))
 
-    pares = [(valor, observadas.get(valor, 0)) for valor in ordem]
+    # O código conta, o rótulo imprime.
+    #
+    # `ordem` são os valores como eles estão na coluna do banco — é por eles que
+    # `observadas` é consultada. O que vai para a tabela e para o gráfico é o
+    # rótulo, que cai no próprio código quando não há um. Uma coluna de texto
+    # atravessa isto sem nada acontecer: lá o valor **é** o rótulo.
+    contagem: dict[str, int] = {}
+    codigos_do_rotulo: dict[str, list[str]] = {}
+    for codigo in ordem:
+        nome_na_tabela = linha.rotulo_de(codigo)
+        contagem[nome_na_tabela] = contagem.get(nome_na_tabela, 0) + observadas.get(codigo, 0)
+        codigos_do_rotulo.setdefault(nome_na_tabela, []).append(codigo)
+
+    # Dois códigos com o mesmo rótulo viram **uma linha só, somada**. Não é
+    # tolerância a erro de digitação: é a promessa que o cabeçalho deste módulo
+    # faz desde a Fase 4 — *"reagrupar categorias vira editar uma célula, não
+    # caçar código"*. Escrever `1=Sim|2=Sim` é o jeito de dizer "some estes dois",
+    # e duas linhas chamadas «Sim» na mesma tabela seriam a promessa quebrada.
+    #
+    # O aviso abaixo é o que impede o agrupamento acidental de passar: ele nomeia
+    # quais códigos foram somados em qual rótulo, e aparece na tela e no manifesto.
+    juntados = {r: c for r, c in codigos_do_rotulo.items() if len(c) > 1}
+    if juntados:
+        quais = "; ".join(
+            f"{' + '.join(cs)} → «{r}»" for r, cs in list(juntados.items())[:5]
+        )
+        avisos.append(
+            f"`{linha.variavel}`: {len(juntados)} rótulo(s) reúnem mais de um código e "
+            f"foram somados em uma linha ({quais}). Se o agrupamento for o que você "
+            "quis, está certo; se dois rótulos ficaram iguais sem querer, corrija o "
+            f"`{ARQUIVO_DICIONARIO}`."
+        )
+
+    sem_rotulo = [codigo for codigo, rotulo in linha.rotulos_das_categorias if not rotulo]
+    if sem_rotulo:
+        avisos.append(
+            f"`{linha.variavel}`: {len(sem_rotulo)} categoria(s) com `=` e nada depois "
+            f"({', '.join(sem_rotulo[:5])}). Elas saíram na tabela com o próprio código. "
+            "Escreva o rótulo depois do sinal, ou apague o sinal."
+        )
+
+    pares = list(contagem.items())
 
     corpo = [
         (
@@ -618,6 +660,19 @@ def _descrever_categorica(
             f"% do total: denominador {total} (com os faltantes).",
             "ordem: "
             + ("do dicionário" if declaradas else "frequência decrescente"),
+        )
+        + (
+            (
+                "categorias rotuladas pelo dicionário: "
+                + ", ".join(
+                    f"{codigo} = {rotulo}"
+                    for codigo, rotulo in linha.rotulos_das_categorias
+                    if rotulo
+                )
+                + ".",
+            )
+            if linha.tem_rotulos
+            else ()
         ),
     )
 
@@ -638,6 +693,13 @@ def _descrever_categorica(
             "categorias": len(pares),
             "ordem": "dicionario" if declaradas else "frequencia",
             "declaradas": list(declaradas),
+            # O mapa vai para o manifesto de propósito: é ele que responde, seis
+            # meses depois, de onde saiu a palavra «Feminino» em uma tabela cuja
+            # coluna no banco só tem `1` e `2`.
+            "rotulos": {
+                codigo: rotulo for codigo, rotulo in linha.rotulos_das_categorias
+            },
+            "agrupadas": {rotulo: list(cs) for rotulo, cs in juntados.items()},
         },
         avisos=tuple(avisos),
     )
