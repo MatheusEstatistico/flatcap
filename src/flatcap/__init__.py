@@ -12,8 +12,9 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
     descritiva.py  obedece ao dicionário: conta, resume e monta as tabelas
+    normalidade.py testa a normalidade das numéricas (Shapiro-Wilk, forma, Q-Q)
     graficos.py    desenha os .png a partir das tabelas já calculadas
-    manifesto.py   escreve e lê o manifesto.json da descritiva
+    manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
 
@@ -66,6 +67,43 @@ sabe como uma pasta se chama. Pasta no formato antigo é reconhecida e
 diagnosticada, nos dois módulos que esbarram nela, com um texto só
 (`projeto.texto_da_migracao`) — a migração é manual, e de propósito: mover
 pasta do usuário é coisa que o FlatCap nunca fez sozinho.
+
+## 1.2.0 — a segunda análise, e o que ela cobrou
+
+A Fase 7 acrescenta um módulo (`normalidade.py`) e um comando, e o resto da
+versão é o preço de deixar de ter uma análise só. Quatro coisas mudaram de casa,
+todas na mesma direção de sempre — para baixo, para o módulo que é dono da
+pergunta:
+
+**`Tabela` e `Grafico` desceram para o `manifesto.py`.** Eles são o contrato de
+saída de **qualquer** análise, e moravam no módulo que importa o `pandas`. Deixá-los
+lá obrigaria toda análise nova a importar a descritiva, acoplando duas análises
+que não têm nada a ver uma com a outra. O `descritiva.py` reexporta os dois.
+
+**A `SEMENTE` desceu junto**, pelo mesmo motivo que `versao_vigente` e
+`formato_de_data` já tinham descido: é um valor que todo manifesto registra, e
+duas sementes em dois módulos é como duas rodadas do mesmo projeto deixam de ser
+reproduzíveis uma contra a outra.
+
+**As duas recusas do dicionário ficaram públicas no `descritiva.py`**, com a
+classe de erro como parâmetro. Duas regras da casa se cruzam ali: a conferência
+precisa ser **uma só** (senão um comando aceita o que o outro recusou) e o painel
+precisa levar o nome do comando que o usuário rodou. Passar a classe resolve as
+duas sem escolher entre elas.
+
+**O `manifesto.json` ganhou `analise` e `colunas`.** O primeiro diz de qual
+análise é a rodada, sem depender do nome da pasta. O segundo diz **quais colunas
+do banco** o item usou — e é ele que faz as conferências do relatório continuarem
+valendo quando um item não é uma variável, como a tabela de normalidade, que fala
+de todas de uma vez. O número de formato continua em `1`: os dois campos são
+aditivos e não produzem interpretação errada nenhuma em quem não os conhece.
+
+E uma que não mudou, contra a expectativa: **o `graficos.py` nunca escolheu a
+pasta.** O `desenhar` sempre recebeu o caminho como parâmetro, e por isso a
+normalidade escreve em `3. Análises/normalidade/` sem que uma linha dele mude. O
+que ele ganhou foi a espécie `qq` e um registro de espécies no lugar do
+`if/elif/else` — que, com mais de uma análise, desenhava espécie desconhecida como
+gráfico de colunas em silêncio.
 """
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
