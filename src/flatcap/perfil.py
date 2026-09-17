@@ -72,6 +72,7 @@ import pandas as pd
 from . import __version__
 from .banco import Banco, Leitura, abrir, formato_de_data
 from .dicionario import (
+    ARQUIVO_DICIONARIO,
     CATEGORICA,
     DATA,
     IGNORAR,
@@ -116,6 +117,12 @@ CODIGOS_VOLATEIS: frozenset[str] = frozenset(
         "sentinela_textual",
     }
 )
+
+# `categoria_sem_rotulo` é `CONFIRMAR` e **não** entra na lista acima, e a
+# classificação é deliberada: o que falta nessa coluna é uma decisão do cliente,
+# e os valores não mudam quando ele a toma — rotular `1` como «Feminino» não
+# apaga o `1` da coluna. Pôr o código aqui faria a ordem das categorias deixar de
+# ser proposta justamente nas colunas que mais precisam dela.
 
 _TITULOS = {
     CORRIGIR: "Corrigir antes de começar",
@@ -481,6 +488,53 @@ def _perfilar_coluna(serie: pd.Series, nome: object, posicao: int, linhas: int) 
 
     tipo, motivo = _sugerir(nome, serie, textos, unicos, faltantes, linhas)
     sugeridas = _categorias_sugeridas(tipo, categorias, unicos, tuple(achados))
+
+    # A coluna que precisa de rótulo, e o momento em que se descobre que ela
+    # precisa.
+    #
+    # `_sugerir` acabou de propor `categorica` para uma coluna que o leitor trouxe
+    # como número — é a regra dos "inteiros pequenos que se repetem", e ela acerta
+    # em cheio no código de 0/1 e na escala de 1 a 5. São exatamente as colunas em
+    # que a tabela, o gráfico e o documento saem com `0` e `1` se ninguém escrever
+    # o que eles querem dizer.
+    #
+    # Sem este achado, a sintaxe `1=Feminino` fica documentada no cabeçalho do
+    # `dicionario.csv` e ninguém descobre que ela existe. É a simetria da Fase 4
+    # mais uma vez: o perfil propõe, você decide, a análise obedece.
+    #
+    # `CONFIRMAR` e **não** em `CODIGOS_VOLATEIS`: o que falta aqui é uma decisão
+    # do cliente, e os valores não vão mudar quando ele a tomar — rotular `1` não
+    # apaga o `1` da coluna. Se entrasse na lista, a ordem das categorias deixaria
+    # de ser proposta justamente nas colunas que mais precisam dela.
+    # `unicos > 1` porque a coluna de um valor só já tem o achado dela
+    # (`coluna_constante`, que manda deixá-la fora das tabelas). Pedir um rótulo
+    # para ela seria mandar o usuário decidir o nome de uma categoria que não vai
+    # aparecer em lugar nenhum — e um detector que dispara onde não precisa é
+    # como a lista inteira passa a ser ignorada. Encontrado rodando.
+    if tipo == CATEGORICA and _e_numerica(serie) and categorias and unicos > 1:
+        codigos = ", ".join(valor for valor, _ in categorias[:LIMITE_EXEMPLOS])
+        exemplo = categorias[0][0]
+        achados.append(
+            Achado(
+                codigo="categoria_sem_rotulo",
+                gravidade=CONFIRMAR,
+                variavel=nome,
+                titulo=f"código sem rótulo: {len(categorias)} valor(es) numérico(s)",
+                detalhe=(
+                    "A coluna é numérica e vai ser tratada como categórica — é código, "
+                    "não quantidade. Do jeito que está, a tabela, o gráfico e o "
+                    f"relatório saem com `{exemplo}` no lugar do nome da categoria, e "
+                    "quem lê o documento não tem como saber o que isso quer dizer.\n"
+                    "Pergunte ao cliente o que cada código significa e escreva no "
+                    f"`{ARQUIVO_DICIONARIO}`, na coluna `categorias_ordem`, com `=`:\n"
+                    f"    {exemplo}=Feminino|… \n"
+                    "Sem o sinal, o valor continua sendo o próprio rótulo — que é o "
+                    "certo para as colunas que já vêm com o texto."
+                ),
+                exemplos=(codigos,),
+            )
+        )
+
     if tipo == CATEGORICA and not sugeridas and any("|" in valor for valor, _ in categorias):
         achados.append(
             Achado(
@@ -1243,7 +1297,7 @@ def texto_do_perfil(perfil: Perfil, fusao: Fusao) -> str:
         _md_avisos(perfil),
         _md_checklist(perfil),
         _md_variaveis(perfil),
-        _md_categoricas(perfil),
+        _md_categoricas(perfil, fusao),
         _md_numericas(perfil),
         _md_dicionario(perfil, fusao),
     ]
@@ -1384,10 +1438,16 @@ def _md_variaveis(perfil: Perfil) -> str:
     return "\n".join(linhas)
 
 
-def _md_categoricas(perfil: Perfil) -> str:
+def _md_categoricas(perfil: Perfil, fusao: Fusao) -> str:
     """
     Os valores observados de cada categórica, que é o que se olha para preencher
     `categorias_ordem`.
+
+    **É esta a tabela que se aponta na reunião para perguntar "o que é 1 e o que
+    é 2?".** Por isso ela ganhou a coluna `rótulo`: quando o dicionário já
+    responde, a resposta aparece do lado do valor, e a conferência com o cliente
+    vira ler a tabela em voz alta. Enquanto ele não responde, a coluna não existe
+    — uma coluna vazia em toda linha seria ruído em um documento impresso.
     """
     candidatas = [
         coluna
@@ -1397,23 +1457,51 @@ def _md_categoricas(perfil: Perfil) -> str:
     if not candidatas:
         return ""
 
+    do_dicionario = {linha.variavel: linha for linha in fusao.linhas}
+
     linhas = ["## Valores observados", ""]
     for coluna in candidatas:
         preenchidos = coluna.preenchidos or 1
+        no_dicionario = do_dicionario.get(coluna.nome)
+        rotulada = no_dicionario is not None and no_dicionario.tem_rotulos
+
         linhas.append(f"**`{coluna.nome}`** — {coluna.unicos} valor(es)")
         linhas.append("")
-        linhas.append("| valor | n | % dos preenchidos |")
-        linhas.append("|---|---:|---:|")
+        if rotulada:
+            linhas.append("| valor | rótulo | n | % dos preenchidos |")
+            linhas.append("|---|---|---:|---:|")
+        else:
+            linhas.append("| valor | n | % dos preenchidos |")
+            linhas.append("|---|---:|---:|")
+
         for valor, quantos in coluna.categorias:
             fatia = f"{quantos / preenchidos * 100:.1f}".replace(".", ",")
-            linhas.append(f"| {_celula(valor)} | {quantos} | {fatia}% |")
+            if rotulada:
+                rotulo = no_dicionario.rotulo_de(valor)
+                marcado = _celula(rotulo) if rotulo != valor else "*(sem rótulo)*"
+                linhas.append(
+                    f"| {_celula(valor)} | {marcado} | {quantos} | {fatia}% |"
+                )
+            else:
+                linhas.append(f"| {_celula(valor)} | {quantos} | {fatia}% |")
+
         if coluna.faltantes:
-            linhas.append(f"| *(vazio)* | {coluna.faltantes} | — |")
+            vazio = (
+                f"| *(vazio)* | — | {coluna.faltantes} | — |"
+                if rotulada
+                else f"| *(vazio)* | {coluna.faltantes} | — |"
+            )
+            linhas.append(vazio)
         linhas.append("")
 
     linhas += [
         "> Variáveis com mais de "
         f"{LIMITE_CATEGORIAS} valores distintos não são listadas por extenso.",
+        "",
+        "> Coluna de código sai com o número na tabela e no relatório enquanto "
+        "ninguém escrever o que ele quer dizer. O lugar de escrever é o "
+        f"`{ARQUIVO_DICIONARIO}`, em `categorias_ordem`, com `=`: "
+        "`1=Feminino|2=Masculino`.",
         "",
     ]
     return "\n".join(linhas)
