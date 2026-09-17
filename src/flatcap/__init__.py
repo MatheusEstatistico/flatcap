@@ -106,4 +106,4 @@ que ele ganhou foi a espécie `qq` e um registro de espécies no lugar do
 gráfico de colunas em silêncio.
 """
 
-__version__ = "1.2.0"
+__version__ = "1.3.1"
