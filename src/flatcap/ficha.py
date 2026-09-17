@@ -58,6 +58,7 @@ import tempfile
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
+from typing import Any
 
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
@@ -198,6 +199,19 @@ class Ficha:
     Os dois têm default vazio porque ficha criada antes deste campo existir
     continua abrindo. Vazio não é erro: é o que faz o documento sair com o
     marcador e o alerta `texto_ausente`, em vez de sair mais curto em silêncio.
+
+    `analises` é a terceira exceção, e entrou na Fase 7 por uma razão de outra
+    natureza: ela não é impressa, ela **dirige**. É a lista que o `flatcap novo`
+    grava vazia e que o cabeçalho da ficha promete desde a Fase 2 — *"o que foi
+    combinado na reunião. A Fase 7 lê esta lista para saber quais módulos rodar"*.
+    Ela entra na `Ficha` porque é a única coisa da ficha que **toda** camada de
+    cima consulta: é a ordem das seções do relatório quando há mais de uma rodada
+    na pasta.
+
+    Os parâmetros de cada análise — os pares da correlação, a lista de variáveis
+    da normalidade — **não** entram aqui. Eles são de um módulo só, e um campo na
+    `Ficha` por análise faria esta classe crescer a cada análise nova. Quem os lê é
+    o `bloco(raiz, chave)`, mais abaixo.
     """
 
     raiz: Path
@@ -209,6 +223,7 @@ class Ficha:
     dados: tuple[Versao, ...]
     finalidade: str = ""
     objetivos: str = ""
+    analises: tuple[str, ...] = ()
 
     @property
     def versao_redcap(self) -> Versao | None:
@@ -556,6 +571,77 @@ def ler(raiz: Path) -> Ficha:
         dados=_versoes(documento, caminho),
         finalidade=_texto(documento, "finalidade"),
         objetivos=_texto(documento, "objetivos"),
+        analises=_analises(documento),
+    )
+
+
+def bloco(raiz: Path, chave: str) -> Any:
+    """
+    O bloco cru de uma chave qualquer do `projeto.yaml`, ou `None`.
+
+    Existe porque **este é o único módulo do pacote que abre o `projeto.yaml`**, e
+    é bom que continue sendo. A Fase 7 pôs os parâmetros de cada análise na ficha —
+    `normalidade:` com a lista de variáveis, `correlacao:` com os pares —, e sem
+    esta função cada módulo de análise importaria o `ruamel` e viraria um segundo
+    leitor de YAML. No dia em que a implementação de YAML mudar (a decisão está em
+    aberto nas pendências do roteiro), quebrariam cinco lugares em vez de um.
+
+    Devolve tipos comuns de Python, e não os objetos do `ruamel`: eles são
+    subclasses de `dict` e `list` e funcionam do mesmo jeito, mas carregam junto os
+    comentários e a formatação do arquivo — e um módulo de análise que recebesse
+    isso poderia alterar a ficha sem querer, por uma linha que parece inofensiva.
+
+    O valor **não é validado aqui**. O formato do bloco é assunto de quem o usa:
+    o que é um par de variáveis para a correlação não é o que é uma lista de nomes
+    para a normalidade, e este módulo não tem como saber qual é qual. A recusa por
+    formato errado é de cada análise, com o nome dela no painel.
+
+    Raises:
+        FichaAusenteError, FichaInvalidaError
+    """
+    raiz = Path(raiz)
+    caminho = caminho_da_ficha(raiz)
+    if not caminho.exists():
+        raise FichaAusenteError(
+            f"A pasta {raiz.name} não tem {ARQUIVO_PROJETO}.", raiz
+        )
+
+    documento = _carregar_documento(caminho)
+    if not isinstance(documento, dict):
+        raise FichaInvalidaError(
+            f"{caminho} não contém um mapeamento de campos.", caminho
+        )
+    return _simples(documento.get(chave))
+
+
+def _simples(valor: Any) -> Any:
+    """
+    Converte o que o `ruamel` devolveu para `dict`, `list` e escalares comuns.
+    """
+    if isinstance(valor, dict):
+        return {str(chave): _simples(item) for chave, item in valor.items()}
+    if isinstance(valor, list):
+        return [_simples(item) for item in valor]
+    return valor
+
+
+def _analises(documento) -> tuple[str, ...]:
+    """
+    A lista `analises:`, com o que não for texto descartado.
+
+    Descarta em silêncio, e a escolha é deliberada. Esta lista é editada à mão, e
+    o estrago de uma entrada malformada é pequeno e local: a seção correspondente
+    não aparece na ordem pedida. Recusar a ficha inteira por causa dela travaria
+    `flatcap dados listar` e `flatcap relatorio` — comandos que não têm nada a ver
+    com a lista — por um erro de digitação em uma linha que nenhum deles lê.
+    """
+    bruto = documento.get("analises")
+    if not isinstance(bruto, list):
+        return ()
+    return tuple(
+        texto
+        for texto in (str(item).strip() for item in bruto if item is not None)
+        if texto
     )
 
 
