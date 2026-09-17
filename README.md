@@ -26,14 +26,14 @@ pip install -e ".[dev]"
 Copie `.env.example` para `.env` e preencha: 
 ```env
 REDCAP_API_URL=https://<servidor-institucional>/redcap/api/
-REDCAP_TOKEN=
-FLATCAP_ROOT=
+REDCAP_TOKEN=32caracteres
+FLATCAP_ROOT=pasta_local
 ```
 
 | Chave | Onde obter |
 |---|---|
 | `REDCAP_API_URL` | Página **API Playground** do projeto. **Não** é o link curto do survey. |
-| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. Precisa de permissão para exportar **registros, metadados e arquivos**. |
+| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. <br>Precisa de permissão para exportar **registros, metadados e arquivos**. |
 | `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. |
 --- 
 
