@@ -83,8 +83,6 @@ garante que a descritiva e o relatório falem da mesma versão.
 
 from __future__ import annotations
 
-import csv
-import io
 import math
 import re
 import sys
@@ -105,7 +103,6 @@ from .dicionario import (
     DATA,
     IGNORAR,
     NUMERICA,
-    SEPARADOR_CAMPO,
     Linha,
     caminho_do_dicionario,
 )
@@ -113,10 +110,14 @@ from .dicionario import ler as ler_dicionario
 from .ficha import Ficha, escrever_atomico
 from .ficha import ler as ler_ficha
 from .manifesto import (
+    ANALISE_DESCRITIVA,
     ARQUIVO_MANIFESTO,
+    SEMENTE,
     Artefato,
+    Grafico,
     ItemDoManifesto,
     Manifesto,
+    Tabela,
     texto_do_manifesto,
 )
 from .nomes import rotulo_do_projeto
@@ -125,9 +126,13 @@ from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA, anotar
 # Nada nesta fase sorteia coisa nenhuma — uma descritiva é contagem, e contagem
 # não tem aleatoriedade. A semente existe declarada e registrada no manifesto
 # assim mesmo, por dois motivos: o roteiro pede, e a Fase 7 (bootstrap, testes de
-# permutação, imputação) vai precisar de uma. Quando precisar, ela já está aqui,
-# com um valor só e escrito em todo manifesto já gerado.
-SEMENTE = 42
+# permutação, imputação) vai precisar de uma.
+#
+# Ela **desceu para o `manifesto.py`** na Fase 7 e é reexportada daqui, para que
+# nenhum chamador mude. O motivo está na docstring dela: é um valor que todo
+# manifesto registra, e uma segunda semente em um segundo módulo é como duas
+# rodadas do mesmo projeto deixam de ser reproduzíveis uma contra a outra. Mesma
+# manobra que `versao_vigente` e `formato_de_data` já fizeram.
 
 # Regras de apresentação. Todas com nome, aqui em cima, pelo mesmo motivo da Fase
 # 4: número solto no meio de uma função é decisão que ninguém consegue rever.
@@ -147,7 +152,6 @@ ROTULO_OUTRAS = "Outras"
 ROTULO_ABAIXO = "(abaixo da primeira faixa)"
 ROTULO_ACIMA = "(acima da última faixa)"
 
-_BOM = "﻿"  # o mesmo do `dicionario.csv`, e pela mesma razão: Excel pt-BR
 _NAO_ALFANUMERICO = re.compile(r"[^a-z0-9]+")
 _ESPACOS = re.compile(r"\s+")
 
@@ -204,72 +208,16 @@ class NadaParaAnalisarError(DescritivaError):
 # O que sai no disco
 
 
-@dataclass(frozen=True)
-class Tabela:
-    """
-    Uma tabela pronta para virar `.csv`. Texto, não `DataFrame`.
-
-    O conteúdo já vem montado como linhas de texto para que `executar_descritiva`
-    não decida mais nada e para que a simulação mostre exatamente o que seria
-    gravado — a mesma invariante do `texto_do_dicionario` da Fase 4: o texto é o
-    arquivo.
-    """
-
-    nome: str
-    especie: str
-    variavel: str
-    titulo: str
-    colunas: tuple[str, ...]
-    linhas: tuple[tuple[str, ...], ...]
-    notas: tuple[str, ...] = ()
-
-    def texto(self) -> str:
-        """
-        O arquivo inteiro, com o cabeçalho explicativo em linhas de comentário.
-
-        O comentário existe para o dia em que alguém abrir `freq_sexo.csv` sozinho,
-        fora de qualquer contexto, e precisar saber de qual variável e de qual
-        denominador ele fala.
-        """
-        buffer = io.StringIO(newline="")
-        escritor = csv.writer(
-            buffer,
-            delimiter=SEPARADOR_CAMPO,
-            lineterminator="\n",
-            quoting=csv.QUOTE_MINIMAL,
-        )
-        escritor.writerow(list(self.colunas))
-        for linha in self.linhas:
-            escritor.writerow(list(linha))
-
-        cabecalho = [f"# {self.titulo}", f"# variável: {self.variavel}"]
-        cabecalho += [f"# {nota}" for nota in self.notas]
-        return f"{_BOM}" + "\n".join(cabecalho) + "\n" + buffer.getvalue()
-
-
-@dataclass(frozen=True)
-class Grafico:
-    """
-    Um gráfico decidido e ainda não desenhado.
-
-    Carrega os números já calculados — as contagens das barras, as bordas e as
-    alturas do histograma —, e não a coluna do banco. Duas consequências: o
-    `graficos.py` não recalcula nada (e por isso não pode discordar da tabela ao
-    lado), e o plano não segura o banco inteiro na memória por variável.
-    """
-
-    nome: str
-    especie: str  # barras | histograma | colunas
-    variavel: str
-    titulo: str
-    subtitulo: str = ""
-    rotulo_categoria: str = ""
-    rotulo_valor: str = "n"
-    categorias: tuple[str, ...] = ()
-    valores: tuple[float, ...] = ()
-    rotulos: tuple[str, ...] = ()
-    bordas: tuple[float, ...] = ()
-    contagens: tuple[int, ...] = ()
+# `Tabela` e `Grafico` moram no `manifesto.py` desde a Fase 7, e são reexportados
+# daqui — `from .descritiva import Tabela` continua funcionando.
+#
+# Eles são o **contrato de saída de qualquer análise**, e não da descritiva: a
+# normalidade escreve `.csv` e desenha `.png` com as mesmas duas classes. Deixá-los
+# aqui obrigaria toda análise nova a importar o módulo da descritiva — acoplando
+# duas análises que não têm nada a ver uma com a outra, e fazendo a segunda pagar
+# meio segundo de `pandas` só para conhecer uma `dataclass` de texto. O
+# `manifesto.py` já era dono do `Artefato`, não importa `pandas` nem `matplotlib`,
+# e é o módulo que a Fase 6 lê para montar o documento: é o lugar.
 
 
 @dataclass(frozen=True)
@@ -1164,11 +1112,18 @@ def montar_manifesto(
             artefatos=_artefatos(v, com_graficos),
             detalhes=dict(v.detalhes),
             avisos=v.avisos,
+            # Uma seção da descritiva usa exatamente uma coluna, e é por isso que
+            # o campo parecia redundante até existir a segunda análise. Ele é
+            # escrito aqui porque a conferência do relatório passou a perguntar
+            # "quais colunas esta rodada usou?" a **toda** rodada — e uma pergunta
+            # que só algumas respondem é uma pergunta que não se pode fazer.
+            colunas=(v.variavel,),
         )
         for v in descritiva.variaveis
     )
 
     return Manifesto(
+        analise=ANALISE_DESCRITIVA,
         flatcap=__version__,
         gerado_em=descritiva.quando,
         projeto={
@@ -1268,14 +1223,40 @@ def _ambiente(com_graficos: bool) -> dict[str, Any]:
 # Recusas
 
 
-def _dicionario_do_projeto(raiz: Path, banco: Banco) -> tuple[Linha, ...]:
+def conferir_dicionario(
+    raiz: Path,
+    banco: Banco,
+    ausente: type[Exception] = DicionarioAusenteError,
+    desatualizado: type[Exception] = DicionarioDesatualizadoError,
+    analise: str = "a descritiva",
+) -> tuple[Linha, ...]:
     """
     Lê o `dicionario.csv` e confere que ele descreve **este** banco.
+
+    Pública desde a Fase 7, e com as duas classes de erro como parâmetro. A razão
+    é que duas regras da casa se cruzam aqui:
+
+    * **uma implementação só.** Toda análise obedece ao mesmo dicionário e
+      pergunta a mesma coisa sobre o mesmo banco. Duas cópias desta conferência é
+      como um comando aceita rodar sobre um dicionário que o outro recusou — e aí
+      o relatório monta uma seção sobre variáveis que a outra seção não tem.
+    * **um erro por módulo.** A CLI captura `DescritivaError` no comando
+      `descritiva` e `NormalidadeError` no comando `normalidade`, e é isso que faz
+      o painel sair com o título certo. Se esta função levantasse sempre
+      `DescritivaError`, `flatcap normalidade` abriria um painel escrito
+      "Descritiva" — sobre um comando que o usuário não rodou.
+
+    Passar a classe resolve as duas sem escolher entre elas. O default é o da
+    descritiva, então o chamador antigo não mudou.
+
+    O `analise` entra só no texto, e entra porque a frase muda de dono: "a
+    descritiva não tem o que obedecer" é a mesma informação que "a normalidade não
+    tem o que obedecer", e nenhuma das duas deve dizer o nome da outra.
     """
     linhas = ler_dicionario(raiz)
     if not linhas:
-        raise DicionarioAusenteError(
-            f"Este projeto não tem {ARQUIVO_DICIONARIO}, e a descritiva não tem o que "
+        raise ausente(
+            f"Este projeto não tem {ARQUIVO_DICIONARIO}, e {analise} não tem o que "
             "obedecer.\n"
             f"Esperado em: {caminho_do_dicionario(raiz)}\n\n"
             "O dicionário é escrito pelo `flatcap perfil` e preenchido por você na "
@@ -1289,19 +1270,29 @@ def _dicionario_do_projeto(raiz: Path, banco: Banco) -> tuple[Linha, ...]:
     if novas:
         quais = "\n".join(f"  {nome}" for nome in novas[:20])
         resto = f"\n  ... e mais {len(novas) - 20}" if len(novas) > 20 else ""
-        raise DicionarioDesatualizadoError(
+        raise desatualizado(
             f"O banco tem {len(novas)} coluna(s) que o {ARQUIVO_DICIONARIO} "
             f"desconhece:\n{quais}{resto}\n\n"
-            "A descritiva obedece ao dicionário e a mais nada — se ela rodasse assim, "
-            "essas colunas ficariam fora do relatório sem que nada na saída dissesse "
-            "que elas existem.\n"
+            f"{analise.capitalize()} obedece ao dicionário e a mais nada — se ela "
+            "rodasse assim, essas colunas ficariam fora do relatório sem que nada na "
+            "saída dissesse que elas existem.\n"
             "Rode `flatcap perfil --sim`: a fusão acrescenta as variáveis novas e não "
             "toca em nenhuma linha que você já preencheu."
         )
     return linhas
 
 
-def _recusar_incompativeis(quadro: pd.DataFrame, analisaveis: Sequence[Linha]) -> None:
+# O nome privado que o resto deste módulo usa. Mesma manobra do
+# `perfil._formato_de_data`: a função mudou de visibilidade, e nenhum chamador
+# interno mudou de linha.
+_dicionario_do_projeto = conferir_dicionario
+
+
+def recusar_incompativeis(
+    quadro: pd.DataFrame,
+    analisaveis: Sequence[Linha],
+    erro: type[Exception] = VariavelIncompativelError,
+) -> None:
     """
     Recusa o comando inteiro quando o dicionário promete um tipo que a coluna não tem.
 
@@ -1315,6 +1306,18 @@ def _recusar_incompativeis(quadro: pd.DataFrame, analisaveis: Sequence[Linha]) -
     correção é dele, e a Fase 3 tem o lugar certo para a versão corrigida entrar.
     Se a coluna não vai ser corrigida, o dicionário aceita `categorica` ou
     `ignorar` — as duas são decisões suas, escritas, e nenhuma delas é silenciosa.
+
+    Pública desde a Fase 7, e com a classe de erro como parâmetro, pelo mesmo
+    motivo do `conferir_dicionario` acima: a conferência precisa ser uma só e o
+    painel precisa levar o nome do comando que o usuário rodou. Se a descritiva
+    recusasse `peso` e a normalidade a aceitasse, o relatório sairia com um teste
+    de normalidade sobre uma coluna que nenhuma tabela descreve.
+
+    **Cada análise passa as variáveis que ela vai tocar**, e é por isso que a
+    função recebe a lista em vez de ler o dicionário por conta própria. A
+    normalidade só usa as `numerica`, então uma coluna `data` com dois formatos
+    misturados — que recusa a descritiva — não bloqueia um teste que nunca a
+    abriria. A regra é a mesma; o escopo é de quem chama.
     """
     problemas: list[tuple[str, str, list[str]]] = []
 
@@ -1351,7 +1354,10 @@ def _recusar_incompativeis(quadro: pd.DataFrame, analisaveis: Sequence[Linha]) -
                 )
 
     if problemas:
-        raise VariavelIncompativelError(_mensagem_incompativel(problemas))
+        raise erro(_mensagem_incompativel(problemas))
+
+
+_recusar_incompativeis = recusar_incompativeis
 
 
 def _mensagem_incompativel(problemas: list[tuple[str, str, list[str]]]) -> str:
@@ -1405,8 +1411,8 @@ def _motivo_de_fora(linha: Linha) -> str:
 # Arquivamento
 
 
-def _arquivamento(
-    raiz: Path, pasta: Path, quando: datetime
+def arquivamento(
+    raiz: Path, pasta: Path, quando: datetime, analise: str = PASTA_DESCRITIVA
 ) -> tuple[Path, Path] | None:
     """
     Onde a rodada anterior vai parar, se houver uma.
@@ -1419,17 +1425,27 @@ def _arquivamento(
 
     O nome carrega data e hora porque duas rodadas no mesmo dia são o caso comum —
     você roda, olha, corrige o dicionário e roda de novo.
+
+    Pública desde a Fase 7, com o nome da análise como parâmetro: a regra de
+    arquivar é do desenho da pasta e vale para qualquer rodada, e o prefixo
+    `descritiva_` era o único pedaço dela que sabia de qual análise se tratava.
+    Com o parâmetro, `normalidade_2026-09-17_1500/` sai da mesma função — e a
+    pasta `2. Versões antigas/` continua se lendo de cima para baixo, com o nome
+    da análise na frente da data.
     """
     if not pasta.is_dir() or not any(pasta.iterdir()):
         return None
 
-    base = raiz / PASTA_ANTIGAS / f"{PASTA_DESCRITIVA}_{quando:%Y-%m-%d_%H%M}"
+    base = raiz / PASTA_ANTIGAS / f"{analise}_{quando:%Y-%m-%d_%H%M}"
     destino = base
     sufixo = 2
     while destino.exists():
         destino = base.with_name(f"{base.name}_{sufixo}")
         sufixo += 1
     return pasta, destino
+
+
+_arquivamento = arquivamento
 
 
 def _acao_do_historico(plano: PlanoDescritiva) -> str:
@@ -1562,13 +1578,17 @@ def _contar_periodos(datas: pd.Series, passo: str) -> list[tuple[str, int]]:
 # Formatação
 
 
-def _numero(valor: float | None, casas: int = CASAS_RESUMO) -> str:
+def numero(valor: float | None, casas: int = CASAS_RESUMO) -> str:
     """
     Número no formato brasileiro, sem separador de milhar.
 
     Sem milhar de propósito: `1.234,5` numa célula é a forma mais fácil de um
     número virar texto na volta, e estes arquivos existem para serem lidos de volta
     — pela Fase 6 e por você, no Excel.
+
+    Pública desde a Fase 7 pelo mesmo motivo do `tamanho_legivel` do `projeto.py`:
+    dois formatadores diferentes para a mesma grandeza é como um relatório sai com
+    `20,5` em uma tabela e `20.5` na seguinte, na mesma página.
     """
     if valor is None:
         return "—"
@@ -1580,6 +1600,9 @@ def _numero(valor: float | None, casas: int = CASAS_RESUMO) -> str:
     if "." in texto:
         texto = texto.rstrip("0").rstrip(".")
     return texto.replace(".", ",")
+
+
+_numero = numero
 
 
 def _percentual(parte: float, total: float) -> str:
@@ -1651,7 +1674,7 @@ def _encurtar(texto: str, limite: int = 40) -> str:
     return limpo if len(limpo) <= limite else limpo[: limite - 1] + "…"
 
 
-def _slug(nome: str, usados: set[str]) -> str:
+def slug(nome: str, usados: set[str]) -> str:
     """
     O pedaço do nome do arquivo que vem da variável.
 
@@ -1664,6 +1687,11 @@ def _slug(nome: str, usados: set[str]) -> str:
     Colisão (`Idade (anos)` e `idade_anos` dão o mesmo pedaço) resolve com sufixo
     numérico, na ordem das colunas do banco. É o `manifesto.json` que diz qual
     arquivo é de qual variável — e é por isso que ele existe.
+
+    Pública desde a Fase 7: duas análises escrevendo `hist_idade.png` e
+    `qq_idade_anos.png` para a mesma coluna, cada uma com a sua regra de limpeza,
+    é como um `.png` deixa de ser encontrável pelo nome da variável que o gerou.
+    O `usados` é por rodada — o desempate vale dentro de uma pasta, não entre elas.
     """
     limpo = unicodedata.normalize("NFKD", str(nome or "")).lower()
     limpo = "".join(c for c in limpo if not unicodedata.combining(c))
@@ -1677,3 +1705,6 @@ def _slug(nome: str, usados: set[str]) -> str:
         sufixo += 1
     usados.add(candidato)
     return candidato
+
+
+_slug = slug
