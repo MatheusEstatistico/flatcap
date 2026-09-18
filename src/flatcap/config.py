@@ -26,11 +26,11 @@ dizer o que fazer.
 CHAVES: dict[str, str] = {
     "REDCAP_API_URL": (
         "URL da API do REDCap, no formato https://<servidor>/redcap/api/ "
-        "(NÃO É O LINK DO SERVEY). Veja a página 'API Playground' do projeto."
+        "(NÃO É O LINK DO SURVEY). Veja a página 'API Playground' do projeto."
     ),
     "REDCAP_TOKEN": (
-        "Token da API, obtido no meu 'API' do projeto do REDCap. "
-        "Preciisa ter permissão de exportar registros medatados e arquivos."
+        "Token da API, obtido no menu 'API' do projeto do REDCap. "
+        "Precisa ter permissão de exportar registros, metadados e arquivos."
     ),
     "FLATCAP_ROOT": (
         "Caminho absoluto da pasta onde ficam os diretórios "
@@ -43,7 +43,7 @@ class ConfigError(RuntimeError):
     """
     Configuração ausente ou inválida!
 
-    Erro próprio (e não ValueERror genérico) para que a CLI possa capturá-lo e
+    Erro próprio (e não ValueError genérico) para que a CLI possa capturá-lo e
     transformar em mensagem amigável, sem engolir bugs de verdade.
     """
 
@@ -77,7 +77,7 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
             de propósito — um caminho digitado errado deve dar erro, não virar uma
             pasta vazia silenciosa em lugar nenhum.
 
-    Raíses:
+    Raises:
         ConfigError: com a lista do que falta e por quê cada item importa.
     """
     caminho_env = _localizar_env(env_file)
@@ -126,7 +126,7 @@ def _validar_api_url(valor: str) -> str:
     """
     if "redcap.link" in valor:
         raise ConfigError(
-            "REDCAP_API_URL aponta para 'redcap.link', é o link do syrvey, não o endpoint da API.\n"
+            "REDCAP_API_URL aponta para 'redcap.link', é o link do survey, não o endpoint da API.\n"
             "Use o formato 'https://<servidor>/redcap/api/'."
         )
     if not valor.startswith(("http://", "https://")):
@@ -138,7 +138,7 @@ def _validar_api_url(valor: str) -> str:
 
 def _validar_root(valor: str, criar: bool = False) -> Path:
     """
-    Expande `~`, resolve o caminho e confirma que da para escrevê-lo.
+    Expande `~`, resolve o caminho e confirma que dá para escrevê-lo.
     """
     root = Path(valor).expanduser()
 
@@ -151,7 +151,7 @@ def _validar_root(valor: str, criar: bool = False) -> Path:
     if not root.exists():
         if not criar:
             raise ConfigError(
-                f"FLATCAP_ROOT não exisite: {root}.\n"
+                f"FLATCAP_ROOT não existe: {root}.\n"
                 "Confira se o caminho está correto ou se a nuvem está montada"
             )
         root.mkdir(parents = True, exist_ok = True)
@@ -174,7 +174,7 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
     """
     Monta o texto do erro de chaves ausentes, com o próximo passo explícito.
     """
-    linhas = ["Configuração incompleta. Fatam:", ""]
+    linhas = ["Configuração incompleta. Faltam:", ""]
     linhas += [f"{chave}\n {CHAVES[chave]}" for chave in faltando]
 
     if caminho_env:
@@ -182,6 +182,6 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
         linhas.append("Preencha as chaves acima novamente e reinicie o FlatCap.")
     else:
         linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
-        linhas.append("Crie aquivo .env copiando o modelo versionado:")
+        linhas.append("Crie o arquivo .env copiando o modelo versionado:")
         linhas.append("     cp .env.example .env")
     return "\n".join(linhas)
