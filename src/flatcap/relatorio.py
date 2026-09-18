@@ -28,11 +28,28 @@ perguntas que não precisam dele.
 
 ## O que este módulo decide
 
-**De qual rodada o documento fala.** A vigente, em `3. Análises/descritiva/`. Uma
-rodada arquivada em `2. Versões antigas/` continua legível pelo `manifesto.ler`,
-mas não é o que este comando monta: o relatório é o da descritiva de agora.
+**De quais rodadas o documento fala.** De **todas** as que estiverem em
+`3. Análises/*/` com um `manifesto.json` dentro. Não há nome de pasta fixo no
+código: a descritiva, a normalidade e a análise que vier depois entram pelo
+mesmo caminho, e o comando que a escreveu não precisa dizer nada a este módulo.
+Uma rodada arquivada em `2. Versões antigas/` continua legível pelo
+`manifesto.ler`, mas não é o que este comando monta: o relatório é o das
+rodadas de agora.
 
-**Se ela ainda descreve o que está na pasta.** Quatro conferências, e nenhuma
+Foi este o buraco que a Fase 7 abriu e que a 1.3.1 fecha. O `flatcap
+normalidade` escrevia `normalidade.csv` e os `qq_*.png` no disco, o relatório
+lia uma pasta de nome fixo, e nada disso chegava ao `.docx` — sem erro, sem
+aviso, com o comando saindo com código 0 nas duas pontas.
+
+**Em que ordem.** Na da lista `analises:` do `projeto.yaml`, que é o que foi
+combinado na reunião — a ficha promete isso desde a Fase 2 e ninguém lia. O que
+não estiver na lista entra depois, na `ORDEM_PADRAO_DAS_ANALISES` do
+`manifesto.py`, e o que não estiver em nenhuma das duas entra no fim, em ordem
+alfabética. Análise escrita na ficha e sem rodada no disco não é erro: vira um
+aviso no terminal, porque quase sempre é a análise que você combinou e ainda
+não rodou.
+
+**Se elas ainda descrevem o que está na pasta.** Quatro conferências, e nenhuma
 delas recusa o comando — a decisão da fase foi **gerar com o aviso dentro do
 documento**:
 
@@ -40,7 +57,7 @@ documento**:
     * o arquivo do banco foi alterado no disco depois de registrado;
     * o `dicionario.csv` mudou depois da rodada (variável nova, tipo trocado,
       rótulo reescrito, faixas diferentes);
-    * um artefato listado no manifesto não está mais na pasta.
+    * um artefato listado em algum manifesto não está mais na pasta.
 
 Cada uma vira um `Alerta`, e o `Alerta` viaja para dentro do `.docx`, logo abaixo
 da identificação. Um aviso que fica só no terminal é um aviso que ninguém lê
@@ -87,6 +104,7 @@ from __future__ import annotations
 import csv
 import io
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -97,28 +115,34 @@ from .dicionario import ARQUIVO_DICIONARIO
 from .dicionario import ler as ler_dicionario
 from .ficha import Ficha, Versao, versao_vigente
 from .ficha import ler as ler_ficha
-from .manifesto import ARQUIVO_MANIFESTO, Manifesto
+from .manifesto import (
+    ANALISE_DESCRITIVA,
+    ARQUIVO_MANIFESTO,
+    ORDEM_PADRAO_DAS_ANALISES,
+    ItemDoManifesto,
+    Manifesto,
+)
 from .manifesto import ler as ler_manifesto
 from .nomes import SEPARADOR, sanitizar
 from .projeto import (
     ARQUIVO_PROJETO,
+    ARQUIVO_TEMPLATE,
     PASTA_ANALISES,
     PASTA_ANTIGAS,
-    PASTA_DESCRITIVA,
     anotar,
+    pastas_das_analises,
 )
 
 PREFIXO_RELATORIO = "Relatorio_"
 
 TITULO_PADRAO = "Relatório Estatístico"
 
-# O mesmo nome que `documento.ARQUIVO_TEMPLATE`, repetido aqui porque importar o
-# `documento.py` no topo traria o `python-docx` junto — e a simulação deste
-# comando não escreve documento nenhum. É a única duplicação deliberada do
-# módulo; a limpeza natural é a constante descer para o `projeto.py`, que é o
-# dono do desenho da pasta, e o `documento.py` reexportar o nome — o mesmo
-# caminho que `versao_vigente` e `PASTA_DESCRITIVA` já fizeram.
-_ARQUIVO_TEMPLATE = "template.docx"
+# `ARQUIVO_TEMPLATE` vem do `projeto.py`, e não mais escrito aqui uma segunda
+# vez. A duplicação existia porque importar o `documento.py` no topo traria o
+# `python-docx` junto, e a simulação deste comando não escreve documento nenhum;
+# a constante desceu para o dono do desenho da pasta, que é o mesmo caminho que
+# `versao_vigente` e `PASTA_DESCRITIVA` já tinham feito. O `documento.py`
+# reexporta o nome, então quem o importava de lá não mudou.
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -161,14 +185,22 @@ class RelatorioError(RuntimeError):
     """
 
 
-class DescritivaAusenteError(RelatorioError):
+class AnaliseAusenteError(RelatorioError):
     """
-    O projeto não tem uma rodada de descritiva para relatar.
+    O projeto não tem nenhuma rodada de análise para relatar.
 
     É a única recusa desta fase, e ela não é uma escolha entre gerar e não gerar:
-    sem manifesto não há o que montar. Todas as outras divergências viram aviso
-    dentro do documento.
+    sem manifesto nenhum não há o que montar. Todas as outras divergências viram
+    aviso dentro do documento.
+
+    Chamava-se `DescritivaAusenteError` quando a descritiva era a única análise
+    que existia. O nome antigo continua apontando para esta classe, logo abaixo:
+    ele está em `except` de quem chama, e um `raise` que nenhum `except` pega é
+    um traceback na cara do usuário.
     """
+
+
+DescritivaAusenteError = AnaliseAusenteError
 
 
 class TabelaIlegivelError(RelatorioError):
@@ -260,6 +292,24 @@ class Secao:
 
 
 @dataclass(frozen=True)
+class Rodada:
+    """
+    Uma rodada de análise encontrada em `3. Análises/`, já lida.
+
+    O nome vem do campo `analise` do manifesto, e não do nome da pasta: nome de
+    pasta é o que o usuário renomeia, e é ele que teria de bater com a lista
+    `analises:` da ficha para a ordem do documento funcionar. A pasta entra só
+    como o lugar onde os artefatos moram — e como o nome que sobra quando um
+    manifesto antigo não declara a análise dele.
+    """
+
+    analise: str
+    pasta: Path
+    manifesto: Manifesto
+    secoes: tuple[Secao, ...] = ()
+
+
+@dataclass(frozen=True)
 class ForaDoRelatorio:
     """
     Uma variável do dicionário que não gerou nada, e por quê.
@@ -281,6 +331,10 @@ class Relatorio:
     """
 
     ficha: Ficha
+    # O manifesto que responde pelo documento quando a pergunta é uma só — a
+    # data da rodada nas propriedades do `.docx`, o banco no cabeçalho do
+    # terminal. É o da descritiva quando ela existe; ver `_manifesto_principal`.
+    # As rodadas todas estão em `rodadas`.
     manifesto: Manifesto
     titulo: str
     secoes: tuple[Secao, ...]
@@ -288,11 +342,22 @@ class Relatorio:
     fora: tuple[ForaDoRelatorio, ...] = ()
     alertas: tuple[Alerta, ...] = ()
     avisos: tuple[str, ...] = ()
-    quando: datetime = None  # type: ignore[assignment]
+    # Sem `type: ignore`: o campo tem default e o default é `None`, então o tipo
+    # é `datetime | None`. Declarar `datetime` e atribuir `None` era pedir ao
+    # verificador para não olhar exatamente a linha em que ele estava certo.
+    quando: datetime | None = None
+    rodadas: tuple[Rodada, ...] = ()
 
     @property
     def raiz(self) -> Path:
         return self.ficha.raiz
+
+    @property
+    def analises(self) -> tuple[str, ...]:
+        """
+        As análises que entraram no documento, na ordem em que entraram.
+        """
+        return tuple(rodada.analise for rodada in self.rodadas)
 
     @property
     def subtitulo(self) -> str:
@@ -374,7 +439,7 @@ def preparar_relatorio(
     titulo: str = TITULO_PADRAO,
 ) -> PlanoRelatorio:
     """
-    Lê a rodada da descritiva e monta o documento inteiro. Não escreve nada.
+    Lê as rodadas de análise da pasta e monta o documento inteiro. Não escreve nada.
 
     Args:
         raiz: a pasta do projeto (a que tem o `projeto.yaml`).
@@ -387,7 +452,7 @@ def preparar_relatorio(
 
     Raises:
         FichaError: a ficha do projeto não abre.
-        DescritivaAusenteError: não há rodada para relatar.
+        AnaliseAusenteError: não há rodada nenhuma para relatar.
         ManifestoInvalidoError: o `manifesto.json` não abre ou é de formato novo.
         DicionarioInvalidoError: o `dicionario.csv` que está lá não é interpretável.
         TabelaIlegivelError: um `.csv` da rodada não abre.
@@ -397,35 +462,44 @@ def preparar_relatorio(
     quando = agora or datetime.now()
 
     ficha = ler_ficha(raiz)
-    pasta = raiz / PASTA_ANALISES / PASTA_DESCRITIVA
-    manifesto = _manifesto_da_rodada(pasta)
+    rodadas, ausentes, sem_rodada = _rodadas(raiz, ficha)
 
     alertas: list[Alerta] = []
     avisos: list[str] = []
 
-    secoes, ausentes = _secoes(pasta, manifesto)
     if ausentes:
         quais = ", ".join(f"`{nome}`" for nome in ausentes[:6])
         resto = f" e mais {len(ausentes) - 6}" if len(ausentes) > 6 else ""
         alertas.append(
             Alerta(
                 codigo="artefato_ausente",
-                titulo=f"{len(ausentes)} arquivo(s) da descritiva não estão na pasta",
+                titulo=f"{len(ausentes)} arquivo(s) das análises não estão na pasta",
                 detalhe=(
-                    f"O manifesto lista {quais}{resto}, e o arquivo não está em "
-                    f"{PASTA_ANALISES}/{PASTA_DESCRITIVA}/. O documento saiu sem essa "
-                    "tabela ou figura. Rode `flatcap descritiva` de novo para refazer "
-                    "a rodada inteira."
+                    f"O manifesto da rodada lista {quais}{resto}, e o arquivo não "
+                    f"está em {PASTA_ANALISES}/. O documento saiu sem essa tabela ou "
+                    "figura. Rode a análise de novo para refazer a rodada inteira."
                 ),
             )
         )
 
-    alertas += _conferir_banco(raiz, ficha, manifesto, conferir)
-    alerta_dicionario, aviso_dicionario = _conferir_dicionario(raiz, manifesto)
+    alertas += _conferir_banco(raiz, ficha, rodadas, conferir)
+    alerta_dicionario, aviso_dicionario = _conferir_dicionario(raiz, rodadas)
     if alerta_dicionario is not None:
         alertas.append(alerta_dicionario)
     if aviso_dicionario:
         avisos.append(aviso_dicionario)
+
+    # Análise combinada na reunião e ainda não rodada. Aviso de terminal, e não
+    # `Alerta`: quem precisa saber é você, agora, antes de enviar — e o que está
+    # escrito no documento continua verdadeiro sem ela. Pôr isto dentro do
+    # `.docx` seria contar ao cliente uma combinação que é sua com ele.
+    if sem_rodada:
+        avisos.append(
+            f"A lista `analises:` do {ARQUIVO_PROJETO} pede "
+            f"{_analises_em_texto(sem_rodada)}, e não há rodada dessa(s) análise(s) "
+            f"em {PASTA_ANALISES}/. O documento saiu sem essa(s) seção(ões) — rode a "
+            "análise antes de gerar o relatório, ou tire o nome da lista."
+        )
 
     # Por último de propósito: os quatro alertas acima falam da validade dos
     # números, e este fala do acabamento do documento. Um alerta de dado errado
@@ -436,32 +510,25 @@ def preparar_relatorio(
 
     relatorio = Relatorio(
         ficha=ficha,
-        manifesto=manifesto,
+        manifesto=_manifesto_principal(rodadas),
+        rodadas=rodadas,
         titulo=titulo,
-        secoes=secoes,
+        secoes=tuple(secao for rodada in rodadas for secao in rodada.secoes),
         # O texto entra no `Relatorio` como dado, e o `documento.py` não lê
         # constante nenhuma. É o que mantém a divisão da fase — e é o que fez
         # esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
         # primeira página passaria a vir do `projeto.yaml`, é este.
         texto=montar_abertura(ficha),
-        fora=tuple(
-            ForaDoRelatorio(
-                variavel=str(entrada.get("variavel", "")),
-                tipo=str(entrada.get("tipo", "")),
-                motivo=str(entrada.get("motivo", "")),
-            )
-            for entrada in manifesto.fora
-        ),
+        fora=_variaveis_de_fora(rodadas),
         alertas=tuple(alertas),
         avisos=tuple(avisos),
         quando=quando,
     )
 
-    destino = raiz / nome_do_relatorio(ficha.matricula, quando.date())
     return PlanoRelatorio(
         relatorio=relatorio,
-        destino=destino,
-        arquivamentos=_arquivamentos(raiz, destino),
+        destino=raiz / nome_do_relatorio(ficha.matricula, quando.date()),
+        arquivamentos=_arquivamentos(raiz),
         template=_localizar_template(raiz, template),
     )
 
@@ -565,7 +632,7 @@ def relatorios_na_pasta(raiz: Path) -> tuple[Path, ...]:
     )
 
 
-def _arquivamentos(raiz: Path, destino: Path) -> tuple[tuple[Path, Path], ...]:
+def _arquivamentos(raiz: Path) -> tuple[tuple[Path, Path], ...]:
     """
     O que sai da raiz e vai para `2. Versões antigas/`.
 
@@ -576,6 +643,12 @@ def _arquivamentos(raiz: Path, destino: Path) -> tuple[tuple[Path, Path], ...]:
 
     Duas rodadas no mesmo dia colidiriam no destino, porque o nome carrega a data
     e não a hora. O desempate é o sufixo numérico da Fase 5.
+
+    Não recebe o destino, e é por isso que ele não aparece aqui: o relatório que
+    está para ser escrito ou ainda não existe no disco, ou tem o nome de um dos
+    anteriores — e aí já está na lista, achado pela varredura. A linha
+    `_ = destino` que morava no fim desta função dizia isso e não fazia nada;
+    dizer está na docstring, que é onde se diz.
     """
     pares: list[tuple[Path, Path]] = []
     ocupados: set[Path] = set()
@@ -589,9 +662,6 @@ def _arquivamentos(raiz: Path, destino: Path) -> tuple[tuple[Path, Path], ...]:
         ocupados.add(alvo)
         pares.append((anterior, alvo))
 
-    # O destino ainda não existe no disco quando o plano é montado, mas se ele
-    # for um dos anteriores (mesma data, mesma matrícula) já está na lista acima.
-    _ = destino
     return tuple(pares)
 
 
@@ -630,11 +700,11 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
         return caminho
 
     raiz = Path(raiz)
-    candidatos = [raiz / _ARQUIVO_TEMPLATE, raiz.parent / _ARQUIVO_TEMPLATE]
+    candidatos = [raiz / ARQUIVO_TEMPLATE, raiz.parent / ARQUIVO_TEMPLATE]
     # O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
     # de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
     if raiz.parent.parent != raiz.parent:
-        candidatos.append(raiz.parent.parent / _ARQUIVO_TEMPLATE)
+        candidatos.append(raiz.parent.parent / ARQUIVO_TEMPLATE)
 
     for candidato in candidatos:
         if candidato.is_file():
@@ -645,20 +715,155 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
 # A rodada
 
 
-def _manifesto_da_rodada(pasta: Path) -> Manifesto:
+def _rodadas(
+    raiz: Path, ficha: Ficha
+) -> tuple[tuple[Rodada, ...], list[str], list[str]]:
     """
-    O manifesto da descritiva vigente, com a recusa quando não há rodada.
+    As rodadas de `3. Análises/`, na ordem do documento.
+
+    Devolve as rodadas, os artefatos que os manifestos prometem e não estão no
+    disco, e os nomes que a ficha pede e que não têm rodada nenhuma.
+
+    **Varre, e não procura nome fixo.** É a diferença que faz a normalidade
+    entrar no documento sem uma linha deste módulo saber que ela existe — e é o
+    que a próxima análise vai encontrar pronto. Pasta sem `manifesto.json`
+    dentro é ignorada em silêncio: `3. Análises/` é uma pasta do usuário, e uma
+    subpasta de rascunho dele não é uma rodada mal formada.
+
+    Raises:
+        AnaliseAusenteError: não há rodada nenhuma.
+        ManifestoInvalidoError: uma rodada tem manifesto e ele não abre.
     """
-    if not (pasta / ARQUIVO_MANIFESTO).is_file():
-        raise DescritivaAusenteError(
-            f"Este projeto não tem uma descritiva para relatar.\n"
-            f"Esperado em: {pasta}/{ARQUIVO_MANIFESTO}\n\n"
-            "O relatório monta os arquivos que a descritiva escreveu — ele não "
-            "abre o banco e não recalcula nada, que é o que garante que o "
-            "documento e as tabelas digam o mesmo número.\n"
-            "Rode `flatcap descritiva <id> --sim` antes."
+    achadas: list[Rodada] = []
+    ausentes: list[str] = []
+
+    for pasta in pastas_das_analises(raiz):
+        if not (pasta / ARQUIVO_MANIFESTO).is_file():
+            continue
+        manifesto = ler_manifesto(pasta)
+        secoes, faltando = _secoes(pasta, manifesto)
+        ausentes += [f"{pasta.name}/{nome}" for nome in faltando]
+        achadas.append(
+            Rodada(
+                analise=manifesto.analise or pasta.name,
+                pasta=pasta,
+                manifesto=manifesto,
+                secoes=secoes,
+            )
         )
-    return ler_manifesto(pasta)
+
+    if not achadas:
+        raise AnaliseAusenteError(_mensagem_sem_rodada(raiz))
+
+    rodadas = _ordenar(achadas, ficha.analises)
+    rodadas_no_disco = {rodada.analise for rodada in rodadas}
+    sem_rodada = [
+        nome for nome in ficha.analises if nome not in rodadas_no_disco
+    ]
+    return rodadas, ausentes, sem_rodada
+
+
+def _ordenar(
+    rodadas: list[Rodada], analises_da_ficha: tuple[str, ...]
+) -> tuple[Rodada, ...]:
+    """
+    A ordem das seções do documento: a ficha primeiro, o padrão depois.
+
+    É o que a lista `analises:` sempre prometeu e nunca dirigiu. O cabeçalho da
+    ficha diz literalmente *«o que foi combinado na reunião»*, e o que foi
+    combinado tem uma ordem — a descritiva antes dos pressupostos em um
+    relatório, o contrário em outro, conforme o que o cliente vai ler primeiro.
+    Sem isto a ordem era a do `sorted` do sistema de arquivos, que é alfabética
+    por acidente.
+
+    Três degraus, e o terceiro é o que torna a saída determinística: a posição
+    na lista da ficha, a posição na `ORDEM_PADRAO_DAS_ANALISES`, e o nome. Nome
+    escrito na ficha e sem rodada no disco não entra aqui — ele vira aviso, em
+    `_rodadas`.
+    """
+    na_ficha = {nome: posicao for posicao, nome in enumerate(analises_da_ficha)}
+    no_padrao = {
+        nome: posicao for posicao, nome in enumerate(ORDEM_PADRAO_DAS_ANALISES)
+    }
+    return tuple(
+        sorted(
+            rodadas,
+            key=lambda rodada: (
+                na_ficha.get(rodada.analise, len(na_ficha)),
+                no_padrao.get(rodada.analise, len(no_padrao)),
+                rodada.analise,
+            ),
+        )
+    )
+
+
+def _manifesto_principal(rodadas: tuple[Rodada, ...]) -> Manifesto:
+    """
+    O manifesto que responde pelo documento quando a pergunta é uma só.
+
+    As propriedades do `.docx` e o cabeçalho do terminal precisam de **um** banco
+    e de **uma** data de rodada, e com mais de uma análise na pasta isso deixou
+    de ser automático. A escolha é a descritiva: é ela que descreve o banco
+    inteiro, e é a data dela que responde «de quando são estes números?» para
+    quem abre o arquivo no Windows sem abri-lo no Word. Sem descritiva, a
+    primeira rodada da ordem — que é a que o documento apresenta primeiro.
+    """
+    for rodada in rodadas:
+        if rodada.analise == ANALISE_DESCRITIVA:
+            return rodada.manifesto
+    return rodadas[0].manifesto
+
+
+def _variaveis_de_fora(rodadas: tuple[Rodada, ...]) -> tuple[ForaDoRelatorio, ...]:
+    """
+    As variáveis do dicionário que **nenhuma** rodada descreveu.
+
+    A conta é entre rodadas, e precisa ser: a lista `fora` da normalidade tem
+    toda categórica do banco — «a normalidade só se pergunta de numérica» —, e
+    imprimir isso no terminal diria que `sexo` ficou fora do relatório logo
+    acima da seção `Sexo` do próprio relatório. Fora do documento é quem não
+    aparece em rodada nenhuma.
+    """
+    usadas = {
+        coluna for rodada in rodadas for coluna in rodada.manifesto.colunas_usadas
+    }
+    vistas: dict[str, ForaDoRelatorio] = {}
+    for rodada in rodadas:
+        for entrada in rodada.manifesto.fora:
+            nome = str(entrada.get("variavel", ""))
+            if not nome or nome in usadas or nome in vistas:
+                continue
+            vistas[nome] = ForaDoRelatorio(
+                variavel=nome,
+                tipo=str(entrada.get("tipo", "")),
+                motivo=str(entrada.get("motivo", "")),
+            )
+    return tuple(vistas.values())
+
+
+def _mensagem_sem_rodada(raiz: Path) -> str:
+    return (
+        "Este projeto não tem nenhuma rodada de análise para relatar.\n"
+        f"Esperado em: {Path(raiz) / PASTA_ANALISES}/<análise>/{ARQUIVO_MANIFESTO}\n\n"
+        "O relatório monta os arquivos que as análises escreveram — ele não abre "
+        "o banco e não recalcula nada, que é o que garante que o documento e as "
+        "tabelas digam o mesmo número.\n"
+        "Rode `flatcap descritiva <id> --sim` antes."
+    )
+
+
+def _analises_em_texto(analises: Sequence[str]) -> str:
+    """
+    `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
+
+    Sem artigo antes do nome de propósito: `a descritiva` e `a normalidade`
+    funcionam, e `a teste t` não. O nome da análise vem do manifesto, e o
+    manifesto é escrito por quem escreveu a análise.
+    """
+    nomes = [f"`{nome}`" for nome in analises]
+    if len(nomes) <= 1:
+        return nomes[0] if nomes else ""
+    return ", ".join(nomes[:-1]) + f" e {nomes[-1]}"
 
 
 def _secoes(pasta: Path, manifesto: Manifesto) -> tuple[tuple[Secao, ...], list[str]]:
@@ -879,10 +1084,10 @@ def _conferir_texto(ficha: Ficha) -> Alerta | None:
 
 
 def _conferir_banco(
-    raiz: Path, ficha: Ficha, manifesto: Manifesto, conferir: bool
+    raiz: Path, ficha: Ficha, rodadas: tuple[Rodada, ...], conferir: bool
 ) -> list[Alerta]:
     """
-    A rodada ainda descreve a versão vigente do banco?
+    As rodadas ainda descrevem a versão vigente do banco?
 
     Duas perguntas diferentes, e vale separá-las porque o que fazer é diferente:
 
@@ -896,25 +1101,45 @@ def _conferir_banco(
     conferência contra o disco é a mesma `linha_do_tempo` da Fase 3 — porque duas
     implementações da mesma conferência é como um comando diz "confere" enquanto
     o outro diz "ALTERADO" sobre o mesmo arquivo.
+
+    Com mais de uma rodada na pasta, a conta é por **banco usado**, e não por
+    rodada: duas análises da mesma versão são um alerta só, e duas análises de
+    versões diferentes são dois — que é a informação que interessa, porque aí o
+    documento está misturando números de dois bancos e as análises que ele nomeia
+    são as que precisam ser refeitas.
     """
     alertas: list[Alerta] = []
-    da_rodada = str(manifesto.banco.get("sha256") or "").lower()
-    arquivo_da_rodada = str(manifesto.banco.get("arquivo") or "?")
 
     vigente: Versao | None = versao_vigente(ficha)
     if vigente is None:
         return alertas
 
-    if da_rodada and vigente.sha256 and da_rodada != vigente.sha256.lower():
+    usados: dict[tuple[str, str], list[str]] = {}
+    for rodada in rodadas:
+        arquivo = str(rodada.manifesto.banco.get("arquivo") or "?")
+        sha = str(rodada.manifesto.banco.get("sha256") or "").lower()
+        usados.setdefault((arquivo, sha), []).append(rodada.analise)
+
+    for (arquivo, sha), analises in usados.items():
+        if not sha or not vigente.sha256 or sha == vigente.sha256.lower():
+            continue
+        uma = len(analises) == 1
         alertas.append(
             Alerta(
                 codigo="banco_mudou",
-                titulo="a descritiva foi feita sobre outra versão do banco",
+                titulo=(
+                    f"a rodada de {_analises_em_texto(analises)} foi feita "
+                    "sobre outra versão do banco"
+                    if uma
+                    else f"as rodadas de {_analises_em_texto(analises)} foram "
+                    "feitas sobre outra versão do banco"
+                ),
                 detalhe=(
-                    f"Os números deste documento saíram de `{arquivo_da_rodada}`, e a "
-                    f"versão vigente do projeto hoje é `{vigente.arquivo}`. "
-                    "Para que o documento fale da versão atual, rode "
-                    "`flatcap descritiva <id> --sim` e gere o relatório de novo."
+                    f"Os números de {_analises_em_texto(analises)} saíram de "
+                    f"`{arquivo}`, e a versão vigente do projeto hoje é "
+                    f"`{vigente.arquivo}`. Para que o documento fale da versão "
+                    f"atual, rode {_analises_em_texto(analises)} de novo e gere o "
+                    "relatório em seguida."
                 ),
             )
         )
@@ -927,8 +1152,10 @@ def _conferir_banco(
     except OSError:  # pragma: no cover - o disco já foi lido várias vezes até aqui
         return alertas
 
+    arquivos = {arquivo for arquivo, _ in usados}
     for item in tempo.itens:
-        if item.versao.arquivo != arquivo_da_rodada:
+        arquivo_da_rodada = item.versao.arquivo
+        if arquivo_da_rodada not in arquivos:
             continue
         if item.caminho is None:
             alertas.append(
@@ -952,7 +1179,7 @@ def _conferir_banco(
                         f"`{arquivo_da_rodada}` está no disco com conteúdo diferente do "
                         "que foi registrado na ficha. Alguém o abriu e salvou por cima. "
                         "Trate o arquivo alterado como versão nova: rode "
-                        "`flatcap dados adicionar` e refaça a descritiva."
+                        "`flatcap dados adicionar` e refaça as análises."
                     ),
                 )
             )
@@ -961,10 +1188,10 @@ def _conferir_banco(
 
 
 def _conferir_dicionario(
-    raiz: Path, manifesto: Manifesto
+    raiz: Path, rodadas: tuple[Rodada, ...]
 ) -> tuple[Alerta | None, str]:
     """
-    O `dicionario.csv` de hoje é o que dirigiu a rodada?
+    O `dicionario.csv` de hoje é o que dirigiu as rodadas?
 
     É a divergência mais fácil de acontecer e a mais difícil de perceber: você
     corrige um rótulo ou muda uma faixa depois de rodar a descritiva, gera o
@@ -976,6 +1203,25 @@ def _conferir_dicionario(
     `detalhes`. Um dicionário ilegível **não** interrompe o relatório: ele já
     cumpriu o papel dele quando a rodada foi gerada, e recusar aqui seria travar
     o documento por causa de um arquivo que o documento não usa.
+
+    ## `colunas_usadas`, e não `item.variavel`
+
+    É a troca que faz esta conferência sobreviver à segunda análise. O campo
+    `variavel` é singular e existe análise que não é de uma variável: a tabela de
+    normalidade fala de todas de uma vez e sai do manifesto com `variavel=""`.
+    Comparando por ele, o item da normalidade viraria a variável de nome vazio, e
+    todo relatório sairia com «`` saiu da descritiva depois da rodada» — em todo
+    projeto, para sempre. `colunas_usadas` responde a pergunta que se queria
+    fazer, «quais colunas do banco esta rodada tocou?», e responde igual para uma
+    seção de uma variável e para uma de doze.
+
+    ## Quem responde por «entrou no dicionário depois»
+
+    Só a descritiva, e a assimetria é deliberada. Ela é a análise que descreve
+    **todas** as variáveis analisáveis; a normalidade só olha as numéricas.
+    Perguntar a pergunta a todas as rodadas faria toda categórica do dicionário
+    ser dada como «entrou depois» em um projeto que só rodou a normalidade —
+    um alerta dentro do documento do cliente, sobre nada.
     """
     try:
         linhas = ler_dicionario(raiz)
@@ -999,22 +1245,48 @@ def _conferir_dicionario(
             "",
         )
 
-    conhecidas = {item.variavel: item for item in manifesto.itens}
+    analisaveis = {linha.variavel: linha for linha in linhas if linha.analisavel}
+
+    # Quais colunas do banco cada rodada tocou, e qual rodada tocou primeiro.
+    usadas: dict[str, str] = {}
+    for rodada in rodadas:
+        for coluna in rodada.manifesto.colunas_usadas:
+            usadas.setdefault(coluna, rodada.analise)
+
+    # Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
+    # para eles: uma seção que fala de doze colunas não tem um tipo do
+    # dicionário para comparar, e a de normalidade se chama «Normalidade».
+    conhecidas: dict[str, ItemDoManifesto] = {}
+    for rodada in rodadas:
+        for item in rodada.manifesto.itens:
+            if item.variavel:
+                conhecidas.setdefault(item.variavel, item)
+
     vazias = {
         str(entrada.get("variavel", ""))
-        for entrada in manifesto.fora
+        for rodada in rodadas
+        for entrada in rodada.manifesto.fora
         if "sem nenhum valor" in str(entrada.get("motivo", ""))
     }
-    analisaveis = {linha.variavel: linha for linha in linhas if linha.analisavel}
 
     mudancas: list[str] = []
 
-    for nome in analisaveis:
-        if nome not in conhecidas and nome not in vazias:
-            mudancas.append(f"`{nome}` entrou no dicionário depois da rodada")
-    for nome in conhecidas:
-        if nome not in analisaveis:
-            mudancas.append(f"`{nome}` saiu da descritiva depois da rodada")
+    base = next(
+        (rodada for rodada in rodadas if rodada.analise == ANALISE_DESCRITIVA),
+        None,
+    )
+    if base is not None:
+        descritas = set(base.manifesto.colunas_usadas)
+        for nome in analisaveis:
+            if nome not in descritas and nome not in vazias:
+                mudancas.append(f"`{nome}` entrou no dicionário depois da rodada")
+
+    for nome, analise in usadas.items():
+        if nome and nome not in analisaveis:
+            mudancas.append(
+                f"`{nome}` deixou de ser analisável no dicionário depois da "
+                f"rodada de `{analise}`"
+            )
 
     for nome, linha in analisaveis.items():
         item = conhecidas.get(nome)
@@ -1039,17 +1311,17 @@ def _conferir_dicionario(
     return (
         Alerta(
             codigo="dicionario_mudou",
-            titulo=f"o {ARQUIVO_DICIONARIO} mudou depois desta rodada",
+            titulo=f"o {ARQUIVO_DICIONARIO} mudou depois das rodadas",
             detalhe=(
-                "As tabelas deste documento obedecem ao dicionário de quando a "
-                "descritiva foi gerada, e ele mudou desde então:\n"
+                "As tabelas deste documento obedecem ao dicionário de quando as "
+                "análises foram geradas, e ele mudou desde então:\n"
                 + "\n".join(f"— {mudanca}" for mudanca in mudancas[:8])
                 + (
                     f"\n— e mais {len(mudancas) - 8} diferença(s)."
                     if len(mudancas) > 8
                     else ""
                 )
-                + "\nRode `flatcap descritiva <id> --sim` e gere o relatório de novo."
+                + "\nRode as análises de novo e gere o relatório em seguida."
             ),
         ),
         "",
@@ -1108,8 +1380,8 @@ def _acao_do_historico(plano: PlanoRelatorio) -> str:
     relatorio = plano.relatorio
     partes = [
         f"`flatcap relatorio {relatorio.ficha.record_id}` — `{plano.destino.name}` "
-        f"escrito a partir da descritiva de "
-        f"{relatorio.manifesto.gerado_em:%d/%m/%Y %H:%M}: "
+        f"escrito a partir de {_analises_em_texto(relatorio.analises)}, rodada(s) "
+        f"até {relatorio.manifesto.gerado_em:%d/%m/%Y %H:%M}: "
         f"{len(relatorio.secoes)} seção(ões), {plano.total_tabelas} tabela(s) e "
         f"{plano.total_figuras} figura(s)."
     ]
@@ -1125,10 +1397,12 @@ def _acao_do_historico(plano: PlanoRelatorio) -> str:
 
 __all__ = [
     "Alerta",
+    "AnaliseAusenteError",
     "Figura",
     "PlanoRelatorio",
     "Relatorio",
     "RelatorioError",
+    "Rodada",
     "DescritivaAusenteError",
     "ModeloAusenteError",
     "ResultadoRelatorio",

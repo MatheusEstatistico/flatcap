@@ -118,11 +118,42 @@ CODIGOS_VOLATEIS: frozenset[str] = frozenset(
     }
 )
 
-# `categoria_sem_rotulo` é `CONFIRMAR` e **não** entra na lista acima, e a
-# classificação é deliberada: o que falta nessa coluna é uma decisão do cliente,
-# e os valores não mudam quando ele a toma — rotular `1` como «Feminino» não
-# apaga o `1` da coluna. Pôr o código aqui faria a ordem das categorias deixar de
+# O outro lado da trava: os achados de `CONFIRMAR` cujos valores **continuam**
+# existindo depois de o cliente decidir.
+#
+# A lista dos voláteis sozinha não classifica nada: «não está nela» é o estado
+# de um detector deliberadamente estável e o de um detector que alguém esqueceu
+# de classificar, e os dois são indistinguíveis. Com as duas listas, a pergunta
+# passa a ter resposta — é o que `codigo_classificado` responde, e é o que o
+# teste da trava estrutural pergunta.
+#
+# `categoria_sem_rotulo` é o caso que obrigou a escrever isto. Ele é `CONFIRMAR`
+# e é estável de propósito: o que falta nessa coluna é uma decisão do cliente, e
+# os valores não mudam quando ele a toma — rotular `1` como «Feminino» não apaga
+# o `1` da coluna. Pô-lo entre os voláteis faria a ordem das categorias deixar de
 # ser proposta justamente nas colunas que mais precisam dela.
+CODIGOS_ESTAVEIS: frozenset[str] = frozenset(
+    {
+        "categoria_sem_rotulo",
+        "coluna_vazia",
+        "identificador_repetido",
+        "linhas_duplicadas",
+        "muitos_faltantes",
+        "sentinela_numerica",
+    }
+)
+
+
+def codigo_classificado(codigo: str) -> bool:
+    """
+    Este detector já foi classificado em volátil ou estável?
+
+    Pública para o teste que trava a regra: um detector novo de gravidade
+    `CONFIRMAR` precisa entrar em uma das duas listas, e a escolha precisa ser
+    consciente — dela depende se a ordem das categorias é proposta ou não na
+    coluna que ele denuncia.
+    """
+    return codigo in CODIGOS_VOLATEIS or codigo in CODIGOS_ESTAVEIS
 
 _TITULOS = {
     CORRIGIR: "Corrigir antes de começar",
@@ -502,10 +533,11 @@ def _perfilar_coluna(serie: pd.Series, nome: object, posicao: int, linhas: int) 
     # `dicionario.csv` e ninguém descobre que ela existe. É a simetria da Fase 4
     # mais uma vez: o perfil propõe, você decide, a análise obedece.
     #
-    # `CONFIRMAR` e **não** em `CODIGOS_VOLATEIS`: o que falta aqui é uma decisão
-    # do cliente, e os valores não vão mudar quando ele a tomar — rotular `1` não
-    # apaga o `1` da coluna. Se entrasse na lista, a ordem das categorias deixaria
-    # de ser proposta justamente nas colunas que mais precisam dela.
+    # `CONFIRMAR` e em `CODIGOS_ESTAVEIS`, não em `CODIGOS_VOLATEIS`: o que falta
+    # aqui é uma decisão do cliente, e os valores não vão mudar quando ele a
+    # tomar — rotular `1` não apaga o `1` da coluna. Se entrasse entre os
+    # voláteis, a ordem das categorias deixaria de ser proposta justamente nas
+    # colunas que mais precisam dela.
     # `unicos > 1` porque a coluna de um valor só já tem o achado dela
     # (`coluna_constante`, que manda deixá-la fora das tabelas). Pedir um rótulo
     # para ela seria mandar o usuário decidir o nome de uma categoria que não vai

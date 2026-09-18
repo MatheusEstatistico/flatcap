@@ -439,7 +439,7 @@ def preparar_normalidade(
         analise="a normalidade",
     )
     pedidas = _variaveis_pedidas(raiz)
-    normalidade = avaliar(banco, ficha, linhas, pedidas, quando)
+    normalidade = avaliar(banco, ficha, linhas, pedidas, quando, com_graficos)
 
     pasta = pasta_da_analise(raiz, PASTA_NORMALIDADE)
     manifesto = montar_manifesto(normalidade, linhas, com_graficos)
@@ -480,8 +480,15 @@ def executar_normalidade(plano: PlanoNormalidade) -> ResultadoNormalidade:
             arquivado = (de, para)
             desfazer.append(lambda d=de, p=para: p.rename(d))
 
+        # `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi
+        # este comando que a criou. O `rmdir` é registrado **antes** dos
+        # arquivos e o desfazer roda ao contrário, então os arquivos saem
+        # primeiro e a pasta sai vazia, que é a única forma de ela sair.
+        existia = plano.pasta.is_dir()
         plano.pasta.mkdir(parents=True, exist_ok=True)
         criados.append(plano.pasta)
+        if not existia:
+            desfazer.append(lambda p=plano.pasta: p.rmdir())
 
         caminho = plano.pasta / plano.tabela.nome
         escrever_atomico(caminho, plano.tabela.texto())
@@ -512,7 +519,13 @@ def executar_normalidade(plano: PlanoNormalidade) -> ResultadoNormalidade:
                 f"historico.md: {erro}"
             )
 
-    except (OSError, NormalidadeError):
+    except Exception:
+        # Qualquer falha, e não só `OSError` e `NormalidadeError`. O que roda
+        # aqui dentro inclui o `matplotlib`, que estoura com exceções próprias —
+        # e uma delas subindo sem passar por aqui deixava a rodada anterior
+        # arquivada em troca de nada, que é exatamente o que o desfazer existe
+        # para impedir. O erro continua subindo inteiro: o que muda é que o
+        # disco volta ao estado de antes antes de ele subir.
         for passo in reversed(desfazer):
             try:
                 passo()
@@ -535,6 +548,7 @@ def avaliar(
     linhas_do_dicionario: Sequence[Linha],
     pedidas: tuple[str, ...] = (),
     quando: datetime | None = None,
+    com_graficos: bool = True,
 ) -> Normalidade:
     """
     Avalia a normalidade das numéricas do dicionário. Função pura.
@@ -543,6 +557,13 @@ def avaliar(
     da Fase 4 e o `descrever` da Fase 5: dá para jogar um `DataFrame` montado à mão
     e uma lista de `Linha` aqui dentro e afirmar sobre a tabela, sem pasta de
     projeto e sem disco.
+
+    `com_graficos` chega até aqui porque os pontos do Q-Q são calculados por
+    variável e descartados inteiros quando não há figura: com `--sem-graficos`,
+    `_pontos_do_qq` ordenava a coluna, chamava o `scipy` uma vez por variável e
+    guardava N pontos que o `PlanoNormalidade.graficos` jogava fora. É o mesmo
+    argumento do import do `matplotlib` lá embaixo — quem desligou o gráfico não
+    deve pagar por ele.
 
     **Chama-se `avaliar` e não `testar`, e o motivo é prático.** O `pytest` coleta
     como teste qualquer objeto chamado `test*` no espaço de nomes de um arquivo de
@@ -568,10 +589,15 @@ def avaliar(
     # que nunca a abriria. Ver `descritiva.recusar_incompativeis`.
     recusar_incompativeis(quadro, numericas, erro=VariavelIncompativelError)
 
+    # Por nome, e não `if linha not in numericas`: a comparação de `Linha` é por
+    # valor e a busca é linear, o que dava O(n²) — e, com duas linhas idênticas,
+    # a segunda seria dada como numérica sem ser. A variável é a chave do
+    # dicionário, e o `ler_arquivo` já recusa duas linhas com o mesmo nome.
+    nomes_numericos = {linha.variavel for linha in numericas}
     fora: list[ForaDaNormalidade] = [
         ForaDaNormalidade(linha.variavel, linha.tipo, _motivo_de_fora(linha))
         for linha in linhas_do_dicionario
-        if linha not in numericas
+        if linha.variavel not in nomes_numericos
     ]
 
     if pedidas:
@@ -600,7 +626,13 @@ def avaliar(
         if serie is None:  # pragma: no cover - `recusar_incompativeis` já barrou
             continue
         variaveis.append(
-            _testar_variavel(linha, serie, slug_do_nome(linha.variavel, usados), total)
+            _testar_variavel(
+                linha,
+                serie,
+                slug_do_nome(linha.variavel, usados),
+                total,
+                com_graficos,
+            )
         )
 
     avisos = list(banco.avisos)
@@ -625,7 +657,11 @@ def avaliar(
 
 
 def _testar_variavel(
-    linha: Linha, serie: pd.Series, slug: str, total: int
+    linha: Linha,
+    serie: pd.Series,
+    slug: str,
+    total: int,
+    com_graficos: bool = True,
 ) -> VariavelTestada:
     """
     Mede uma coluna: forma, teste, e os pontos do Q-Q.
@@ -681,7 +717,13 @@ def _testar_variavel(
             "tamanho."
         )
 
-    pontos_x, pontos_y, reta = _pontos_do_qq(valores, preenchidos)
+    # Sem figura, sem pontos. Eles só existem para o Q-Q, e calculá-los custa
+    # ordenar a coluna e uma chamada ao `scipy` por variável — para guardar N
+    # pontos que o `PlanoNormalidade.graficos` descarta em seguida.
+    if com_graficos:
+        pontos_x, pontos_y, reta = _pontos_do_qq(valores, preenchidos)
+    else:
+        pontos_x, pontos_y, reta = (), (), None
 
     return VariavelTestada(
         variavel=linha.variavel,
@@ -724,7 +766,15 @@ def _shapiro(
     `stderr`: um aviso impresso no meio da saída de um comando é um recado que o
     usuário aprende a ignorar. Capturado aqui, ele vira aviso do FlatCap e viaja
     até o manifesto junto do resto — mesma manobra que o `banco.py` faz com o
-    `ParserWarning` do `pandas`.
+    `ParserWarning` do `pandas`, **inclusive no filtro por categoria**, que é o
+    que faltava: um `simplefilter("always")` sem categoria recolhe qualquer aviso
+    que qualquer biblioteca emita dentro do bloco, e o `or capturados` que estava
+    aqui transformava um deles na frase «o teste rodou sobre N valores, acima de
+    5000» dentro do manifesto — sobre uma amostra de trinta. Uma frase falsa no
+    recibo da rodada é pior do que aviso nenhum.
+
+    Quando o `scipy` avisa de outra coisa, o texto dele vai junto, como ele
+    escreveu. O FlatCap repassa o recado; ele não inventa o motivo.
     """
     if preenchidos < MINIMO_SHAPIRO:
         return (
@@ -750,18 +800,28 @@ def _shapiro(
     aviso = ""
     try:
         with warnings.catch_warnings(record=True) as capturados:
-            warnings.simplefilter("always")
+            warnings.simplefilter("always", UserWarning)
             resultado = stats.shapiro(valores.to_numpy())
-        if preenchidos > MAXIMO_CONFIAVEL or capturados:
-            aviso = (
-                f"`{variavel}`: o teste rodou sobre {preenchidos} valor(es), acima de "
-                f"{MAXIMO_CONFIAVEL}. O `scipy` avisa que o valor-p deixa de ser exato "
-                "nesse tamanho — e, mais importante, com n grande qualquer desvio "
-                "irrelevante sai significante. Leia a assimetria, a curtose e o Q-Q."
-            )
     except (ValueError, TypeError) as erro:  # pragma: no cover - as duas barreiras acima
         return None, None, "o teste não pôde ser calculado", (
             f"`{variavel}`: o Shapiro-Wilk não pôde ser calculado ({erro})."
+        )
+
+    do_scipy = [c for c in capturados if issubclass(c.category, UserWarning)]
+    if preenchidos > MAXIMO_CONFIAVEL:
+        aviso = (
+            f"`{variavel}`: o teste rodou sobre {preenchidos} valor(es), acima de "
+            f"{MAXIMO_CONFIAVEL}. O `scipy` avisa que o valor-p deixa de ser exato "
+            "nesse tamanho — e, mais importante, com n grande qualquer desvio "
+            "irrelevante sai significante. Leia a assimetria, a curtose e o Q-Q."
+        )
+    elif do_scipy:
+        quais = "; ".join(
+            dict.fromkeys(str(c.message).strip() for c in do_scipy)
+        )
+        aviso = (
+            f"`{variavel}`: o `scipy` avisou ao calcular o Shapiro-Wilk sobre "
+            f"{preenchidos} valor(es) — {quais}"
         )
 
     w = _finito(float(resultado.statistic))
@@ -1090,6 +1150,8 @@ def _ambiente(com_graficos: bool) -> dict[str, Any]:
 
     O `matplotlib` só é consultado quando há gráfico, como na Fase 5: perguntar a
     versão custaria importar a biblioteca que o `--sem-graficos` existe para evitar.
+    A `fonte` entra junto e pela mesma razão que na descritiva: ela é a que o
+    matplotlib resolveu, que pode não ser a que o `graficos.py` pediu.
     """
     import openpyxl
     import scipy
@@ -1101,11 +1163,13 @@ def _ambiente(com_graficos: bool) -> dict[str, Any]:
         "openpyxl": openpyxl.__version__,
         "scipy": scipy.__version__,
         "matplotlib": None,
+        "fonte": None,
     }
     if com_graficos:
-        from .graficos import versao_do_matplotlib
+        from .graficos import fonte_dos_graficos, versao_do_matplotlib
 
         ambiente["matplotlib"] = versao_do_matplotlib()
+        ambiente["fonte"] = fonte_dos_graficos()
     return ambiente
 
 

@@ -53,7 +53,13 @@ from .ficha import (
     sequencia_do_nome,
 )
 from .nomes import sanitizar
-from .projeto import PASTA_ANTIGAS, PASTA_DADOS, anotar, tamanho_legivel
+from .projeto import (
+    EXTENSOES_DE_BANCO,
+    PASTA_ANTIGAS,
+    PASTA_DADOS,
+    anotar,
+    tamanho_legivel,
+)
 
 ORIGEM_REDCAP = "redcap"
 ORIGEM_PADRAO = "cliente_pos_reuniao"
@@ -340,7 +346,8 @@ def linha_do_tempo(raiz: Path, conferir: bool = True) -> LinhaDoTempo:
     * **ausente**: a ficha registra um arquivo que não está mais no disco;
     * **alterado**: o arquivo está lá, mas o `sha256` não é mais o registrado —
       alguém abriu e salvou por cima;
-    * **não registrado**: há arquivo na pasta que a ficha desconhece.
+    * **não registrado**: há arquivo na pasta que a ficha desconhece **e que
+      poderia ser um banco** — ver `e_candidato_a_banco`.
 
     A conferência de `sha256` é o padrão porque, nesta configuração, só o
     `00_redcap_*` é somente-leitura: as versões revisadas continuam editáveis, e
@@ -370,11 +377,50 @@ def linha_do_tempo(raiz: Path, conferir: bool = True) -> LinhaDoTempo:
             confere = atual == versao.sha256
         itens.append(ItemDaLinha(versao, caminho, caminho.parent.name, confere))
 
+    # O que sobrou de `presentes` é o que a ficha não conhece — e nem tudo o que
+    # a ficha não conhece é banco. As duas pastas guardam outras coisas: o
+    # `Relatorio_*.docx` que o `flatcap relatorio` arquiva, um `.txt` de
+    # anotações. O filtro fica **aqui**, e não na varredura acima, porque a
+    # varredura também serve para encontrar as versões registradas: uma versão
+    # com nome fora da convenção precisa continuar sendo achada no disco, em vez
+    # de virar `ausente` por causa de um filtro.
     return LinhaDoTempo(
         ficha=ficha,
         itens=tuple(itens),
-        nao_registrados=tuple(sorted(presentes.values())),
+        nao_registrados=tuple(
+            sorted(
+                caminho
+                for caminho in presentes.values()
+                if e_candidato_a_banco(caminho)
+            )
+        ),
         conferido=conferir,
+    )
+
+
+def e_candidato_a_banco(caminho: Path) -> bool:
+    """
+    Este arquivo, achado na pasta de dados, poderia ser uma versão do banco?
+
+    A pergunta existe porque `2. Versões antigas/` deixou de guardar só banco: a
+    Fase 5 passou a arquivar lá a rodada anterior da descritiva e a Fase 6 o
+    relatório anterior. Sem este filtro, o `Relatorio_00742_2026-09-20.docx` que
+    o `flatcap relatorio` acabou de arquivar aparece no `flatcap dados listar`
+    como «arquivo que a ficha não conhece» — um alarme que o FlatCap dispara
+    contra si mesmo, e que ensina o usuário a ignorar a lista inteira.
+
+    Duas formas de responder que sim, e basta uma:
+
+    * **o nome segue a convenção** (`NN_`), que é como toda versão escrita pelo
+      FlatCap se chama — inclusive uma que tenha perdido a extensão;
+    * **a extensão é a de um banco**, que é o caso da planilha que você largou
+      na pasta à mão e ainda não registrou. É justamente o que a mensagem de
+      `banco._mensagem_sem_versao` existe para apontar, e por isso ela não pode
+      ser filtrada aqui.
+    """
+    return (
+        sequencia_do_nome(caminho.name) is not None
+        or caminho.suffix.lower() in EXTENSOES_DE_BANCO
     )
 
 

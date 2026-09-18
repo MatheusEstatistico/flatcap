@@ -84,9 +84,16 @@ edição em bloco de notas. Daí `|` dentro das listas, que não aparece em nome
 categoria de banco de saúde nenhum.
 
 A leitura é tolerante e a escrita é estrita: na leitura, o separador de campos é
-descoberto (`;` ou `,`) e tanto `|` quanto `;` valem dentro das listas; na
-gravação, sempre `;` e `|`. Assim um arquivo salvo por outra ferramenta continua
-abrindo, e o arquivo que o FlatCap escreve é sempre o mesmo.
+descoberto (`;` ou `,`) e o `;` só vale dentro das listas **quando não for o
+separador de campos daquele arquivo**; na gravação, sempre `;` e `|`. Assim um
+arquivo salvo por outra ferramenta continua abrindo, e o arquivo que o FlatCap
+escreve é sempre o mesmo.
+
+A ressalva do `;` é o conserto de um round-trip quebrado. Com `;` entre campos, o
+`csv.writer` grava `Alta; a pedido` entre aspas — corretamente, e a categoria é
+uma só. A leitura, aceitando `;` dentro da lista, devolvia duas: `Alta` e
+`a pedido`. O arquivo voltava do disco diferente do que tinha sido gravado, que é
+exatamente o que a fusão existe para impedir.
 """
 
 from __future__ import annotations
@@ -291,7 +298,7 @@ def ler_arquivo(caminho: Path) -> tuple[Linha, ...]:
     """
     caminho = Path(caminho)
     texto = _ler_texto(caminho)
-    campos, registros = _tabela(texto, caminho)
+    campos, registros, separador = _tabela(texto, caminho)
 
     linhas: list[Linha] = []
     vistas: dict[str, int] = {}
@@ -312,7 +319,7 @@ def ler_arquivo(caminho: Path) -> tuple[Linha, ...]:
         vistas[variavel] = numero
 
         codigos, rotulos = _categorias(
-            registro.get("categorias_ordem"), variavel, numero, caminho
+            registro.get("categorias_ordem"), variavel, numero, caminho, separador
         )
 
         linhas.append(
@@ -322,7 +329,9 @@ def ler_arquivo(caminho: Path) -> tuple[Linha, ...]:
                 tipo=_tipo(registro.get("tipo"), variavel, numero, caminho),
                 categorias_ordem=codigos,
                 rotulos_das_categorias=rotulos,
-                faixas=_faixas(registro.get("faixas"), variavel, numero, caminho),
+                faixas=_faixas(
+                    registro.get("faixas"), variavel, numero, caminho, separador
+                ),
                 no_banco=_booleano(registro.get("no_banco")),
                 extras=tuple(
                     (nome, (registro.get(nome) or "").strip())
@@ -434,9 +443,15 @@ def _ler_texto(caminho: Path) -> str:
     return bruto.decode("latin-1")
 
 
-def _tabela(texto: str, caminho: Path) -> tuple[tuple[str, ...], list[tuple[int, dict[str, str]]]]:
+def _tabela(
+    texto: str, caminho: Path
+) -> tuple[tuple[str, ...], list[tuple[int, dict[str, str]]], str]:
     """
     Separa cabeçalho e registros, descobrindo o separador de campos.
+
+    Devolve o separador junto, e não só a tabela: quem lê uma célula de lista
+    precisa saber qual caractere já foi gasto para separar campos, senão volta a
+    partir `Alta; a pedido` em duas categorias. Ver `_lista`.
 
     As linhas iniciadas por `#` são o cabeçalho explicativo que o FlatCap escreve.
     Elas são descartadas na leitura e reescritas na gravação — o que também
@@ -482,7 +497,7 @@ def _tabela(texto: str, caminho: Path) -> tuple[tuple[str, ...], list[tuple[int,
         valores = list(valores) + [""] * (len(campos) - len(valores))
         registros.append((numero, dict(zip(campos, valores, strict=True))))
 
-    return campos, registros
+    return campos, registros, separador
 
 
 def _separador_de_campos(linhas: list[str]) -> str:
@@ -530,23 +545,65 @@ def _tipo(valor: str | None, variavel: str, numero: int, caminho: Path) -> str:
     )
 
 
-def _lista(valor: str | None) -> tuple[str, ...]:
+def _lista(
+    valor: str | None,
+    separador_de_campos: str = SEPARADOR_CAMPO,
+    aparar: bool = True,
+) -> tuple[str, ...]:
     """
     Quebra `Feminino|Masculino` — e também `Feminino;Masculino`, que é o que o
     roteiro escreve e o que sai quando o campo vem entre aspas de outra ferramenta.
+
+    ## O `;` só é separador de lista quando não é separador de campos
+
+    Aceitá-lo sempre quebrava o round-trip do arquivo que o próprio FlatCap
+    grava. Com `;` entre campos, uma categoria chamada `Alta; a pedido` sai do
+    `csv.writer` entre aspas, que é o certo — e voltava da leitura como duas
+    categorias, `Alta` e `a pedido`. O arquivo lido deixava de ser o arquivo
+    escrito, e a fusão, que nunca reescreve linha preenchida, gravava a divisão
+    de volta no disco.
+
+    Num arquivo separado por vírgula o `;` continua valendo dentro da lista: lá
+    ele não é ambíguo, e é o que o roteiro escreve.
+
+    ## `aparar` — e por que a categoria não é aparada
+
+    `faixas` são números, e `  18` é o mesmo corte que `18`: ali o espaço é
+    digitação. Uma categoria não: `"Sim "` e `"Sim"` são duas contagens
+    diferentes no banco — é o que o detector `espaco_sobrando` do `perfil.py`
+    denuncia —, e aparar a declarada fazia a linha do relatório sair com `n = 0`
+    justamente na coluna suja que se estava tentando descrever.
+
+    O preço é conhecido e vale registrar: quem escrever `Sim | Não` por estética
+    declara as categorias `"Sim "` e `" Não"`, que não casam com o banco. A
+    descritiva avisa — `valor(es) no banco fora da ordem declarada` e
+    `categoria(s) do dicionário sem nenhum caso` —, e é um aviso que aponta para
+    a célula certa. O contrário não tem conserto: aparando, a categoria com
+    espaço fica impossível de declarar, e nada na saída diz por quê.
     """
-    bruto = (valor or "").strip()
-    if not bruto:
+    bruto = valor if valor is not None else ""
+    if aparar:
+        bruto = bruto.strip()
+    if not bruto.strip():
         return ()
 
-    separador = next(
-        (s for s in _SEPARADORES_LISTA if s in bruto), _SEPARADORES_LISTA[0]
-    )
-    return tuple(parte.strip() for parte in bruto.split(separador) if parte.strip())
+    candidatos = tuple(
+        s for s in _SEPARADORES_LISTA if s != separador_de_campos
+    ) or (SEPARADOR_LISTA,)
+    separador = next((s for s in candidatos if s in bruto), candidatos[0])
+
+    partes = bruto.split(separador)
+    if aparar:
+        return tuple(parte.strip() for parte in partes if parte.strip())
+    return tuple(parte for parte in partes if parte.strip())
 
 
 def _categorias(
-    valor: str | None, variavel: str, numero: int, caminho: Path
+    valor: str | None,
+    variavel: str,
+    numero: int,
+    caminho: Path,
+    separador_de_campos: str = SEPARADOR_CAMPO,
 ) -> tuple[tuple[str, ...], tuple[tuple[str, str], ...]]:
     """
     Separa `1=Feminino|2=Masculino` no código e no rótulo de cada categoria.
@@ -573,20 +630,29 @@ def _categorias(
     REDCap, e pelo mesmo motivo: `1=Sim = confirmado` é um rótulo com `=` dentro,
     não duas categorias. Partir em todos devolveria um rótulo cortado no meio.
 
+    ## O espaço é do valor, menos ao redor do `=`
+
+    Sem `=`, a parte inteira é o valor como ele está no banco, espaço e tudo:
+    `"Sim "` e `"Sim"` são duas colunas diferentes de uma tabela de frequência,
+    e o `espaco_sobrando` do `perfil.py` existe justamente para você poder
+    declarar a primeira. Com `=`, o sinal é a fronteira e o espaço ao redor dele
+    é digitação: `1 = Feminino` é o código `1`.
+
     Raises:
         DicionarioInvalidoError: código repetido na mesma célula, ou `=` sem
             código antes dele.
     """
-    partes = _lista(valor)
+    partes = _lista(valor, separador_de_campos, aparar=False)
     codigos: list[str] = []
     rotulos: list[tuple[str, str]] = []
     vistos: set[str] = set()
 
     for parte in partes:
         codigo, tem_rotulo, rotulo = parte.partition(SEPARADOR_ROTULO)
-        codigo, rotulo = codigo.strip(), rotulo.strip()
+        if tem_rotulo:
+            codigo, rotulo = codigo.strip(), rotulo.strip()
 
-        if not codigo:
+        if not codigo.strip():
             raise DicionarioInvalidoError(
                 f"A variável `{variavel}` (linha {numero} de {caminho.name}) tem uma "
                 f"categoria que começa com `{SEPARADOR_ROTULO}`: `{parte}`.\n\n"
@@ -621,7 +687,13 @@ def _categorias(
     return tuple(codigos), tuple(rotulos)
 
 
-def _faixas(valor: str | None, variavel: str, numero: int, caminho: Path) -> tuple[str, ...]:
+def _faixas(
+    valor: str | None,
+    variavel: str,
+    numero: int,
+    caminho: Path,
+    separador_de_campos: str = SEPARADOR_CAMPO,
+) -> tuple[str, ...]:
     """
     As faixas precisam ser números em ordem crescente, e é aqui que isso é conferido.
 
@@ -629,7 +701,7 @@ def _faixas(valor: str | None, variavel: str, numero: int, caminho: Path) -> tup
     momento de descobrir uma digitação errada é enquanto o arquivo está aberto na
     sua frente — não daqui a duas semanas, no meio da geração das tabelas.
     """
-    partes = _lista(valor)
+    partes = _lista(valor, separador_de_campos)
     if not partes:
         return ()
 

@@ -89,6 +89,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
+from .projeto import ARQUIVO_TEMPLATE
+
 if TYPE_CHECKING:  # só para as anotações: importar `relatorio` aqui criaria um ciclo
     from .relatorio import Relatorio, TabelaLida
 
@@ -102,7 +104,12 @@ ESTILO_CORPO = ("FlatCap Corpo", "Normal")
 ESTILO_LEGENDA = ("FlatCap Legenda", "Caption")
 ESTILO_TABELA = ("FlatCap Tabela", "Table Grid")
 
-ARQUIVO_TEMPLATE = "template.docx"
+# `ARQUIVO_TEMPLATE` é importado do `projeto.py`, lá em cima, e reexportado por
+# este módulo — é daqui que ele sempre foi importado. Ele estava escrito duas
+# vezes: aqui e no `relatorio.py`, que não pode importar este módulo no topo sem
+# trazer o `python-docx` para uma simulação que não escreve documento nenhum.
+# Duas grafias do mesmo nome de arquivo é como um comando passa a procurar um
+# modelo que o outro comando não grava.
 
 # A folha de decisões que mora ao lado do modelo.
 #
@@ -243,7 +250,11 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
     for alerta in relatorio.alertas:
         _caixa_de_aviso(documento, alerta, estilos)
 
-    abriu = _texto_padrao(documento, relatorio, estilos)
+    # A primeira página já tem conteúdo? É disso que depende a quebra antes da
+    # primeira seção, mais abaixo. O texto de abertura responde quase sempre; o
+    # alerta responde no caso em que ele não existe, porque uma página com uma
+    # caixa amarela dentro não é uma página em branco.
+    abriu = _texto_padrao(documento, relatorio, estilos) or bool(relatorio.alertas)
 
     numero_tabela = 0
     numero_figura = 0
@@ -361,6 +372,14 @@ def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
     O `bool` de volta existe para a quebra de página: sem texto de abertura, a
     primeira página seria só o título e o subtítulo, e quebrar ali produziria
     uma página quase em branco que ninguém pediu.
+
+    Ele diz só o que este módulo sabe — «escrevi algum parágrafo» —, e quem
+    decide a quebra é o `escrever`, que soma a isto os alertas. A distinção
+    importa porque o caminho do `flatcap relatorio` nunca chega aqui com o texto
+    vazio: o `relatorio.montar_abertura` devolve pelo menos os dois marcadores
+    `«a preencher: …»` quando os campos da ficha estão em branco, de propósito.
+    Este ramo é para o `Relatorio` montado à mão — em teste, ou pela camada de
+    cima que um dia decida não imprimir marcador nenhum.
     """
     escreveu = False
     for paragrafo in relatorio.texto:
