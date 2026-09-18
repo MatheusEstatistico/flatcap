@@ -121,7 +121,13 @@ from .manifesto import (
     texto_do_manifesto,
 )
 from .nomes import rotulo_do_projeto
-from .projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA, anotar
+from .projeto import (
+    PASTA_ANALISES,
+    PASTA_ANTIGAS,
+    PASTA_DESCRITIVA,
+    anotar,
+    pasta_da_analise,
+)
 
 # Nada nesta fase sorteia coisa nenhuma — uma descritiva é contagem, e contagem
 # não tem aleatoriedade. A semente existe declarada e registrada no manifesto
@@ -365,7 +371,11 @@ def preparar_descritiva(
 
     descritiva = descrever(banco, ficha, linhas, quando)
 
-    pasta = raiz / PASTA_ANALISES / PASTA_DESCRITIVA
+    # `pasta_da_analise` e não a concatenação à mão: a mesma pergunta é feita
+    # pela normalidade e pelo relatório, e é o `projeto.py` que responde por
+    # onde uma rodada mora. Duas formas de montar o mesmo caminho é como uma
+    # delas deixa de acompanhar a próxima mudança no desenho da pasta.
+    pasta = pasta_da_analise(raiz, PASTA_DESCRITIVA)
     manifesto = montar_manifesto(descritiva, linhas, com_graficos)
 
     return PlanoDescritiva(
@@ -404,8 +414,15 @@ def executar_descritiva(plano: PlanoDescritiva) -> ResultadoDescritiva:
             arquivado = (de, para)
             desfazer.append(lambda d=de, p=para: p.rename(d))
 
+        # `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi
+        # este comando que a criou. O `rmdir` é registrado **antes** dos
+        # arquivos e o desfazer roda ao contrário, então os arquivos saem
+        # primeiro e a pasta sai vazia, que é a única forma de ela sair.
+        existia = plano.pasta.is_dir()
         plano.pasta.mkdir(parents=True, exist_ok=True)
         criados.append(plano.pasta)
+        if not existia:
+            desfazer.append(lambda p=plano.pasta: p.rmdir())
 
         for tabela in plano.tabelas:
             caminho = plano.pasta / tabela.nome
@@ -438,7 +455,13 @@ def executar_descritiva(plano: PlanoDescritiva) -> ResultadoDescritiva:
                 f"historico.md: {erro}"
             )
 
-    except (OSError, DescritivaError):
+    except Exception:
+        # Qualquer falha, e não só `OSError` e `DescritivaError`. O que roda
+        # aqui dentro inclui o `matplotlib`, que estoura com exceções próprias
+        # — e uma delas subindo sem passar por aqui deixava a rodada anterior
+        # arquivada em troca de nada, que é exatamente o que o desfazer existe
+        # para impedir. O erro continua subindo inteiro: o que muda é que o
+        # disco volta ao estado de antes antes de ele subir.
         for passo in reversed(desfazer):
             try:
                 passo()
@@ -559,8 +582,9 @@ def _descrever_categorica(
     denuncia sozinho.
     """
     textos = _serie_de_texto(serie)
-    contagem = textos.value_counts()
-    observadas = {str(valor): int(quantos) for valor, quantos in contagem.items()}
+    observadas = {
+        str(valor): int(quantos) for valor, quantos in textos.value_counts().items()
+    }
     preenchidos = total - faltantes
 
     declaradas = tuple(linha.categorias_ordem)
@@ -597,11 +621,17 @@ def _descrever_categorica(
     # `observadas` é consultada. O que vai para a tabela e para o gráfico é o
     # rótulo, que cai no próprio código quando não há um. Uma coluna de texto
     # atravessa isto sem nada acontecer: lá o valor **é** o rótulo.
-    contagem: dict[str, int] = {}
+    # Nome próprio, e não `contagem` de novo: o `value_counts` acima devolvia uma
+    # `Series` indexada pelo valor do banco, e isto é um `dict` indexado pelo
+    # rótulo. São duas coisas diferentes, e reaproveitar o nome fazia o miolo da
+    # função mais importante do módulo depender de qual das duas era a da linha.
+    por_rotulo: dict[str, int] = {}
     codigos_do_rotulo: dict[str, list[str]] = {}
     for codigo in ordem:
         nome_na_tabela = linha.rotulo_de(codigo)
-        contagem[nome_na_tabela] = contagem.get(nome_na_tabela, 0) + observadas.get(codigo, 0)
+        por_rotulo[nome_na_tabela] = (
+            por_rotulo.get(nome_na_tabela, 0) + observadas.get(codigo, 0)
+        )
         codigos_do_rotulo.setdefault(nome_na_tabela, []).append(codigo)
 
     # Dois códigos com o mesmo rótulo viram **uma linha só, somada**. Não é
@@ -632,7 +662,7 @@ def _descrever_categorica(
             "Escreva o rótulo depois do sinal, ou apague o sinal."
         )
 
-    pares = list(contagem.items())
+    pares = list(por_rotulo.items())
 
     corpo = [
         (
@@ -804,12 +834,24 @@ def _descrever_numerica(
 
 def _descrever_data(
     linha: Linha, serie: pd.Series, slug: str, total: int, faltantes: int
-) -> VariavelDescrita:
+) -> VariavelDescrita | None:
     """
     O período (de quando a quando) e como os casos se distribuem dentro dele.
+
+    Devolve `None` quando não sobrou nenhuma data válida, como a coluna vazia:
+    sem data não há período a descrever.
     """
     datas, formato, nao_convertidos = _como_data(serie)
     validas = datas.dropna()
+    if validas.empty:
+        # Sem nenhuma data válida não há período: `minimo` e `maximo` saem `NaT`
+        # e `(maximo - minimo).days` estoura. Hoje é inalcançável — a recusa de
+        # `recusar_incompativeis` exige um formato que explique 90% da coluna —,
+        # e a guarda existe porque «inalcançável» é uma propriedade de outro
+        # módulo, não desta função. `None` a manda para a lista `fora`, que é
+        # onde as colunas sem valor já são registradas.
+        return None
+
     preenchidos = int(validas.shape[0])
     avisos: list[str] = []
     de_onde = (
@@ -928,12 +970,16 @@ def _cortes_das_faixas(
     A coluna `faixas` do dicionário manda. Ela já chegou conferida pela Fase 4 —
     números em ordem crescente —, então aqui não há o que validar de novo.
 
-    Sem ela, os quartis. E os quartis têm uma condição: precisam ser cinco números
-    distintos. Em uma variável com três valores diferentes, Q1, mediana e Q3
-    coincidem, e o que sairia seria uma tabela de duas faixas com nome de quatro.
-    Nesse caso não sai tabela nenhuma, e o motivo fica escrito no manifesto — uma
-    variável assim é categórica disfarçada, e a decisão de tratá-la como tal é sua,
-    no dicionário.
+    Sem ela, os quartis: mínimo, Q1, mediana, Q3 e máximo, sem repetir. O que
+    sobra depois de tirar os repetidos precisa ser **pelo menos três cortes** —
+    isto é, duas faixas —, e não cinco: uma variável em que só a mediana coincide
+    com Q1 ainda produz três faixas honestas, e recusá-la seria jogar fora uma
+    tabela correta por causa de um empate.
+
+    Abaixo de três, não sai tabela nenhuma e o motivo fica escrito no manifesto:
+    com dois cortes sobraria uma faixa só, que é a variável inteira e não
+    descreve nada. Uma variável assim é categórica disfarçada de número, e a
+    decisão de tratá-la como tal é sua, no dicionário.
     """
     if linha.faixas:
         cortes = tuple(float(str(f).replace(",", ".")) for f in linha.faixas)
@@ -1216,6 +1262,13 @@ def montar_manifesto(
             "arquivo": ARQUIVO_DICIONARIO,
             "variaveis": len(linhas),
             "analisaveis": sum(1 for linha in linhas if linha.analisavel),
+            # Mesmo campo, mesmo esquema que o manifesto da normalidade. Dois
+            # blocos `dicionario` com chaves diferentes obrigariam quem lê os
+            # dois — o relatório, e você — a saber de qual análise é o arquivo
+            # antes de saber o que perguntar a ele.
+            "numericas": sum(
+                1 for linha in linhas if linha.analisavel and linha.tipo == NUMERICA
+            ),
         },
         ambiente=_ambiente(com_graficos),
         regras={
@@ -1265,6 +1318,13 @@ def _ambiente(com_graficos: bool) -> dict[str, Any]:
     sair diferente do que saía antes, é o que responde se mudaram os dados ou mudou
     a biblioteca. O `matplotlib` só é consultado quando há gráfico — perguntar a
     versão custaria importar a biblioteca que o `--sem-graficos` existe para evitar.
+
+    A **fonte** entra junto, e ela não é uma versão: é a fonte que o matplotlib de
+    fato resolveu, que pode não ser a que o `graficos.py` pediu. Sem o Arial
+    instalado ele escreve um aviso em `stderr`, que ninguém lê, e desenha com o
+    próximo nome da lista — o gráfico sai bonito, com a fonte errada, e a única
+    forma de descobrir é pôr a figura ao lado do texto do documento e reparar.
+    Escrita aqui, a pergunta «mudou a máquina ou mudou o código?» tem resposta.
     """
     import openpyxl
 
@@ -1274,11 +1334,13 @@ def _ambiente(com_graficos: bool) -> dict[str, Any]:
         "pandas": pd.__version__,
         "openpyxl": openpyxl.__version__,
         "matplotlib": None,
+        "fonte": None,
     }
     if com_graficos:
-        from .graficos import versao_do_matplotlib
+        from .graficos import fonte_dos_graficos, versao_do_matplotlib
 
         ambiente["matplotlib"] = versao_do_matplotlib()
+        ambiente["fonte"] = fonte_dos_graficos()
     return ambiente
 
 
