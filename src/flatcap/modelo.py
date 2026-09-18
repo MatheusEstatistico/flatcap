@@ -175,7 +175,21 @@ def mapa_de_rotulos(
 
 def mais_recentes(clientes: Sequence[Cliente], quantos: int) -> list[Cliente]:
     """
+    Os `quantos` registros mais recentes, **na ordem em que o REDCap os devolveu**.
 
+    Duas coisas de uma vez, e a segunda é a que surpreende: a função escolhe
+    pelo `record_id` (maior é mais novo, porque o REDCap numera em sequência) e
+    devolve na ordem original, não na ordem do sorteio. É o que faz o
+    `flatcap listar --ultimos 10` mostrar dez linhas na mesma ordem em que as
+    outras aparecem quando o limite não é usado — uma tabela que muda de ordem
+    quando encolhe é uma tabela que ninguém reencontra.
+
+    `quantos <= 0` ou maior do que a lista devolve a lista inteira: pedir mais do
+    que existe não é erro, é não ter filtro nenhum.
+
+    `record_id` que não é número vai para o fim (ver `_chave_recencia`) e o
+    desempate é a posição original, para que duas chamadas iguais produzam
+    exatamente a mesma lista.
     """
     if quantos <= 0 or quantos >= len(clientes):
         return list(clientes)
