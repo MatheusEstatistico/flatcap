@@ -104,6 +104,43 @@ PASTA_DESCRITIVA = "descritiva"
 # carregam o `pandas` e o `scipy` para calculá-las.
 PASTA_NORMALIDADE = "normalidade"
 
+# O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
+# arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
+# Ele estava escrito duas vezes — no `documento.py`, que é quem o grava, e no
+# `relatorio.py`, que não podia importar o `documento.py` sem trazer o
+# `python-docx` junto para uma simulação que não escreve documento nenhum. Os
+# dois passaram a importá-lo daqui, e o `documento.py` reexporta o nome.
+ARQUIVO_TEMPLATE = "template.docx"
+
+# As extensões que um banco do cliente pode ter.
+#
+# Moram aqui, e não no `banco.py` que as usa para abrir, pelo mesmo motivo que
+# `PASTA_DESCRITIVA`: quem precisa da resposta **sem** abrir o banco é o
+# `dados.py`, que confronta a ficha com o disco e precisa distinguir o que, na
+# pasta, é candidato a versão do que é um relatório arquivado. E o `dados.py`
+# não pode importar o `banco.py` — é o `banco.py` que importa o `dados.py`.
+EXTENSOES_DE_BANCO: tuple[str, ...] = (".xlsx", ".csv")
+
+
+def pastas_das_analises(raiz: Path) -> tuple[Path, ...]:
+    """
+    As pastas de rodada que existem em `3. Análises/`, em ordem de nome.
+
+    É a varredura que o `relatorio.py` faz para descobrir **quais** análises
+    foram rodadas neste projeto, em vez de procurar uma pasta de nome fixo. Foi
+    a falta dela que deixou a normalidade escrever `normalidade.csv` e os
+    `qq_*.png` no disco sem que nada disso entrasse no `.docx` — e teria feito o
+    mesmo com o teste t e o qui-quadrado.
+
+    Só o primeiro nível, e só diretório: o que está **dentro** de uma rodada é
+    assunto do `manifesto.json` dela. Quem decide se a pasta é mesmo uma rodada é
+    quem a lê — aqui a pergunta é só qual pasta existe.
+    """
+    pasta = Path(raiz) / PASTA_ANALISES
+    if not pasta.is_dir():
+        return ()
+    return tuple(sorted(item for item in pasta.iterdir() if item.is_dir()))
+
 
 def pasta_da_analise(raiz: Path, analise: str) -> Path:
     """
