@@ -100,6 +100,25 @@ FORMATO = 1
 ANALISE_DESCRITIVA = "descritiva"
 ANALISE_NORMALIDADE = "normalidade"
 
+# A ordem em que as análises aparecem no documento quando a ficha não manda.
+#
+# A lista `analises:` do `projeto.yaml` tem a primeira palavra — é o que foi
+# combinado na reunião, e o relatório obedece. Esta é a ordem de quem não
+# escreveu nada lá: a descritiva primeiro, porque é ela que apresenta cada
+# variável, e os pressupostos depois, porque falam de variáveis já apresentadas.
+# Rodada que não estiver nem na ficha nem aqui entra no fim, em ordem
+# alfabética — determinística, e visivelmente no fim, que é o lugar certo para
+# uma análise que ninguém disse onde queria.
+#
+# Uma análise nova acrescenta uma linha aqui e nada mais. É o mesmo tipo de
+# registro que o `_FORMAS` do `graficos.py`, e existe pelo mesmo motivo: com
+# `if/elif` espalhado, a análise nova aparece no documento em um lugar que
+# ninguém escolheu.
+ORDEM_PADRAO_DAS_ANALISES: tuple[str, ...] = (
+    ANALISE_DESCRITIVA,
+    ANALISE_NORMALIDADE,
+)
+
 # A semente.
 #
 # Ela mora aqui desde a Fase 7, e não no `descritiva.py` onde nasceu, pelo mesmo
@@ -556,6 +575,7 @@ __all__ = [
     "ANALISE_NORMALIDADE",
     "ARQUIVO_MANIFESTO",
     "FORMATO",
+    "ORDEM_PADRAO_DAS_ANALISES",
     "SEMENTE",
     "Artefato",
     "Grafico",
