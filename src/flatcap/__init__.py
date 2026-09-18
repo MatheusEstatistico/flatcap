@@ -104,6 +104,39 @@ normalidade escreve em `3. Análises/normalidade/` sem que uma linha dele mude. 
 que ele ganhou foi a espécie `qq` e um registro de espécies no lugar do
 `if/elif/else` — que, com mais de uma análise, desenhava espécie desconhecida como
 gráfico de colunas em silêncio.
+
+## 1.3.1 — o relatório passa a enxergar a segunda análise
+
+A Fase 7 escreveu a normalidade no disco e **não** no documento. O
+`preparar_relatorio` lia uma pasta de nome fixo, `3. Análises/descritiva/`, e o
+`normalidade.csv` e os `qq_*.png` ficavam no disco sem que nada os apanhasse — os
+dois comandos saindo com código 0, e a falta aparecendo só para quem abrisse o
+`.docx` procurando. O teste t e o qui-quadrado cairiam no mesmo buraco.
+
+São três peças, e elas se sustentam:
+
+**O relatório varre `3. Análises/*/`.** Quem responde onde as rodadas moram é o
+`projeto.pastas_das_analises`, ao lado do `pasta_da_analise` que a Fase 7 já tinha
+criado para isso. Pasta com `manifesto.json` dentro é rodada; pasta sem, é pasta
+sua. Nenhum nome de análise está escrito no `relatorio.py` — a próxima análise
+entra no documento sem que uma linha dele mude, que era a promessa da arquitetura.
+
+**A lista `analises:` da ficha dirige a ordem das seções.** Ela é prometida desde
+a Fase 2 — *"o que foi combinado na reunião"* — e até aqui não era lida por
+ninguém. O que não estiver nela sai na `ORDEM_PADRAO_DAS_ANALISES` do
+`manifesto.py`, e nome escrito na ficha sem rodada no disco vira aviso no
+terminal, porque quase sempre é a análise que você combinou e ainda não rodou.
+
+**A conferência do dicionário pergunta por `colunas_usadas`.** O campo
+`ItemDoManifesto.colunas` existia desde a Fase 7 e nada o lia. Comparar por
+`item.variavel` funcionava enquanto todo item era uma variável; com a tabela de
+normalidade, que fala de doze de uma vez e sai com `variavel=""`, todo relatório
+passaria a dizer «`` saiu da descritiva depois da rodada».
+
+O `Relatorio` ganhou `rodadas`, e `manifesto` passou a ser o **principal** — o da
+descritiva quando ela existe. As propriedades do `.docx` e o cabeçalho do terminal
+precisam de um banco e de uma data, e com mais de uma rodada isso deixou de ser
+automático.
 """
 
 __version__ = "1.3.1"
