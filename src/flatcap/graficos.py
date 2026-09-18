@@ -94,18 +94,24 @@ matplotlib.use("Agg")
 # que desenhar com outra fonte.
 FONTE = ("Arial", "Liberation Sans", "Helvetica", "DejaVu Sans", "sans-serif")
 
-# Aqui em cima, e não dentro de `_figura`, por dois motivos. O primeiro é que
-# `rcParams` é estado global do processo, e escrevê-lo a cada figura é reconfigurar
-# a biblioteca uma vez por gráfico para dizer sempre a mesma coisa. O segundo é a
-# ordem: no código anterior a configuração vinha **depois** do `plt.subplots`, que
-# já criou os objetos de texto dos eixos. Isso funciona porque o matplotlib só
-# resolve a fonte na hora de desenhar — conferido —, mas é uma garantia que ele
-# não documenta, e é o tipo de coisa que muda de versão sem release note.
+# A configuração de aparência mora aqui em cima, com a paleta, onde se acha sem
+# procurar — mas ela **não** é escrita no `rcParams` global, e essa é a correção.
 #
-# E, principalmente: configuração de aparência mora no alto do arquivo, com a
-# paleta, onde se acha sem procurar.
-matplotlib.rcParams["font.family"] = "sans-serif"
-matplotlib.rcParams["font.sans-serif"] = list(FONTE)
+# `rcParams` é estado do processo inteiro. Escrevê-lo no import fazia o simples
+# ato de `import flatcap.graficos` mudar a fonte de qualquer figura que qualquer
+# outra parte do processo viesse a desenhar — um notebook que importasse o
+# FlatCap para olhar um manifesto sairia com os próprios gráficos em Arial, sem
+# nada dizendo por quê. Um módulo que desenha não tem o direito de decidir pelo
+# processo; ele decide pela figura dele.
+#
+# O `rc_context` do `desenhar` aplica isto enquanto a figura é montada **e**
+# salva, e devolve o estado no fim. Os dois dentro do mesmo contexto de
+# propósito: o matplotlib só resolve a fonte na hora de desenhar, e quem desenha
+# é o `savefig`.
+APARENCIA: dict[str, object] = {
+    "font.family": "sans-serif",
+    "font.sans-serif": list(FONTE),
+}
 
 import matplotlib.pyplot as plt  # noqa: E402 - obrigatoriamente depois do `use`
 from matplotlib.ticker import MaxNLocator  # noqa: E402
@@ -160,10 +166,12 @@ def fonte_dos_graficos() -> str:
     forma de descobrir é pôr a figura ao lado do texto do documento e reparar.
 
     É a mesma ideia da codificação impressa no `perfil.md`: a única forma de saber
-    que a escolha foi outra é vê-la escrita. Levar isto para o `ambiente` do
-    manifesto é uma linha no `descritiva._ambiente`, e é o que responde, no dia em
-    que uma rodada antiga sair com outra cara, se mudou a máquina ou mudou o
-    código.
+    que a escolha foi outra é vê-la escrita. Ela vai para o campo `fonte` do
+    `ambiente` de todo manifesto que tem figura — `descritiva._ambiente` e
+    `normalidade._ambiente` —, e é o que responde, no dia em que uma rodada antiga
+    sair com outra cara, se mudou a máquina ou mudou o código. Ficou escrita e não
+    chamada por duas fases, que é o defeito silencioso que ela existia para expor,
+    aplicado a si mesma.
     """
     from matplotlib import font_manager
 
@@ -194,18 +202,21 @@ def desenhar(grafico: Grafico, caminho: Path) -> Path:
             f"(em `{grafico.nome}`). As que existem: "
             f"{', '.join(sorted(_FORMAS))}."
         )
-    figura = forma(grafico)
 
-    try:
-        figura.savefig(
-            caminho,
-            dpi=DPI,
-            facecolor=SUPERFICIE,
-            bbox_inches="tight",
-            pad_inches=0.18,
-        )
-    finally:
-        plt.close(figura)
+    # Montar e salvar dentro do mesmo contexto. A aparência vale para esta figura
+    # e não fica no processo depois dela — ver `APARENCIA`.
+    with plt.rc_context(APARENCIA):
+        figura = forma(grafico)
+        try:
+            figura.savefig(
+                caminho,
+                dpi=DPI,
+                facecolor=SUPERFICIE,
+                bbox_inches="tight",
+                pad_inches=0.18,
+            )
+        finally:
+            plt.close(figura)
     return caminho
 
 
