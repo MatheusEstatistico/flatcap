@@ -54,9 +54,17 @@ import pandas as pd
 
 from .dados import ItemDaLinha, linha_do_tempo
 from .ficha import Versao, versao_vigente
-from .projeto import PASTA_ANTIGAS, PASTA_DADOS, tamanho_legivel
+from .projeto import (
+    EXTENSOES_DE_BANCO,
+    PASTA_ANTIGAS,
+    PASTA_DADOS,
+    tamanho_legivel,
+)
 
-EXTENSOES_SUPORTADAS = (".xlsx", ".csv")
+# O nome por onde este módulo é conhecido desde a Fase 4. A lista desceu para o
+# `projeto.py` porque o `dados.py` passou a precisar dela para saber o que, na
+# pasta, é candidato a versão do banco — e ele não pode importar este módulo.
+EXTENSOES_SUPORTADAS = EXTENSOES_DE_BANCO
 
 # Formato que aparece na prática, que a gente reconhece e mesmo assim não abre.
 # A mensagem diz o que fazer, porque "formato não suportado" sozinho não ajuda
