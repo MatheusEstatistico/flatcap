@@ -251,7 +251,11 @@ def versao_vigente(ficha: Ficha) -> Versao | None:
     esse, é o índice da versão por construção da Fase 3.
 
     Empate (duas entradas sem prefixo reconhecível) resolve pela ordem da lista,
-    que é a melhor informação que sobra.
+    que é a melhor informação que sobra — e o desempate é a **posição**, lida
+    de um `enumerate`, não um `ficha.dados.index(versao)` dentro da chave do
+    `max`: o `index` percorre a lista de novo a cada comparação (O(n²)) e, com
+    duas `Versao` idênticas, devolve o mesmo índice para as duas — que é
+    justamente o empate que ele deveria desfazer.
 
     Mora aqui desde a Fase 6, e não no `banco.py`, onde nasceu. A pergunta "qual
     versão vale?" se responde lendo a ficha: não precisa do `pandas`, não abre
@@ -262,13 +266,14 @@ def versao_vigente(ficha: Ficha) -> Versao | None:
     """
     if not ficha.dados:
         return None
-    return max(
-        ficha.dados,
-        key=lambda versao: (
-            versao.sequencia if versao.sequencia is not None else -1,
-            ficha.dados.index(versao),
+    posicao, _ = max(
+        enumerate(ficha.dados),
+        key=lambda par: (
+            par[1].sequencia if par[1].sequencia is not None else -1,
+            par[0],
         ),
     )
+    return ficha.dados[posicao]
 
 
 # Localização do projeto no disco
