@@ -206,7 +206,7 @@ class TestSecoes:
                     return
         pytest.fail("nenhuma tabela do documento tem linha Total")
 
-    def test_a_primeira_coluna_a_esquerda_e_as_demais_a_direita(self, documento):
+    def test_o_rotulo_a_esquerda_e_o_numero_a_direita(self, documento):
         from docx.enum.text import WD_ALIGN_PARAGRAPH
 
         doc, _ = documento()
@@ -214,6 +214,57 @@ class TestSecoes:
         linha = quadro.rows[1]
         assert linha.cells[0].paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.LEFT
         assert linha.cells[1].paragraphs[0].alignment == WD_ALIGN_PARAGRAPH.RIGHT
+
+    def test_a_coluna_de_texto_vai_a_esquerda_mesmo_nao_sendo_a_primeira(
+        self, projeto_com_rodada
+    ):
+        """
+        O cruzamento tem dois rótulos. Pela regra antiga — a primeira coluna à
+        esquerda, o resto à direita —, `Fundamental` sairia alinhado pela última
+        letra embaixo de `escolaridade`. O cabeçalho acompanha a coluna.
+        """
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        from conftest import acrescentar_a_ficha
+        from flatcap.cruzamento import executar_cruzamento, preparar_cruzamento
+
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "cruzamento:\n  - [sexo, escolaridade]\n")
+        executar_cruzamento(preparar_cruzamento(raiz, agora=QUANDO))
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        executar_relatorio(plano)
+
+        doc = Document(str(plano.destino))
+        quadro = next(
+            t for t in doc.tables
+            if [c.text.strip() for c in t.rows[0].cells][:2] == ["sexo", "escolaridade"]
+        )
+        esquerda, direita = WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.RIGHT
+        for linha in (quadro.rows[0], quadro.rows[1]):
+            alinhamentos = [c.paragraphs[0].alignment for c in linha.cells]
+            assert alinhamentos == [esquerda, esquerda, direita, direita]
+
+    def test_o_que_conta_como_numero_na_hora_de_alinhar(self):
+        """
+        Número, percentual, valor-p, número com sinal e data ficam à direita; o
+        traço e a célula vazia não puxam para lado nenhum. A coluna `leitura` da
+        normalidade, que é frase, passa a ir à esquerda — como toda coluna de texto.
+        """
+        from flatcap.documento import _colunas_de_texto
+        from flatcap.relatorio import TabelaLida
+
+        def colunas(*linhas):
+            return _colunas_de_texto(
+                TabelaLida("x.csv", "", "", colunas=tuple(f"c{i}" for i in range(len(linhas[0]))),
+                           linhas=linhas)
+            )
+
+        assert colunas(("Feminino", "15", "26,8", "25,0"), ("Total", "60", "100,0", "—")) == {0}
+        assert colunas(("Feminino", "Superior", "15", "26,8"), ("Total", "", "60", "100,0")) == {
+            0, 1,
+        }
+        assert colunas(("idade", "60", "+0,45", "−1,20", "< 0,001", "simétrica")) == {0, 5}
+        assert colunas(("primeira data", "01/03/2026"), ("amplitude (dias)", "365")) == {0}
 
     def test_o_cabecalho_da_tabela_se_repete_a_cada_pagina(self, documento):
         doc, _ = documento()
