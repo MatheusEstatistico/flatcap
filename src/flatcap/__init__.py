@@ -167,9 +167,14 @@ do cruzamento — que também é rótulo — sairia empurrada para a direita. A 
 **`associacao.py`: qui-quadrado ou exato de Fisher, escolhido pela regra de
 Cochran.** Os pares vêm da lista `associacao:` da ficha, em duas formas — o par
 `[sexo, desfecho]` e a variável contra várias, `desfecho: [sexo, escolaridade]` —,
-e saem numa tabela só: variável 1, variável 2, n, teste e p-valor. A justificativa
-de cada escolha — a menor esperada e quantas caselas ficaram abaixo de 5 — vai
-para as notas do `.csv` e para o manifesto, com a tabela de contingência inteira.
+e saem numa tabela só: variável 1, variável 2, n, teste, p-valor e o V de Cramér.
+A justificativa de cada escolha — a menor esperada e quantas caselas ficaram
+abaixo de 5 — vai para as notas do `.csv` e para o manifesto, com a tabela de
+contingência inteira.
+
+**O V de Cramér sai ao lado do p**, porque o p depende do n e o V mede o tamanho
+da associação. Ele usa sempre o X² de Pearson sem correção, qualquer que seja o
+teste da linha, e sai também nas linhas do Fisher.
 
 Os dois testes são os do R. O qui-quadrado é o `chisq.test` com o padrão dele:
 Yates só na 2×2, e nunca maior do que a diferença. O Fisher é o `fisher.test`:
