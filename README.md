@@ -1,7 +1,7 @@
 # FlatCap 
 Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap: 
 
-**REDCap (entrada) → organização de pastas → versionamento dos bancos → análise descritiva → relatório `.docx`**.
+**REDCap (entrada) → organização de pastas → versionamento dos bancos → análises gerais → relatório `.docx`**.
 
 ## Princípio norteador 
 Automatizar o que é repetitivo e mecânico e manter manual o que é decisão técnica. Tudo que é automatizado fica documentado em disco, para que qualquer projeto possa ser reaberto meses depois e compreendido sem depender da memória. Nada é apagado, as versões antigas são documentadas na pasta do cliente/projeto. 
