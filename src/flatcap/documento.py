@@ -180,6 +180,15 @@ _LINHAS_PARA_MANTER_JUNTA = 12
 _FATIA_DO_ROTULO = 0.34
 _FATIA_MINIMA = 0.18
 
+# A repartição pelo conteúdo, das tabelas com mais de uma coluna de texto. São
+# estimativas para Arial 9,5 — a fonte das tabelas —, com folga: um número que
+# quebra no meio é pior do que uma coluna um pouco mais larga do que precisava.
+_EMU_POR_CM = 360000
+_CM_POR_CARACTERE = 0.19
+_RESPIRO_CM = 0.4           # as margens da célula, 0,12 de cada lado, e um fio de ar
+_MINIMO_NUMERICO_CM = 1.2   # para a coluna `n` não virar um fio
+_TEXTO_NATURAL = 40         # caracteres: acima disto, a coluna de texto aceita quebrar
+
 
 def versao_do_python_docx() -> str:
     """
@@ -482,7 +491,17 @@ def _escrever_tabela(
             _alinhar(paragrafo, posicao in de_texto)
             paragrafo.paragraph_format.space_after = Pt(0)
 
-    _repartir_larguras(quadro, _largura_util(documento), tabela.largura)
+    # Um rótulo e números — toda tabela da descritiva — ficam na repartição de
+    # sempre. Mais de uma coluna de texto é outra tabela, e reparte pelo conteúdo.
+    larguras = (
+        _larguras_pelo_conteudo(tabela, de_texto, _largura_util(documento))
+        if len(de_texto) > 1
+        else None
+    )
+    if larguras is None:
+        _repartir_larguras(quadro, _largura_util(documento), tabela.largura)
+    else:
+        _fixar_larguras(quadro, larguras)
     _manter_junta(quadro)
 
     # As notas do `.csv` — os dois denominadores, a convenção de fechamento das
@@ -517,6 +536,90 @@ def _repartir_larguras(quadro, largura_util: int, colunas: int) -> None:
         fatias = [rotulo] + [(1.0 - rotulo) / (colunas - 1)] * (colunas - 1)
 
     _fixar_larguras(quadro, [int(largura_util * fatia) for fatia in fatias])
+
+
+def _larguras_pelo_conteudo(
+    tabela: TabelaLida, de_texto: frozenset[int], largura_util: int
+) -> list[int] | None:
+    """
+    A repartição das tabelas com mais de uma coluna de texto: cada coluna pelo que
+    ela carrega.
+
+    A repartição de sempre — um terço para o rótulo, o resto em partes iguais —
+    foi desenhada para a tabela de frequência, que tem **um** rótulo e números. O
+    cruzamento tem dois rótulos, a normalidade tem uma frase na última coluna e a
+    associação tem o nome do teste, e nas três a regra dava o espaço à coluna
+    errada: `Qui-quadrado com correção de Yates` quebrava em três linhas ao lado de
+    uma `variável 1` quase vazia, e o cabeçalho `faltantes` quebrava no meio da
+    palavra.
+
+    A regra, em três passos:
+
+    * **número não quebra.** Cada coluna de número recebe a largura do texto mais
+      longo dela, cabeçalho incluído — com um mínimo, para `n` não virar um fio;
+    * **texto curto não quebra.** O que sobra vai para as colunas de texto, e a
+      que precisa de menos recebe tudo o que precisa antes de as longas dividirem
+      o resto em partes iguais. Nenhuma fica abaixo da sua palavra mais longa;
+    * **sobrando espaço**, ele vai para as colunas de texto, na proporção do que
+      cada uma carrega.
+
+    As larguras são estimativas para a fonte das tabelas, com folga. Quando nem as
+    palavras mais longas cabem, devolve `None`, e a tabela fica na repartição de
+    sempre — que pelo menos é previsível.
+    """
+    def em_emu(caracteres: int) -> int:
+        return int((caracteres * _CM_POR_CARACTERE + _RESPIRO_CM) * _EMU_POR_CM)
+
+    def textos(posicao: int) -> list[str]:
+        celulas = [linha[posicao] if posicao < len(linha) else "" for linha in tabela.linhas]
+        return [str(texto).strip() for texto in (tabela.colunas[posicao], *celulas)]
+
+    larguras = [0] * tabela.largura
+    naturais: dict[int, int] = {}
+    pisos: dict[int, int] = {}
+    for posicao in range(tabela.largura):
+        conteudo = textos(posicao)
+        maior = max((len(texto) for texto in conteudo), default=1)
+        if posicao in de_texto:
+            pisos[posicao] = em_emu(
+                max((len(palavra) for texto in conteudo for palavra in texto.split()), default=1)
+            )
+            naturais[posicao] = max(em_emu(min(maior, _TEXTO_NATURAL)), pisos[posicao])
+        else:
+            larguras[posicao] = max(em_emu(maior), int(_MINIMO_NUMERICO_CM * _EMU_POR_CM))
+
+    resta = int(largura_util) - sum(larguras)
+    if resta < sum(pisos.values()):
+        return None
+
+    pendentes = sorted(naturais, key=naturais.__getitem__)
+    while pendentes:
+        parte = resta / len(pendentes)
+        curtas = [p for p in pendentes if naturais[p] <= parte]
+        presas = [p for p in pendentes if pisos[p] > parte]
+        if curtas:
+            escolhidas, medida = curtas, naturais
+        elif presas:
+            escolhidas, medida = presas, pisos
+        else:
+            for posicao in pendentes:
+                larguras[posicao] = int(parte)
+            resta -= int(parte) * len(pendentes)
+            break
+        for posicao in escolhidas:
+            larguras[posicao] = medida[posicao]
+            resta -= medida[posicao]
+        pendentes = [p for p in pendentes if p not in escolhidas]
+
+    if resta > 0:
+        total = sum(naturais.values())
+        for posicao, natural in naturais.items():
+            larguras[posicao] += int(resta * natural / total)
+    # A soma das palavras mais longas cabia, mas a ordem da divisão pode ter dado a
+    # uma coluna curta o que faltou a uma longa. Estourar a mancha da página nunca.
+    if sum(larguras) > int(largura_util):
+        return None
+    return larguras
 
 
 def _fixar_larguras(quadro, larguras) -> None:

@@ -282,6 +282,93 @@ class TestSecoes:
         larguras = [c.width for c in quadro.columns]
         assert larguras[0] > larguras[1]
 
+    def test_tabela_de_um_rotulo_so_fica_na_reparticao_de_sempre(self, documento):
+        """
+        A regra nova é só para tabela com mais de uma coluna de texto. As da
+        descritiva — um rótulo e números — saem exatamente como saíam: um terço
+        para o rótulo, o resto em partes iguais.
+        """
+        doc, _ = documento()
+        secao = doc.sections[-1]
+        util = secao.page_width - secao.left_margin - secao.right_margin
+        quadro = next(t for t in doc.tables if len(t.columns) == 4)
+        larguras = [c.width for c in quadro.columns]
+        # O Word guarda a largura em vigésimos de ponto: a volta perde até um.
+        um_vigesimo = 635
+        assert larguras[0] == pytest.approx(util * 0.34, abs=um_vigesimo)
+        for largura in larguras[1:]:
+            assert largura == pytest.approx(util * (1 - 0.34) / 3, abs=um_vigesimo)
+
+    def test_varias_colunas_de_texto_repartem_pelo_conteudo(self):
+        """
+        A tabela da associação: o nome do teste leva o espaço, e não a
+        `variável 1` quase vazia — até a 1.4.0, `Qui-quadrado com correção de
+        Yates` quebrava em três linhas ao lado dela.
+        """
+        from flatcap.documento import _colunas_de_texto, _larguras_pelo_conteudo
+        from flatcap.relatorio import TabelaLida
+
+        tabela = TabelaLida(
+            "associacao.csv",
+            "associacao",
+            "Testes de associação",
+            colunas=("variável 1", "variável 2", "n", "teste", "p-valor"),
+            linhas=(
+                ("Grupo", "Desfecho", "79", "Qui-quadrado com correção de Yates", "0,017"),
+                ("Grupo", "Escolaridade", "80", "Exato de Fisher", "< 0,001"),
+            ),
+        )
+        util = int(Pt(453))  # a mancha de uma A4 com 2,5 cm de margem
+        larguras = _larguras_pelo_conteudo(tabela, _colunas_de_texto(tabela), util)
+
+        assert larguras is not None
+        assert sum(larguras) <= util
+        variavel_1, variavel_2, n, teste, p = larguras
+        assert teste > variavel_2 > variavel_1
+        assert teste > 2 * p
+        assert n < variavel_1
+
+    def test_cabecalho_de_numero_nao_quebra_no_meio_da_palavra(self):
+        """
+        O defeito da tabela da normalidade: `faltantes` e `assimetria` partidos em
+        duas linhas porque todas as colunas depois da primeira tinham a mesma
+        largura.
+        """
+        from flatcap.documento import (
+            _CM_POR_CARACTERE,
+            _EMU_POR_CM,
+            _colunas_de_texto,
+            _larguras_pelo_conteudo,
+        )
+        from flatcap.relatorio import TabelaLida
+
+        colunas = ("variável", "n", "faltantes", "assimetria", "curtose", "W", "valor-p", "leitura")
+        tabela = TabelaLida(
+            "normalidade.csv",
+            "normalidade",
+            "Pressupostos — normalidade",
+            colunas=colunas,
+            linhas=(
+                ("Idade (anos)", "80", "0", "+0,01", "-1,22", "0,951", "0,004",
+                 "simétrica; achatada; o teste rejeita a normal"),
+            ),
+        )
+        larguras = _larguras_pelo_conteudo(tabela, _colunas_de_texto(tabela), int(Pt(453)))
+        assert larguras is not None
+        for posicao in (2, 3, 4, 6):
+            assert larguras[posicao] >= len(colunas[posicao]) * _CM_POR_CARACTERE * _EMU_POR_CM
+
+    def test_quando_nem_as_palavras_cabem_volta_a_reparticao_de_sempre(self):
+        from flatcap.documento import _colunas_de_texto, _larguras_pelo_conteudo
+        from flatcap.relatorio import TabelaLida
+
+        tabela = TabelaLida(
+            "x.csv", "", "",
+            colunas=("a", "b"),
+            linhas=(("palavra" * 20, "outrapalavra" * 20),),
+        )
+        assert _larguras_pelo_conteudo(tabela, _colunas_de_texto(tabela), int(Pt(453))) is None
+
     def test_a_figura_ocupa_a_largura_util_da_pagina(self, documento):
         doc, _ = documento()
         secao = doc.sections[-1]

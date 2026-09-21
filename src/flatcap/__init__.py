@@ -14,6 +14,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     descritiva.py  obedece ao dicionário: conta, resume e monta as tabelas
     normalidade.py testa a normalidade das numéricas (Shapiro-Wilk, forma, Q-Q)
     cruzamento.py  cruza pares de categóricas: uma tabela por par
+    associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -160,6 +161,31 @@ código que o Excel leu como `1.0` não sai `1.0` em nenhuma delas.
 número à direita. Até aqui só a primeira coluna ia à esquerda, e a segunda coluna
 do cruzamento — que também é rótulo — sairia empurrada para a direita. A coluna
 `leitura` da normalidade já saía assim, e passa a sair à esquerda.
+
+## 1.5.0 — a associação
+
+**`associacao.py`: qui-quadrado ou exato de Fisher, escolhido pela regra de
+Cochran.** Os pares vêm da lista `associacao:` da ficha, em duas formas — o par
+`[sexo, desfecho]` e a variável contra várias, `desfecho: [sexo, escolaridade]` —,
+e saem numa tabela só: variável 1, variável 2, n, teste, p-valor e o V de Cramér.
+A justificativa de cada escolha — a menor esperada e quantas caselas ficaram
+abaixo de 5 — vai para as notas do `.csv` e para o manifesto, com a tabela de
+contingência inteira.
+
+**O V de Cramér sai ao lado do p**, porque o p depende do n e o V mede o tamanho
+da associação. Ele usa sempre o X² de Pearson sem correção, qualquer que seja o
+teste da linha, e sai também nas linhas do Fisher.
+
+Os dois testes são os do R. O qui-quadrado é o `chisq.test` com o padrão dele:
+Yates só na 2×2, e nunca maior do que a diferença. O Fisher é o `fisher.test`:
+2×2 pela hipergeométrica e as maiores **exatas**, pelo algoritmo de rede. Essa
+aritmética está escrita no módulo, e não importada, porque o `scipy` calcula a
+tabela maior que 2×2 por simulação, sem semente — o p mudaria a cada rodada. A
+conferência é contra os exemplos da documentação do R e contra a força bruta.
+
+É a quarta análise, e de novo o `relatorio.py` não muda uma linha. Ela entra na
+`ORDEM_PADRAO_DAS_ANALISES` logo depois do cruzamento, e o `valor_p` da
+normalidade ficou público: o p sai escrito do mesmo jeito nas duas tabelas.
 """
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"

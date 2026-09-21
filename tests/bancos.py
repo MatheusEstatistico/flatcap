@@ -289,6 +289,56 @@ def para_cruzar() -> pd.DataFrame:
     return pd.DataFrame(linhas, columns=["sexo", "escolaridade"])
 
 
+def para_associar() -> pd.DataFrame:
+    """
+    Dois grupos de 40 e uma variável para cada caminho da regra de Cochran.
+
+    Cruzada com `grupo`, cada coluna cai num teste diferente — é o banco da forma
+    "uma contra várias", `grupo: [desfecho, complicacao, escolaridade,
+    faixa_etaria]`:
+
+    * `desfecho` — código `0`/`1` com **uma célula vazia**, que chega decimal da
+      leitura; 2×2 com todas as esperadas acima de 5: **qui-quadrado com Yates**,
+      sobre 79 casos e não 80;
+    * `complicacao` — evento raro, 1 e 5 casos: esperada 3 em duas das quatro
+      caselas, **exato de Fisher 2×2**;
+    * `escolaridade` — `Pós-graduação` com 1 e 2 casos: 2×4 com duas caselas de
+      oito (25%) abaixo de 5, **exato de Fisher maior que 2×2**;
+    * `faixa_etaria` — três faixas equilibradas: 2×3 com tudo acima de 5,
+      **qui-quadrado sem Yates**;
+    * `servico` — uma categoria só: **não há teste**.
+
+    As contagens de cada grupo estão escritas por extenso, em blocos, e não
+    sorteadas: o teste confere o p contra uma conta independente feita sobre estes
+    mesmos números.
+    """
+    controle = {
+        "desfecho": [1] * 12 + [0] * 27 + [None],
+        "complicacao": ["Sim"] * 1 + ["Não"] * 39,
+        "escolaridade": ["Fundamental"] * 10 + ["Médio"] * 20 + ["Superior"] * 9
+        + ["Pós-graduação"] * 1,
+        "faixa_etaria": ["18 a 39"] * 15 + ["40 a 59"] * 15 + ["60 ou mais"] * 10,
+    }
+    intervencao = {
+        "desfecho": [1] * 24 + [0] * 16,
+        "complicacao": ["Sim"] * 5 + ["Não"] * 35,
+        "escolaridade": ["Fundamental"] * 8 + ["Médio"] * 15 + ["Superior"] * 15
+        + ["Pós-graduação"] * 2,
+        "faixa_etaria": ["18 a 39"] * 12 + ["40 a 59"] * 14 + ["60 ou mais"] * 14,
+    }
+    quadro = pd.DataFrame(
+        {
+            "grupo": ["Controle"] * 40 + ["Intervenção"] * 40,
+            **{
+                coluna: controle[coluna] + intervencao[coluna]
+                for coluna in ("desfecho", "complicacao", "escolaridade", "faixa_etaria")
+            },
+            "servico": ["Ambulatório"] * 80,
+        }
+    )
+    return quadro
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

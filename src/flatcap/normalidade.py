@@ -1376,7 +1376,7 @@ def _estatistica(valor: float | None) -> str:
     return f"{valor:.{CASAS_W}f}".replace(".", ",")
 
 
-def _valor_p(valor: float | None) -> str:
+def valor_p(valor: float | None) -> str:
     """
     O valor-p, com três casas e nunca como zero.
 
@@ -1384,12 +1384,19 @@ def _valor_p(valor: float | None) -> str:
     estritamente maior que zero, e `p = 0,000` impresso em um relatório assinado é
     um número que não existe. É a convenção de qualquer revista da área, e é a
     única regra de formatação deste módulo que alguém vai conferir.
+
+    Pública desde a 1.5.0, com o apelido privado que este módulo usa: a associação
+    imprime p-valor na mesma página, e dois formatadores para o mesmo p é como um
+    documento sai com `< 0,001` numa tabela e `0,000` na seguinte.
     """
     if valor is None:
         return _AUSENTE
     if valor < MENOR_P:
         return f"< {numero(MENOR_P, CASAS_P)}"
     return f"{valor:.{CASAS_P}f}".replace(".", ",")
+
+
+_valor_p = valor_p
 
 
 def _integridade(confere: bool | None) -> str:
@@ -1428,4 +1435,5 @@ __all__ = [
     "executar_normalidade",
     "montar_manifesto",
     "preparar_normalidade",
+    "valor_p",
 ]
