@@ -25,6 +25,7 @@ import pytest
 
 import bancos
 import servidor_falso
+from conftest import acrescentar_a_ficha
 from servidor_falso import ERRO_FIELDS_INDEXADOS
 
 pytestmark = pytest.mark.e2e
@@ -224,6 +225,48 @@ class TestFluxoCompleto:
                 assert celulas[categoria] == percentual, categoria
 
 
+    def test_o_cruzamento_do_docx_e_o_do_csv(self, tmp_path, anexo):
+        """
+        A decisão de arquitetura nº 3 conferida para a terceira análise: a tabela
+        do cruzamento no documento é, célula por célula, a do `.csv` que o
+        comando escreveu — e ela entra no documento sem o `relatorio` saber que
+        o cruzamento existe.
+        """
+        from docx import Document
+
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            acrescentar_a_ficha(raiz, "cruzamento:\n  - [sexo, escolaridade]\n")
+            for comando in (
+                ("perfil", "40", "--sim"),
+                ("descritiva", "40", "--sim"),
+                ("cruzamento", "40", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        csv = raiz / "3. Análises" / "cruzamento" / "cruz_sexo_x_escolaridade.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells][:2] == ["sexo", "escolaridade"]
+        )
+        do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
+        assert do_docx == do_csv
+
+
 class TestSemRede:
     """
     Do `dados adicionar` em diante, nada toca o REDCap — e a prova é rodar com
@@ -244,7 +287,9 @@ class TestSemRede:
             encoding="utf-8",
             newline="\n",
         )
-        return env, tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+        raiz = tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+        acrescentar_a_ficha(raiz, "cruzamento:\n  - [sexo, escolaridade]\n")
+        return env, raiz
 
     @pytest.mark.parametrize(
         "comando",
@@ -252,6 +297,8 @@ class TestSemRede:
             ("dados", "listar", "40"),
             ("perfil", "40", "--sim"),
             ("descritiva", "40", "--sim"),
+            ("normalidade", "40", "--sim"),
+            ("cruzamento", "40", "--sim"),
             ("relatorio", "40", "--sim"),
             ("template", "--sim"),
         ],
