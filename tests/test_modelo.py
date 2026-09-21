@@ -19,6 +19,9 @@ import pytest
 from flatcap.modelo import (
     ALUNO,
     CAMPO_ANEXO,
+    CAMPO_FINALIDADE,
+    CAMPO_FINALIDADE_OUTROS,
+    CAMPO_OBJETIVOS,
     CAMPOS_REDCAP,
     INDEFINIDO,
     PROFESSOR,
@@ -155,11 +158,15 @@ class TestMaisRecentes:
         assert mais_recentes(clientes, 10) == clientes
 
 
-def test_os_sete_campos_do_roteiro_estao_na_lista():
+def test_os_campos_pedidos_ao_redcap_estao_na_lista():
     """
     Se `database` não for pedido, `tem_anexo` fica permanentemente falso — que é
     uma resposta errada em silêncio. A lista mora em um lugar só.
+
+    São os sete do roteiro mais os três da primeira página do relatório
+    (`fin`, `outros1`, `obj1`), que entraram com a finalidade e os objetivos.
     """
     assert set(CAMPOS_REDCAP) == {
         "record_id", "intro", "matricula1", "prof1", "matricula2", "aluno2", CAMPO_ANEXO,
+        CAMPO_FINALIDADE, CAMPO_FINALIDADE_OUTROS, CAMPO_OBJETIVOS,
     }
