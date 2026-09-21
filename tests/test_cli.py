@@ -519,6 +519,7 @@ class TestAssociacao:
         assert not (raiz / PASTA_ANALISES / PASTA_ASSOCIACAO).exists()
         saida = _saida(resultado)
         assert "Exato de Fisher" in saida
+        assert "V de Cramér" in saida
         assert "Escolha do teste (regra de Cochran)" in saida
         assert "sexo × escolaridade: 2×3, n = 24" in saida
         assert "Simulação" in saida
