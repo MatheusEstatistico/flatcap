@@ -7,12 +7,8 @@ A regra da pasta desde os ajustes pós-Fase 3: um módulo em `src/flatcap/` pede
 O miolo é testado pela função pura `avaliar(banco, ficha, linhas)`, como o
 `perfilar` da Fase 4 e o `descrever` da Fase 5: um `DataFrame` montado à mão e uma
 lista de `Linha` entram, e as afirmações são sobre a tabela — sem pasta de projeto
-e sem disco. Os dois ajudantes abaixo (`_banco` e `_linha`) existem só para isso.
-
-> **Ao mesclar:** `_banco` e `_linha` provavelmente já têm equivalente em
-> `tests/bancos.py` e em `tests/conftest.py`, que não vieram no anexo. Troque os
-> dois pelos de lá antes de commitar — a desordem que os ajustes pós-Fase 3
-> desfizeram nasceu exatamente de cada fase recriar os próprios ajudantes.
+e sem disco. O banco e a ficha em memória são os do `conftest.py`, os mesmos da
+descritiva e do cruzamento.
 """
 
 from __future__ import annotations
@@ -24,9 +20,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from flatcap.banco import Banco, Leitura
+from conftest import banco_em_memoria, ficha_em_memoria
 from flatcap.dicionario import CATEGORICA, DATA, IGNORAR, NUMERICA, Linha
-from flatcap.ficha import Ficha, Versao
 from flatcap.manifesto import ANALISE_NORMALIDADE
 from flatcap.normalidade import (
     ALFA,
@@ -46,33 +41,6 @@ QUANDO = datetime(2026, 9, 17, 15, 0, 0)
 # Ajudantes
 
 
-def _banco(quadro: pd.DataFrame) -> Banco:
-    caminho = Path("1. Dados originais/00_redcap_2026-09-01_banco.xlsx")
-    return Banco(
-        quadro=quadro,
-        versao=Versao(
-            arquivo=caminho.name,
-            origem="redcap",
-            sha256="a" * 64,
-            tamanho_bytes=1024,
-        ),
-        leitura=Leitura(caminho=caminho, aba="Dados"),
-        confere=True,
-    )
-
-
-def _ficha(raiz: Path | None = None) -> Ficha:
-    return Ficha(
-        raiz=raiz or Path("/root/00742 - Fulano/Projeto 006"),
-        record_id="42",
-        matricula="00742",
-        nome="Fulano de Tal",
-        tipo="professor",
-        status="em_analise",
-        dados=(),
-    )
-
-
 def _linha(variavel: str, tipo: str = NUMERICA, **extras) -> Linha:
     return Linha(variavel=variavel, rotulo=extras.pop("rotulo", variavel), tipo=tipo, **extras)
 
@@ -86,7 +54,7 @@ def _assimetrica(n: int = 120, semente: int = 7) -> list[float]:
 
 
 def _rodar(quadro: pd.DataFrame, linhas, raiz: Path | None = None):
-    return avaliar(_banco(quadro), _ficha(raiz), linhas, (), QUANDO)
+    return avaliar(banco_em_memoria(quadro), ficha_em_memoria(raiz), linhas, (), QUANDO)
 
 
 # O caminho feliz
@@ -188,7 +156,11 @@ def test_recusa_variavel_pedida_que_nao_existe():
     quadro = pd.DataFrame({"idade": _normal(30)})
     with pytest.raises(VariavelPedidaInexistenteError) as erro:
         avaliar(
-            _banco(quadro), _ficha(), [_linha("idade")], ("idade", "imc"), QUANDO
+            banco_em_memoria(quadro),
+            ficha_em_memoria(),
+            [_linha("idade")],
+            ("idade", "imc"),
+            QUANDO,
         )
 
     assert "imc" in str(erro.value)
@@ -199,8 +171,8 @@ def test_recusa_variavel_pedida_que_nao_e_numerica():
     quadro = pd.DataFrame({"idade": _normal(30), "sexo": ["F", "M"] * 15})
     with pytest.raises(VariavelPedidaInexistenteError) as erro:
         avaliar(
-            _banco(quadro),
-            _ficha(),
+            banco_em_memoria(quadro),
+            ficha_em_memoria(),
             [_linha("idade"), _linha("sexo", CATEGORICA)],
             ("sexo",),
             QUANDO,
@@ -212,7 +184,11 @@ def test_recusa_variavel_pedida_que_nao_e_numerica():
 def test_a_lista_da_ficha_restringe_e_o_resto_vai_para_fora():
     quadro = pd.DataFrame({"idade": _normal(40), "imc": _normal(40, 9)})
     resultado = avaliar(
-        _banco(quadro), _ficha(), [_linha("idade"), _linha("imc")], ("idade",), QUANDO
+        banco_em_memoria(quadro),
+        ficha_em_memoria(),
+        [_linha("idade"), _linha("imc")],
+        ("idade",),
+        QUANDO,
     )
 
     assert [v.variavel for v in resultado.variaveis] == ["idade"]
@@ -245,7 +221,9 @@ def test_a_constante_nao_sai_com_assimetria_zero():
     variável que é mesmo simétrica.
     """
     quadro = pd.DataFrame({"constante": [3.0] * 50})
-    resultado = avaliar(_banco(quadro), _ficha(), [_linha("constante")], (), QUANDO)
+    resultado = avaliar(
+        banco_em_memoria(quadro), ficha_em_memoria(), [_linha("constante")], (), QUANDO
+    )
     constante = resultado.variaveis[0]
 
     assert constante.assimetria is None
@@ -264,7 +242,9 @@ def test_variavel_sem_quartis_distintos_nao_gera_figura():
     valor, que é o que acontece de verdade com um desfecho raro.
     """
     quadro = pd.DataFrame({"desfecho": [0.0] * 45 + [1.0] * 5})
-    resultado = avaliar(_banco(quadro), _ficha(), [_linha("desfecho")], (), QUANDO)
+    resultado = avaliar(
+        banco_em_memoria(quadro), ficha_em_memoria(), [_linha("desfecho")], (), QUANDO
+    )
 
     assert len(resultado.variaveis) == 1
     assert resultado.variaveis[0].testada  # o teste roda; o que não sai é a figura
