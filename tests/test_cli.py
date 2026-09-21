@@ -24,10 +24,16 @@ import pytest
 from typer.testing import CliRunner
 
 import bancos
-from conftest import MATRICULA, RECORD_ID
+from conftest import MATRICULA, RECORD_ID, acrescentar_a_ficha
 from flatcap import __version__
 from flatcap.cli import app
-from flatcap.projeto import ARQUIVO_PROJETO, PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA
+from flatcap.projeto import (
+    ARQUIVO_PROJETO,
+    PASTA_ANALISES,
+    PASTA_ANTIGAS,
+    PASTA_CRUZAMENTO,
+    PASTA_DESCRITIVA,
+)
 
 runner = CliRunner()
 
@@ -432,6 +438,71 @@ class TestDescritiva:
         assert PASTA_ANTIGAS in saida
 
 
+class TestCruzamento:
+    BLOCO = "cruzamento:\n  - [sexo, escolaridade]\n"
+
+    def test_simula_por_padrao_e_mostra_a_tabela(self, rodar, projeto_com_rodada):
+        """
+        A simulação existe para ler o que vai para o documento antes de escrever:
+        a tabela sai inteira no terminal, com as mesmas células do `.csv`.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("cruzamento", RECORD_ID)
+        assert resultado.exit_code == 0
+        assert not (raiz / PASTA_ANALISES / PASTA_CRUZAMENTO).exists()
+        saida = _saida(resultado)
+        assert "sexo × escolaridade" in saida
+        assert "Feminino" in saida and "(sem informação)" in saida
+        assert "Simulação" in saida
+
+    def test_com_sim_escreve_a_pasta(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert rodar("cruzamento", RECORD_ID, "--sim").exit_code == 0
+        pasta = raiz / PASTA_ANALISES / PASTA_CRUZAMENTO
+        assert (pasta / "cruz_sexo_x_escolaridade.csv").is_file()
+        assert (pasta / "manifesto.json").is_file()
+
+    def test_sem_a_lista_sai_com_um_e_ensina_a_escrever(self, rodar, projeto_com_rodada):
+        """
+        O par do exemplo tem colchete, e colchete é marcação para o `rich`. A
+        mensagem que ensina a escrever a lista não pode chegar sem ela.
+        """
+        projeto_com_rodada()
+        resultado = rodar("cruzamento", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Cruzamento" in saida
+        assert "- [sexo, escolaridade]" in saida
+
+    def test_par_com_numerica_sai_com_um(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "cruzamento:\n  - [sexo, idade]\n")
+        resultado = rodar("cruzamento", RECORD_ID)
+        assert resultado.exit_code == 1
+        assert "`idade` está marcada `numerica`" in _saida(resultado)
+
+    def test_rotulo_com_colchete_nao_vira_marcacao_do_rich(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        dicionario = raiz / "dicionario.csv"
+        dicionario.write_text(
+            dicionario.read_text(encoding="utf-8-sig").replace(
+                "\nsexo;sexo;", "\nsexo;Sexo [autodeclarado];"
+            ),
+            encoding="utf-8-sig",
+        )
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert "Sexo [autodeclarado] × escolaridade" in _saida(rodar("cruzamento", RECORD_ID))
+
+    def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        rodar("cruzamento", RECORD_ID, "--sim")
+        saida = _saida(rodar("cruzamento", RECORD_ID, "--sim"))
+        assert PASTA_ANTIGAS in saida
+
+
 class TestRelatorio:
     def test_simula_por_padrao(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -521,6 +592,8 @@ class TestInvariantes:
             ("dados", "adicionar", RECORD_ID, "ARQUIVO"),
             ("perfil", RECORD_ID),
             ("descritiva", RECORD_ID),
+            ("normalidade", RECORD_ID),
+            ("cruzamento", RECORD_ID),
             ("relatorio", RECORD_ID),
             ("template",),
         ],
@@ -541,11 +614,13 @@ class TestInvariantes:
             raise AssertionError("um comando de disco tentou falar com a rede")
 
         monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
-        projeto_com_rodada()
+        acrescentar_a_ficha(projeto_com_rodada(), TestCruzamento.BLOCO)
         for comando in (
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
             ("descritiva", RECORD_ID),
+            ("normalidade", RECORD_ID, "--sem-graficos"),
+            ("cruzamento", RECORD_ID),
             ("relatorio", RECORD_ID),
         ):
             assert rodar(*comando).exit_code == 0, comando
@@ -556,11 +631,14 @@ class TestInvariantes:
         from conftest import linhas_do_historico
 
         raiz = projeto_com_banco()
+        acrescentar_a_ficha(raiz, TestCruzamento.BLOCO)
         antes = len(linhas_do_historico(raiz))
         rodar("perfil", RECORD_ID, "--sim")
         rodar("descritiva", RECORD_ID, "--sim")
+        rodar("normalidade", RECORD_ID, "--sem-graficos", "--sim")
+        rodar("cruzamento", RECORD_ID, "--sim")
         rodar("relatorio", RECORD_ID, "--sim")
-        assert len(linhas_do_historico(raiz)) == antes + 3
+        assert len(linhas_do_historico(raiz)) == antes + 5
 
     def test_a_cli_nao_tem_regra_de_negocio(self):
         """
