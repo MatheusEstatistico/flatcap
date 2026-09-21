@@ -21,9 +21,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -39,7 +37,23 @@ HOJE = AGORA.date()
 MATRICULA = "00742"
 RECORD_ID = "42"
 NOME = "José Antônio de Sá"
-PASTA = f"{MATRICULA} - {NOME}"
+PASTA = f"{MATRICULA} - {NOME}"  # a pasta do CLIENTE
+
+# A pasta do PROJETO, um nível abaixo da do cliente — o layout da 1.1.0.
+#
+# Escrita à mão, e não com `nomes.nome_do_projeto(RECORD_ID)`, pelo mesmo motivo
+# do `escrever_ficha`: um fixture que usa a regra do pacote só prova que o pacote
+# concorda consigo mesmo. Se o nome da pasta mudar de formato, é aqui que o teste
+# precisa quebrar.
+PROJETO = "Projeto 042"
+
+# A primeira página do relatório, como o `flatcap novo` a traz do formulário.
+# Preenchidas por padrão: uma ficha sem as duas faz todo relatório da suíte sair
+# com o alerta `texto_ausente`, e aí o teste de "rodada atual não gera alerta"
+# mede a ficha do fixture em vez da rodada. Quem quer a ficha sem elas passa
+# `None` — é o que `test_relatorio.py` faz para conferir o próprio alerta.
+FINALIDADE = "Artigo científico"
+OBJETIVOS = "Objetivo geral: descrever o perfil dos pacientes atendidos."
 
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
@@ -97,6 +111,8 @@ def escrever_ficha(
     nome: str = NOME,
     tipo: str = "professor",
     status: str = "em_analise",
+    finalidade: str | None = FINALIDADE,
+    objetivos: str | None = OBJETIVOS,
     dados: list[dict] | None = None,
     cabecalho: str = "# projeto.yaml — a ficha deste atendimento.\n",
 ) -> Path:
@@ -116,6 +132,8 @@ def escrever_ficha(
         f"criado_em: {HOJE.isoformat()}",
         "prazo: null",
         f"status: {status}",
+        f"finalidade: {_texto_yaml(finalidade)}",
+        f"objetivos: {_texto_yaml(objetivos)}",
         "analises: []",
     ]
     if dados:
@@ -134,6 +152,18 @@ def escrever_ficha(
     return caminho
 
 
+def _texto_yaml(valor: str | None) -> str:
+    """
+    `null` para o campo vazio; entre aspas simples para o resto.
+
+    Aspas porque a finalidade e os objetivos são prosa do cliente, e prosa tem
+    `:` no meio — `Objetivo geral: descrever` sem aspas é um YAML que não abre.
+    """
+    if valor is None:
+        return "null"
+    return "'" + valor.replace("'", "''") + "'"
+
+
 def sha_e_tamanho(caminho: Path) -> tuple[str, int]:
     bruto = Path(caminho).read_bytes()
     return hashlib.sha256(bruto).hexdigest(), len(bruto)
@@ -146,14 +176,20 @@ def projeto_vazio(root) -> Path:
 
     É o estado em que o `flatcap novo` deixa um registro cujo REDCap não trouxe
     anexo, e é o ponto de partida do `dados adicionar`.
+
+    Dois níveis, desde a 1.1.0: `root/<cliente>/<projeto>/projeto.yaml`. Até a
+    revisão 1.3.1 este fixture montava a ficha na pasta do cliente, que é o
+    layout que o `ficha.localizar_projeto` passou a recusar com
+    `LayoutAntigoError` — e era a origem isolada de trinta falhas da suíte.
     """
-    raiz = root / PASTA
-    raiz.mkdir()
+    raiz = root / PASTA / PROJETO
+    raiz.mkdir(parents=True)
     for subpasta in projeto.SUBPASTAS:
         (raiz / subpasta).mkdir()
     escrever_ficha(raiz)
     (raiz / projeto.ARQUIVO_HISTORICO).write_text(
-        f"# Histórico — {PASTA}\n\nUma linha por ação do FlatCap nesta pasta.\n\n",
+        f"# Histórico — {PASTA} · {PROJETO}\n\n"
+        "Uma linha por ação do FlatCap nesta pasta.\n\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -299,7 +335,9 @@ def congelar_relogio(monkeypatch):
             def now(cls, tz=None):  # noqa: ARG003
                 return quando
 
-        for modulo in ("dados", "descritiva", "perfil", "projeto", "relatorio"):
+        for modulo in (
+            "dados", "descritiva", "normalidade", "perfil", "projeto", "relatorio",
+        ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):
                 monkeypatch.setattr(alvo, "datetime", Relogio)
@@ -326,16 +364,16 @@ def bytes_iguais(a: Path, b: Path) -> bool:
 
 __all__ = [
     "AGORA",
+    "FINALIDADE",
     "HOJE",
     "MATRICULA",
     "NOME",
+    "OBJETIVOS",
     "PASTA",
+    "PROJETO",
     "RECORD_ID",
     "bytes_iguais",
     "escrever_ficha",
     "linhas_do_historico",
     "sha_e_tamanho",
-    "shutil",
-    "os",
-    "date",
 ]
