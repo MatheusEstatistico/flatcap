@@ -237,7 +237,8 @@ class TestNovo:
     def test_com_sim_cria(self, rodar, com_redcap, root):
         resultado = rodar("novo", "40", "--sim")
         assert resultado.exit_code == 0
-        assert (root / "00740 - Ana Cláudia Menezes" / ARQUIVO_PROJETO).is_file()
+        projeto = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+        assert (projeto / ARQUIVO_PROJETO).is_file()
 
     def test_registro_sem_anexo_avisa_e_cria_assim_mesmo(
         self, rodar, com_redcap, monkeypatch, root
@@ -257,7 +258,7 @@ class TestNovo:
         Idempotência que serve para script: encadear `novo` sobre a saída do
         `listar` não pode quebrar porque um dos projetos já existe.
         """
-        (root / "00740 - Ana Cláudia Menezes").mkdir()
+        (root / "00740 - Ana Cláudia Menezes" / "Projeto 040").mkdir(parents=True)
         resultado = rodar("novo", "40")
         assert resultado.exit_code == 0
         assert "Nada para fazer" in _saida(resultado)
