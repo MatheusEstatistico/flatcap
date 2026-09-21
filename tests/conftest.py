@@ -23,11 +23,17 @@ import hashlib
 import json
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from flatcap import projeto
-from flatcap.ficha import ARQUIVO_PROJETO
+from flatcap.ficha import ARQUIVO_PROJETO, Ficha, Versao
+
+if TYPE_CHECKING:  # o `pandas` só entra quando um teste monta um banco
+    import pandas as pd
+
+    from flatcap.banco import Banco
 
 # O relógio de toda a suíte. Fixo, e com hora que não é meia-noite, para que um
 # `%H%M` errado apareça em vez de sair `0000` por acidente.
@@ -240,6 +246,69 @@ def bancos():
     return modulo
 
 
+# ── O que as funções puras recebem ──────────────────────────────────────────
+
+
+def banco_em_memoria(quadro: pd.DataFrame) -> Banco:
+    """
+    Um `Banco` montado em volta de um `DataFrame`, sem arquivo nenhum.
+
+    É o que o miolo de cada análise recebe — `descrever`, `avaliar`, `cruzar` — e
+    o que permite afirmar sobre uma tabela sem pasta de projeto e sem disco. Até a
+    1.4.0 havia uma cópia em `test_descritiva.py` e outra em `test_normalidade.py`,
+    com um aviso no topo do segundo para trocá-la pela daqui; a terceira análise
+    era a hora de ele ter um lugar só.
+    """
+    from flatcap.banco import Banco, Leitura
+
+    caminho = Path(projeto.PASTA_DADOS) / "00_redcap_2026-09-01_banco.csv"
+    return Banco(
+        quadro=quadro,
+        versao=Versao(
+            arquivo=caminho.name, origem="redcap", sha256="a" * 64, tamanho_bytes=1024
+        ),
+        leitura=Leitura(caminho=caminho, separador=";", codificacao="utf-8"),
+        confere=True,
+    )
+
+
+def ficha_em_memoria(raiz: Path | None = None) -> Ficha:
+    """
+    A `Ficha` que acompanha o `banco_em_memoria`.
+
+    A raiz padrão é a do `projeto_vazio`, em dois níveis, e nunca é criada: nada
+    que recebe esta ficha escreve no disco. Ela aparece só no manifesto — `pasta`
+    e `cliente` —, e é por isso que ela tem a forma da pasta de verdade.
+    """
+    return Ficha(
+        raiz=raiz or Path("FlatCapRoot") / PASTA / PROJETO,
+        record_id=RECORD_ID,
+        matricula=MATRICULA,
+        nome=NOME,
+        tipo="professor",
+        status="em_analise",
+        dados=(),
+    )
+
+
+def acrescentar_a_ficha(raiz: Path, texto: str) -> Path:
+    """
+    Acrescenta YAML ao fim do `projeto.yaml`, do jeito que você faria no editor.
+
+    Texto, e não uma lista que o teste monta: a lista `cruzamento:` e a
+    `normalidade:` são escritas à mão na reunião, e o que precisa ser testado é o
+    que se digita — `- [sexo, escolaridade]`, com o recuo que a pessoa escolher.
+    """
+    caminho = Path(raiz) / ARQUIVO_PROJETO
+    atual = caminho.read_text(encoding="utf-8")
+    caminho.write_text(
+        atual.rstrip("\n") + "\n" + texto.strip("\n") + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return caminho
+
+
 # ── Uma rodada de descritiva pronta ─────────────────────────────────────────
 
 
@@ -336,7 +405,8 @@ def congelar_relogio(monkeypatch):
                 return quando
 
         for modulo in (
-            "dados", "descritiva", "normalidade", "perfil", "projeto", "relatorio",
+            "cruzamento", "dados", "descritiva", "normalidade", "perfil", "projeto",
+            "relatorio",
         ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):
@@ -372,8 +442,11 @@ __all__ = [
     "PASTA",
     "PROJETO",
     "RECORD_ID",
+    "acrescentar_a_ficha",
+    "banco_em_memoria",
     "bytes_iguais",
     "escrever_ficha",
+    "ficha_em_memoria",
     "linhas_do_historico",
     "sha_e_tamanho",
 ]
