@@ -1938,11 +1938,14 @@ def template(
 
 def _cabecalho_do_relatorio(plano: PlanoRelatorio) -> Text:
     """
-    Quem, de quais análises, sobre qual banco, com qual modelo.
+    Quem, de quais análises, sobre qual banco, com qual modelo e qual título.
 
     As análises entram nomeadas e na ordem em que saem no documento, porque é
     aqui que se descobre — antes de abrir o `.docx` — que a normalidade não
     entrou porque ninguém a rodou.
+
+    O título entra pelo mesmo motivo: sem ele, `--titulo` só se conferia depois
+    de executar, que é exatamente o que a simulação existe para evitar.
     """
     relatorio = plano.relatorio
     ficha = relatorio.ficha
@@ -1968,6 +1971,8 @@ def _cabecalho_do_relatorio(plano: PlanoRelatorio) -> Text:
             str(plano.template) if plano.template else "(nenhum — estilos padrão)",
             "" if plano.template else "dim",
         ),
+        "\n",
+        ("Título ", "dim"), (relatorio.titulo, "bold"),
     )
     return cabecalho
 
