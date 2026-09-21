@@ -1617,7 +1617,7 @@ def _e_data(serie: pd.Series) -> bool:
     return bool(pd.api.types.is_datetime64_any_dtype(serie))
 
 
-def _serie_de_texto(serie: pd.Series) -> pd.Series:
+def serie_de_texto(serie: pd.Series) -> pd.Series:
     """
     Os valores preenchidos como texto, do jeito que eles devem aparecer na tabela.
 
@@ -1626,6 +1626,12 @@ def _serie_de_texto(serie: pd.Series) -> pd.Series:
     sugere para essas colunas. Lógico vira Sim/Não, e data vira `dd/mm/aaaa`:
     os dois são o que se escreve em uma tabela em português, e o dicionário é
     quem decidiu que a coluna é categórica.
+
+    Pública desde a 1.4.0, com o apelido privado que este módulo usa. O
+    `cruzamento.py` escreve a mesma categoria na tabela dele, e uma segunda
+    conversão é como o `1` da tabela de frequência vira `1.0` no cruzamento da
+    página seguinte — o `1.0` que o `pd.crosstab` imprime quando a coluna de
+    código tem uma célula vazia.
     """
     preenchidos = serie.dropna()
     if preenchidos.empty:
@@ -1644,6 +1650,9 @@ def _serie_de_texto(serie: pd.Series) -> pd.Series:
         return valores.map(lambda valor: _numero(valor, 4))
 
     return preenchidos.astype(str)
+
+
+_serie_de_texto = serie_de_texto
 
 
 def _como_data(serie: pd.Series) -> tuple[pd.Series, str | None, int]:
@@ -1729,7 +1738,7 @@ def numero(valor: float | None, casas: int = CASAS_RESUMO) -> str:
 _numero = numero
 
 
-def _percentual(parte: float, total: float) -> str:
+def percentual(parte: float, total: float) -> str:
     """
     Percentual com casas fixas: `5,0` e `100,0`, nunca `5` e `100`.
 
@@ -1737,6 +1746,11 @@ def _percentual(parte: float, total: float) -> str:
     de percentuais em que uns valores têm casa decimal e outros não é uma coluna
     que não alinha, e desalinhada ela deixa de ser lida de cima para baixo — que é
     a única forma de ler uma tabela de frequência.
+
+    Pública desde a 1.4.0, pelo mesmo motivo do `numero`: o cruzamento imprime
+    `% dos válidos` ao lado das tabelas de frequência, e dois formatadores para o
+    mesmo percentual é como um documento sai com `26,8` numa página e `26.8%` na
+    seguinte.
     """
     if not total:
         return "—"
@@ -1744,6 +1758,9 @@ def _percentual(parte: float, total: float) -> str:
     if not math.isfinite(valor):
         return "—"
     return f"{valor:.{CASAS_PERCENTUAL}f}".replace(".", ",")
+
+
+_percentual = percentual
 
 
 def _arredondar(valor: float | None) -> float | None:
