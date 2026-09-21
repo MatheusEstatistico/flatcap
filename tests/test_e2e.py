@@ -297,7 +297,7 @@ class TestFluxoCompleto:
             for linha in csv.read_text(encoding="utf-8-sig").splitlines()
             if linha and not linha.startswith("#")
         ]
-        assert do_csv[0] == ["variável 1", "variável 2", "n", "teste", "p-valor"]
+        assert do_csv[0] == ["variável 1", "variável 2", "n", "teste", "p-valor", "V de Cramér"]
 
         documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
         quadro = next(
