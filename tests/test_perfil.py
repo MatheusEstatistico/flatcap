@@ -526,33 +526,22 @@ class TestTravasEstruturais:
         Um detector novo não pode ficar sem resposta para "os valores desta
         coluna vão mudar quando o cliente corrigir?".
 
-        `CORRIGIR` é volátil por definição. Os de `CONFIRMAR` e `NOTA` precisam
-        aparecer em `CODIGOS_VOLATEIS` ou na lista de estáveis aqui embaixo — e
-        acrescentar um detector sem escolher um dos dois quebra este teste, que
-        é o momento certo de decidir.
+        `CORRIGIR` é volátil por definição, e `NOTA` é estável pela regra do
+        `_categorias_sugeridas`, que só consulta `CORRIGIR` e `CODIGOS_VOLATEIS`.
+        Os de `CONFIRMAR` são os que pedem escolha consciente, e quem responde é
+        o `codigo_classificado` do próprio módulo — e não uma lista mantida aqui
+        em paralelo, que foi como `categoria_sem_rotulo` entrou no módulo
+        classificado e saiu deste teste sem classificação.
         """
         import ast
         import inspect
 
-        from flatcap.perfil import CODIGOS_VOLATEIS
-
-        estaveis = {
-            "cabecalho_com_espaco",
-            "categoria_com_barra",
-            "coluna_constante",
-            "coluna_vazia",
-            "identificador_repetido",
-            "linhas_duplicadas",
-            "muitos_faltantes",
-            "poucas_linhas",
-            "sentinela_numerica",
-        }
-
         import flatcap.perfil as modulo
+        from flatcap.perfil import CODIGOS_ESTAVEIS, CODIGOS_VOLATEIS, codigo_classificado
 
         arvore = ast.parse(inspect.getsource(modulo))
         emitidos: set[str] = set()
-        por_corrigir: set[str] = set()
+        por_confirmar: set[str] = set()
         for no in ast.walk(arvore):
             if not (isinstance(no, ast.Call) and getattr(no.func, "id", "") == "Achado"):
                 continue
@@ -562,15 +551,17 @@ class TestTravasEstruturais:
                 continue
             emitidos.add(codigo.value)
             gravidade = argumentos.get("gravidade")
-            if isinstance(gravidade, ast.Name) and gravidade.id == "CORRIGIR":
-                por_corrigir.add(codigo.value)
+            if isinstance(gravidade, ast.Name) and gravidade.id == "CONFIRMAR":
+                por_confirmar.add(codigo.value)
 
         assert emitidos, "nenhum Achado encontrado — o parser deste teste quebrou"
-        assert emitidos == por_corrigir | CODIGOS_VOLATEIS | estaveis, (
-            "detector sem classificação: "
-            f"{sorted(emitidos - (por_corrigir | CODIGOS_VOLATEIS | estaveis))}"
-        )
-        assert not (CODIGOS_VOLATEIS & estaveis)
+        sem_classificacao = sorted(c for c in por_confirmar if not codigo_classificado(c))
+        assert not sem_classificacao, f"detector sem classificação: {sem_classificacao}"
+        # E o contrário: classificação de um código que nenhum detector emite é
+        # uma lista que ficou para trás de uma mudança de nome.
+        orfaos = sorted((CODIGOS_VOLATEIS | CODIGOS_ESTAVEIS) - emitidos)
+        assert not orfaos, f"classificado e nunca emitido: {orfaos}"
+        assert not (CODIGOS_VOLATEIS & CODIGOS_ESTAVEIS)
 
     def test_ninguem_pergunta_o_dtype_fora_dos_predicados(self):
         """

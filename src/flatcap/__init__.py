@@ -13,6 +13,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     perfil.py      diagnostica o banco e escreve o perfil.md
     descritiva.py  obedece ao dicionário: conta, resume e monta as tabelas
     normalidade.py testa a normalidade das numéricas (Shapiro-Wilk, forma, Q-Q)
+    cruzamento.py  cruza pares de categóricas: uma tabela por par
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -137,6 +138,28 @@ O `Relatorio` ganhou `rodadas`, e `manifesto` passou a ser o **principal** — o
 descritiva quando ela existe. As propriedades do `.docx` e o cabeçalho do terminal
 precisam de um banco e de uma data, e com mais de uma rodada isso deixou de ser
 automático.
+
+## 1.4.0 — o cruzamento
+
+**`cruzamento.py`: uma tabela por par de categóricas.** Cada combinação de
+categorias, quantos casos e o percentual sobre quem respondeu as duas — o `cruz()`
+que se fazia à mão. Os pares vêm da lista `cruzamento:` da ficha, e a numérica de
+poucos valores entra marcada `categorica` no dicionário. Sem teste e sem gráfico.
+
+É a terceira análise e a primeira a entrar sem que o `relatorio.py` mude uma
+linha: a varredura de `3. Análises/*/` da 1.3.1 a encontra sozinha. E o campo
+`colunas` do manifesto, que a 1.2.0 criou esperando um par, é o que mantém as
+conferências do relatório certas para uma seção que fala de duas colunas.
+
+**`serie_de_texto` e `percentual` ficaram públicas no `descritiva.py`.** A
+categoria do cruzamento sai escrita pelas mesmas funções que escrevem a tabela de
+frequência da mesma variável: `1` vira `Feminino` do mesmo jeito nas duas, e um
+código que o Excel leu como `1.0` não sai `1.0` em nenhuma delas.
+
+**O `documento.py` alinha pelo conteúdo, e não pela posição.** Texto à esquerda,
+número à direita. Até aqui só a primeira coluna ia à esquerda, e a segunda coluna
+do cruzamento — que também é rótulo — sairia empurrada para a direita. A coluna
+`leitura` da normalidade já saía assim, e passa a sair à esquerda.
 """
 
-__version__ = "1.3.1"
+__version__ = "1.4.0"

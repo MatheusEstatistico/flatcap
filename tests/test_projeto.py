@@ -127,7 +127,8 @@ class TestPreparar:
     def test_o_plano_traz_tudo_resolvido(self, cfg, redcap):
         redcap([REGISTRO])
         plano = preparar(cfg, "42", agora=AGORA)
-        assert plano.raiz.name == "00742 - José Antônio de Sá"
+        assert plano.raiz.name == "Projeto 042"
+        assert plano.raiz.parent.name == "00742 - José Antônio de Sá"
         assert len(plano.subpastas) == 3
         assert plano.tem_anexo
         assert plano.projeto_yaml and plano.historico_md
@@ -163,17 +164,26 @@ class TestPreparar:
         assert falta in str(erro.value)
 
     def test_pasta_ja_existente_carrega_o_caminho_no_erro(self, cfg, redcap, root):
-        (root / "00742 - José Antônio de Sá").mkdir()
+        # A pasta do PROJETO. A do cliente, sozinha, é reaproveitada desde a
+        # 1.1.0 — é o cliente que voltou com outro trabalho.
+        (root / "00742 - José Antônio de Sá" / "Projeto 042").mkdir(parents=True)
         redcap([REGISTRO])
         with pytest.raises(ProjetoExistenteError) as erro:
             preparar(cfg, "42", agora=AGORA)
         assert erro.value.pasta.exists()
 
     def test_pasta_renomeada_a_mao_tambem_e_encontrada(self, cfg, redcap, root):
-        (root / "00742 (em andamento)").mkdir()
+        """
+        A pasta do cliente é achada pela matrícula e reaproveitada **como está
+        no disco**, inclusive renomeada à mão. Até a 1.0.0 achá-la era recusar;
+        desde a 1.1.0 é pôr o projeto novo dentro dela.
+        """
+        renomeada = root / "00742 (em andamento)"
+        renomeada.mkdir()
         redcap([REGISTRO])
-        with pytest.raises(ProjetoExistenteError):
-            preparar(cfg, "42", agora=AGORA)
+        plano = preparar(cfg, "42", agora=AGORA)
+        assert plano.raiz == renomeada / "Projeto 042"
+        assert not plano.cliente_novo
 
     def test_sem_anexo_a_pasta_e_planejada_assim_mesmo(self, cfg, redcap):
         redcap([REGISTRO], anexo=None)

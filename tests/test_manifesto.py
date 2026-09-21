@@ -164,7 +164,11 @@ class TestLeitura:
     def test_pasta_sem_manifesto(self, tmp_path):
         with pytest.raises(ManifestoInvalidoError) as erro:
             ler(tmp_path)
-        assert "flatcap descritiva" in str(erro.value)
+        # Desde a Fase 7 o manifesto é de qualquer análise: a mensagem manda
+        # rodar "a análise", e não a descritiva — que numa pasta
+        # `normalidade/` seria o comando errado.
+        assert ARQUIVO_MANIFESTO in str(erro.value)
+        assert "Rode a análise de novo" in str(erro.value)
 
     def test_json_invalido_manda_regerar(self, tmp_path):
         (tmp_path / ARQUIVO_MANIFESTO).write_text("{quebrado", encoding="utf-8")

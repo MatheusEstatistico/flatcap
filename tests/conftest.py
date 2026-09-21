@@ -21,15 +21,19 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-import shutil
-from datetime import date, datetime
+from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from flatcap import projeto
-from flatcap.ficha import ARQUIVO_PROJETO
+from flatcap.ficha import ARQUIVO_PROJETO, Ficha, Versao
+
+if TYPE_CHECKING:  # o `pandas` só entra quando um teste monta um banco
+    import pandas as pd
+
+    from flatcap.banco import Banco
 
 # O relógio de toda a suíte. Fixo, e com hora que não é meia-noite, para que um
 # `%H%M` errado apareça em vez de sair `0000` por acidente.
@@ -39,7 +43,23 @@ HOJE = AGORA.date()
 MATRICULA = "00742"
 RECORD_ID = "42"
 NOME = "José Antônio de Sá"
-PASTA = f"{MATRICULA} - {NOME}"
+PASTA = f"{MATRICULA} - {NOME}"  # a pasta do CLIENTE
+
+# A pasta do PROJETO, um nível abaixo da do cliente — o layout da 1.1.0.
+#
+# Escrita à mão, e não com `nomes.nome_do_projeto(RECORD_ID)`, pelo mesmo motivo
+# do `escrever_ficha`: um fixture que usa a regra do pacote só prova que o pacote
+# concorda consigo mesmo. Se o nome da pasta mudar de formato, é aqui que o teste
+# precisa quebrar.
+PROJETO = "Projeto 042"
+
+# A primeira página do relatório, como o `flatcap novo` a traz do formulário.
+# Preenchidas por padrão: uma ficha sem as duas faz todo relatório da suíte sair
+# com o alerta `texto_ausente`, e aí o teste de "rodada atual não gera alerta"
+# mede a ficha do fixture em vez da rodada. Quem quer a ficha sem elas passa
+# `None` — é o que `test_relatorio.py` faz para conferir o próprio alerta.
+FINALIDADE = "Artigo científico"
+OBJETIVOS = "Objetivo geral: descrever o perfil dos pacientes atendidos."
 
 
 # ── Ambiente ────────────────────────────────────────────────────────────────
@@ -97,6 +117,8 @@ def escrever_ficha(
     nome: str = NOME,
     tipo: str = "professor",
     status: str = "em_analise",
+    finalidade: str | None = FINALIDADE,
+    objetivos: str | None = OBJETIVOS,
     dados: list[dict] | None = None,
     cabecalho: str = "# projeto.yaml — a ficha deste atendimento.\n",
 ) -> Path:
@@ -116,6 +138,8 @@ def escrever_ficha(
         f"criado_em: {HOJE.isoformat()}",
         "prazo: null",
         f"status: {status}",
+        f"finalidade: {_texto_yaml(finalidade)}",
+        f"objetivos: {_texto_yaml(objetivos)}",
         "analises: []",
     ]
     if dados:
@@ -134,6 +158,18 @@ def escrever_ficha(
     return caminho
 
 
+def _texto_yaml(valor: str | None) -> str:
+    """
+    `null` para o campo vazio; entre aspas simples para o resto.
+
+    Aspas porque a finalidade e os objetivos são prosa do cliente, e prosa tem
+    `:` no meio — `Objetivo geral: descrever` sem aspas é um YAML que não abre.
+    """
+    if valor is None:
+        return "null"
+    return "'" + valor.replace("'", "''") + "'"
+
+
 def sha_e_tamanho(caminho: Path) -> tuple[str, int]:
     bruto = Path(caminho).read_bytes()
     return hashlib.sha256(bruto).hexdigest(), len(bruto)
@@ -146,14 +182,20 @@ def projeto_vazio(root) -> Path:
 
     É o estado em que o `flatcap novo` deixa um registro cujo REDCap não trouxe
     anexo, e é o ponto de partida do `dados adicionar`.
+
+    Dois níveis, desde a 1.1.0: `root/<cliente>/<projeto>/projeto.yaml`. Até a
+    revisão 1.3.1 este fixture montava a ficha na pasta do cliente, que é o
+    layout que o `ficha.localizar_projeto` passou a recusar com
+    `LayoutAntigoError` — e era a origem isolada de trinta falhas da suíte.
     """
-    raiz = root / PASTA
-    raiz.mkdir()
+    raiz = root / PASTA / PROJETO
+    raiz.mkdir(parents=True)
     for subpasta in projeto.SUBPASTAS:
         (raiz / subpasta).mkdir()
     escrever_ficha(raiz)
     (raiz / projeto.ARQUIVO_HISTORICO).write_text(
-        f"# Histórico — {PASTA}\n\nUma linha por ação do FlatCap nesta pasta.\n\n",
+        f"# Histórico — {PASTA} · {PROJETO}\n\n"
+        "Uma linha por ação do FlatCap nesta pasta.\n\n",
         encoding="utf-8",
         newline="\n",
     )
@@ -202,6 +244,69 @@ def bancos():
     import bancos as modulo
 
     return modulo
+
+
+# ── O que as funções puras recebem ──────────────────────────────────────────
+
+
+def banco_em_memoria(quadro: pd.DataFrame) -> Banco:
+    """
+    Um `Banco` montado em volta de um `DataFrame`, sem arquivo nenhum.
+
+    É o que o miolo de cada análise recebe — `descrever`, `avaliar`, `cruzar` — e
+    o que permite afirmar sobre uma tabela sem pasta de projeto e sem disco. Até a
+    1.4.0 havia uma cópia em `test_descritiva.py` e outra em `test_normalidade.py`,
+    com um aviso no topo do segundo para trocá-la pela daqui; a terceira análise
+    era a hora de ele ter um lugar só.
+    """
+    from flatcap.banco import Banco, Leitura
+
+    caminho = Path(projeto.PASTA_DADOS) / "00_redcap_2026-09-01_banco.csv"
+    return Banco(
+        quadro=quadro,
+        versao=Versao(
+            arquivo=caminho.name, origem="redcap", sha256="a" * 64, tamanho_bytes=1024
+        ),
+        leitura=Leitura(caminho=caminho, separador=";", codificacao="utf-8"),
+        confere=True,
+    )
+
+
+def ficha_em_memoria(raiz: Path | None = None) -> Ficha:
+    """
+    A `Ficha` que acompanha o `banco_em_memoria`.
+
+    A raiz padrão é a do `projeto_vazio`, em dois níveis, e nunca é criada: nada
+    que recebe esta ficha escreve no disco. Ela aparece só no manifesto — `pasta`
+    e `cliente` —, e é por isso que ela tem a forma da pasta de verdade.
+    """
+    return Ficha(
+        raiz=raiz or Path("FlatCapRoot") / PASTA / PROJETO,
+        record_id=RECORD_ID,
+        matricula=MATRICULA,
+        nome=NOME,
+        tipo="professor",
+        status="em_analise",
+        dados=(),
+    )
+
+
+def acrescentar_a_ficha(raiz: Path, texto: str) -> Path:
+    """
+    Acrescenta YAML ao fim do `projeto.yaml`, do jeito que você faria no editor.
+
+    Texto, e não uma lista que o teste monta: a lista `cruzamento:` e a
+    `normalidade:` são escritas à mão na reunião, e o que precisa ser testado é o
+    que se digita — `- [sexo, escolaridade]`, com o recuo que a pessoa escolher.
+    """
+    caminho = Path(raiz) / ARQUIVO_PROJETO
+    atual = caminho.read_text(encoding="utf-8")
+    caminho.write_text(
+        atual.rstrip("\n") + "\n" + texto.strip("\n") + "\n",
+        encoding="utf-8",
+        newline="\n",
+    )
+    return caminho
 
 
 # ── Uma rodada de descritiva pronta ─────────────────────────────────────────
@@ -299,7 +404,10 @@ def congelar_relogio(monkeypatch):
             def now(cls, tz=None):  # noqa: ARG003
                 return quando
 
-        for modulo in ("dados", "descritiva", "perfil", "projeto", "relatorio"):
+        for modulo in (
+            "cruzamento", "dados", "descritiva", "normalidade", "perfil", "projeto",
+            "relatorio",
+        ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):
                 monkeypatch.setattr(alvo, "datetime", Relogio)
@@ -326,16 +434,19 @@ def bytes_iguais(a: Path, b: Path) -> bool:
 
 __all__ = [
     "AGORA",
+    "FINALIDADE",
     "HOJE",
     "MATRICULA",
     "NOME",
+    "OBJETIVOS",
     "PASTA",
+    "PROJETO",
     "RECORD_ID",
+    "acrescentar_a_ficha",
+    "banco_em_memoria",
     "bytes_iguais",
     "escrever_ficha",
+    "ficha_em_memoria",
     "linhas_do_historico",
     "sha_e_tamanho",
-    "shutil",
-    "os",
-    "date",
 ]

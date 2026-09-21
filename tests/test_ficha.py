@@ -18,7 +18,7 @@ from datetime import date
 
 import pytest
 
-from conftest import MATRICULA, PASTA, RECORD_ID, escrever_ficha
+from conftest import MATRICULA, PASTA, PROJETO, RECORD_ID, escrever_ficha
 from flatcap.ficha import (
     CAMPOS_VERSAO,
     IMPLEMENTACAO,
@@ -118,7 +118,10 @@ class TestLeitura:
         with pytest.raises(FichaInvalidaError) as erro:
             ler(projeto_vazio)
         assert "barra solta" in str(erro.value)
-        assert "reparar_fichas" in str(erro.value)
+        # O `reparar_fichas.py` foi aposentado com a migração da Fase 3, e o
+        # diagnóstico ficou: quem restaura uma pasta de backup antigo precisa do
+        # conserto escrito, porque não há mais script para indicar.
+        assert "apague a primeira linha" in str(erro.value)
 
     def test_ficha_que_nao_e_mapeamento(self, projeto_vazio):
         caminho_da_ficha(projeto_vazio).write_text(
@@ -320,8 +323,8 @@ class TestLocalizarProjeto:
         assert "Confira o identificador" in str(erro.value)
 
     def test_duas_pastas_com_o_mesmo_identificador(self, projeto_vazio, root):
-        gemea = root / "00743 - Outro"
-        gemea.mkdir()
+        gemea = root / "00743 - Outro" / PROJETO
+        gemea.mkdir(parents=True)
         escrever_ficha(gemea, matricula="00743")
         with pytest.raises(ProjetoNaoEncontradoError) as erro:
             localizar_projeto(root, RECORD_ID)
@@ -340,8 +343,10 @@ class TestLocalizarProjeto:
         projeto não existe — ele pode ser justamente aquele que não deu para
         ler. O erro que sobe é o diagnóstico da ficha quebrada.
         """
-        quebrada = root / "00999 - Quebrada"
-        quebrada.mkdir()
+        # No segundo nível, onde mora uma ficha de projeto desde a 1.1.0. No
+        # primeiro, ela é layout antigo — outro diagnóstico, outro teste.
+        quebrada = root / "00999 - Quebrada" / "Projeto 999"
+        quebrada.mkdir(parents=True)
         caminho_da_ficha(quebrada).write_text("/\nrecord_id: x\n", encoding="utf-8")
         with pytest.raises(FichaInvalidaError) as erro:
             localizar_projeto(root, "12345")
@@ -379,5 +384,6 @@ def test_a_implementacao_carregada_e_informavel():
 
 
 def test_a_pasta_do_projeto_e_a_do_fixture(projeto_vazio):
-    assert projeto_vazio.name == PASTA
+    assert projeto_vazio.name == PROJETO
+    assert projeto_vazio.parent.name == PASTA
     assert versao_vigente(ler(projeto_vazio)) is None

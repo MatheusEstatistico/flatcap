@@ -256,6 +256,39 @@ def com_codigos_numericos() -> pd.DataFrame:
     return quadro
 
 
+def para_cruzar() -> pd.DataFrame:
+    """
+    `sexo` em código e `escolaridade` em texto, com quatro linhas sem uma das duas
+    respostas — o exemplo do `cruzamento-o-que-construir.md`, que o `cruz()` feito à
+    mão imprimia com três defeitos.
+
+    Sessenta linhas: 56 com as duas respostas, em seis combinações de tamanhos
+    diferentes, e quatro com uma só. As três esquisitices estão aqui de propósito:
+
+    * a coluna de código tem célula vazia, então ela chega **decimal** — é o `1.0`
+      que o `pd.crosstab` imprime no lugar de `1`;
+    * `Masculino · Fundamental` é a menor combinação, com 3 casos — a que o `cruz()`
+      apagava com o `drop` da última linha;
+    * as quatro linhas incompletas são as que o `pd.crosstab` descarta em silêncio,
+      e que fazem o total dele dar 56 num banco de 60.
+    """
+    combinacoes = [
+        (1, "Superior", 15),
+        (1, "Médio", 12),
+        (2, "Médio", 11),
+        (2, "Superior", 9),
+        (1, "Fundamental", 6),
+        (2, "Fundamental", 3),
+    ]
+    linhas: list[tuple] = [
+        (sexo, escolaridade)
+        for sexo, escolaridade, quantos in combinacoes
+        for _ in range(quantos)
+    ]
+    linhas += [(None, "Médio"), (None, "Superior"), (1, None), (2, None)]
+    return pd.DataFrame(linhas, columns=["sexo", "escolaridade"])
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

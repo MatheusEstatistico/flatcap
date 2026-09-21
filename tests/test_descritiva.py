@@ -24,8 +24,7 @@ import pandas as pd
 import pytest
 
 import bancos
-from conftest import AGORA
-from flatcap.banco import Banco, Leitura
+from conftest import AGORA, banco_em_memoria, ficha_em_memoria
 from flatcap.descritiva import (
     FAIXAS_DICIONARIO,
     FAIXAS_QUARTIS,
@@ -41,28 +40,14 @@ from flatcap.descritiva import (
     preparar_descritiva,
 )
 from flatcap.dicionario import CATEGORICA, DATA, IGNORAR, NUMERICA, Linha
-from flatcap.ficha import Ficha, Versao
 from flatcap.manifesto import ARQUIVO_MANIFESTO
 from flatcap.projeto import PASTA_ANALISES, PASTA_ANTIGAS, PASTA_DESCRITIVA
 
 
-def _ficha(tmp_path) -> Ficha:
-    return Ficha(tmp_path, "42", "00742", "Ana", "professor", "em_analise", ())
-
-
-def _banco(quadro, tmp_path) -> Banco:
-    return Banco(
-        quadro=quadro,
-        versao=Versao("00_redcap_2026-09-01_b.csv", "redcap", "a" * 64, 100),
-        leitura=Leitura(caminho=tmp_path / "b.csv", separador=";", codificacao="utf-8"),
-        confere=True,
-    )
-
-
 @pytest.fixture
-def descrita(tmp_path):
+def descrita():
     def executar(quadro, linhas):
-        return descrever(_banco(quadro, tmp_path), _ficha(tmp_path), linhas, AGORA)
+        return descrever(banco_em_memoria(quadro), ficha_em_memoria(), linhas, AGORA)
 
     return executar
 

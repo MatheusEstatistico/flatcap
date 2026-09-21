@@ -21,6 +21,8 @@ from datetime import date, datetime
 import pytest
 
 import bancos
+from conftest import escrever_ficha
+from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO
 from flatcap.projeto import PASTA_ANTIGAS, PASTA_DADOS
 from flatcap.relatorio import (
@@ -31,6 +33,7 @@ from flatcap.relatorio import (
     TabelaIlegivelError,
     executar_relatorio,
     ler_tabela,
+    montar_abertura,
     nome_do_relatorio,
     preparar_relatorio,
     relatorios_na_pasta,
@@ -147,7 +150,10 @@ class TestSecoes:
         `projeto.yaml`, só a linha que preenche o campo muda.
         """
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
-        assert plano.relatorio.texto == TEXTO_PADRAO
+        # A `TEXTO_PADRAO` abre a página, e a finalidade e os objetivos da ficha
+        # vêm depois dela — os três pedaços que o `montar_abertura` junta.
+        assert plano.relatorio.texto == montar_abertura(plano.relatorio.ficha)
+        assert plano.relatorio.texto[: len(TEXTO_PADRAO)] == TEXTO_PADRAO
 
 
 class TestLerTabela:
@@ -203,6 +209,36 @@ class TestAlertas:
 
     def test_rodada_atual_nao_gera_alerta_nenhum(self, projeto_com_rodada):
         assert _codigos(preparar_relatorio(projeto_com_rodada(), agora=QUANDO)) == set()
+
+    def test_ficha_sem_finalidade_nem_objetivos_gera_texto_ausente(self, projeto_com_rodada):
+        """
+        Campo da primeira página em branco não encolhe a página em silêncio:
+        vira marcador visível **e** alerta.
+
+        Até o fixture passar a preencher os dois campos, este alerta saía em
+        todo relatório da suíte — e por isso nenhum teste o conferia de
+        propósito. Com a ficha completa por padrão, ele precisa do teste dele.
+        """
+        raiz = projeto_com_rodada()
+        ficha = ler_ficha(raiz)
+        escrever_ficha(
+            raiz,
+            finalidade=None,
+            objetivos=None,
+            dados=[
+                {
+                    "arquivo": versao.arquivo,
+                    "origem": versao.origem,
+                    "sha256": versao.sha256,
+                    "tamanho_bytes": versao.tamanho_bytes,
+                    "data": versao.data.isoformat(),
+                }
+                for versao in ficha.dados
+            ],
+        )
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        assert _codigos(plano) == {"texto_ausente"}
+        assert any("«a preencher" in paragrafo for paragrafo in plano.relatorio.texto)
 
     def test_banco_mudou(self, projeto_com_rodada, projeto_com_banco):
         raiz = projeto_com_rodada()
@@ -373,16 +409,22 @@ class TestNomeELugar:
 
 class TestTemplate:
     def test_a_ordem_de_busca(self, projeto_com_rodada, tmp_path):
+        # Quatro degraus desde a 1.1.0: o indicado, o do projeto, o do cliente
+        # (o degrau novo) e o do FLATCAP_ROOT. Com o fixture em dois níveis,
+        # `raiz.parent` passou a ser a pasta do cliente, e não mais o root.
         raiz = projeto_com_rodada()
-        do_root = raiz.parent / "template.docx"
         do_projeto = raiz / "template.docx"
+        do_cliente = raiz.parent / "template.docx"
+        do_root = raiz.parent.parent / "template.docx"
         indicado = tmp_path / "outro.docx"
-        for caminho in (do_root, do_projeto, indicado):
+        for caminho in (do_root, do_cliente, do_projeto, indicado):
             caminho.write_bytes(b"PK\x03\x04")
 
         assert preparar_relatorio(raiz, template=indicado, agora=QUANDO).template == indicado
         assert preparar_relatorio(raiz, agora=QUANDO).template == do_projeto
         do_projeto.unlink()
+        assert preparar_relatorio(raiz, agora=QUANDO).template == do_cliente
+        do_cliente.unlink()
         assert preparar_relatorio(raiz, agora=QUANDO).template == do_root
         do_root.unlink()
         assert preparar_relatorio(raiz, agora=QUANDO).template is None
