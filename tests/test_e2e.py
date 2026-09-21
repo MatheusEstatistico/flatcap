@@ -87,8 +87,10 @@ class TestPayload:
 
         chamada = api.ultima("record")
         assert "%5B" not in chamada.bruto, ERRO_FIELDS_INDEXADOS
+        # Os sete do roteiro e os três da primeira página do relatório.
         assert chamada.lista("fields") == [
-            "record_id", "intro", "matricula1", "prof1", "matricula2", "aluno2", "database",
+            "record_id", "intro", "matricula1", "prof1", "matricula2", "aluno2",
+            "fin", "outros1", "obj1", "database",
         ]
 
     def test_o_servidor_recusa_a_forma_indexada(self, tmp_path):
@@ -154,7 +156,7 @@ class TestFluxoCompleto:
             assert flatcap("listar", env=env).returncode == 0
             assert flatcap("novo", "40", "--sim", env=env).returncode == 0
 
-            raiz = root / "00740 - Ana Cláudia Menezes"
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
             assert (raiz / "projeto.yaml").is_file()
             assert list((raiz / "1. Dados originais").glob("00_redcap_*"))
 
@@ -201,7 +203,7 @@ class TestFluxoCompleto:
             ):
                 assert flatcap(*comando, env=env).returncode == 0
 
-        raiz = root / "00740 - Ana Cláudia Menezes"
+        raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
         pasta = raiz / "3. Análises" / "descritiva"
         linhas = [
             linha
@@ -242,7 +244,7 @@ class TestSemRede:
             encoding="utf-8",
             newline="\n",
         )
-        return env, tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes"
+        return env, tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
 
     @pytest.mark.parametrize(
         "comando",
@@ -350,7 +352,7 @@ def test_o_manifesto_gravado_e_json_valido_e_do_formato_conhecido(tmp_path, anex
             assert flatcap(*comando, env=env).returncode == 0
 
     caminho = (
-        tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes"
+        tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
         / "3. Análises" / "descritiva" / "manifesto.json"
     )
     corpo = json.loads(caminho.read_text(encoding="utf-8"))
