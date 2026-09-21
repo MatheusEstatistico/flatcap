@@ -61,6 +61,7 @@ from .projeto import (
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .cruzamento import ParCruzado, PlanoCruzamento
     from .descritiva import Descritiva, PlanoDescritiva
     from .normalidade import Normalidade, PlanoNormalidade
     from .perfil import Achado, Perfil, PlanoPerfil
@@ -1727,6 +1728,234 @@ def _arvore_da_normalidade(plano: PlanoNormalidade) -> Tree:
     return arvore
 
 
+# flatcap cruzamento
+
+@app.command()
+def cruzamento(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Cruza pares de variáveis categóricas: uma tabela por par.
+
+    Para cada par da lista `cruzamento:` do projeto.yaml, uma tabela com cada
+    combinação de categorias, quantos casos e o percentual sobre quem respondeu as
+    duas. Quem não respondeu uma delas sai numa linha própria, e o Total é o do
+    banco — o mesmo das tabelas de frequência. Tudo em `3. Análises/cruzamento/`,
+    com um `manifesto.json`.
+
+    Os pares se escrevem na ficha, um por linha:
+
+        cruzamento:
+          - \\[sexo, escolaridade]
+
+    As duas variáveis precisam estar marcadas `categorica` no dicionario.csv —
+    inclusive uma numérica de poucos valores, como uma escala de 0 a 5.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `pandas` entra aqui dentro, como em todo comando que abre o banco: o
+    # `listar`, que roda várias vezes por dia, não deve pagar por ele.
+    from .banco import BancoError
+    from .cruzamento import CruzamentoError, executar_cruzamento, preparar_cruzamento
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_cruzamento(raiz, aba = aba, conferir = not rapido)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except CruzamentoError as erro:
+        raise _abortar("Cruzamento", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_do_cruzamento(plano))
+    for par in plano.cruzamento.pares:
+        console.print(_tabela_do_cruzamento(par))
+    for aviso in plano.cruzamento.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_do_cruzamento(plano))
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_cruzamento(plano)
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao escrever em {plano.pasta}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+            "anterior — confira a pasta antes de rodar de novo."
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+                style = "dim",
+            )
+        )
+
+    quantos = len(plano.arquivos)
+    console.print(
+        f"\n[green]Cruzamento escrito.[/green] {quantos} "
+        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+        f"{PASTA_ANALISES}/{plano.pasta.name}"
+    )
+
+
+def _cabecalho_do_cruzamento(plano: PlanoCruzamento) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantos pares entram.
+    """
+    cruzamento = plano.cruzamento
+    ficha = cruzamento.ficha
+    banco = cruzamento.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantos = len(cruzamento.pares)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantos} {_plural(quantos, 'par', 'pares')}", ""),
+            (" da lista `cruzamento:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_do_cruzamento(par: ParCruzado) -> Table:
+    """
+    A tabela de um par, com as mesmas células do `.csv`.
+
+    Inteira, e não um resumo por par como o da descritiva: a tabela é o produto
+    deste comando, e a simulação existe para você ler o que vai para o documento
+    antes de escrevê-lo. A linha do `Total` em negrito e a `(sem informação)`
+    apagada são as mesmas marcas que o `.docx` vai dar a elas.
+    """
+    from .descritiva import ROTULO_FALTANTE, ROTULO_TOTAL
+
+    # `Text` no título e nos cabeçalhos, e não a string: são rótulos do
+    # dicionário, e um `Idade [anos]` perderia o colchete como marcação do rich —
+    # o cuidado que o `_abortar` já toma com as mensagens de erro.
+    tabela = Table(
+        title = Text(par.rotulo, style = "bold"), title_justify = "left",
+        show_header = True, header_style = "bold",
+    )
+    for posicao, nome in enumerate(par.tabela.colunas):
+        if posicao < 2:
+            tabela.add_column(Text(nome), overflow = "fold")
+        else:
+            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+
+    for celulas in par.tabela.linhas:
+        estilo = (
+            "bold" if celulas[0] == ROTULO_TOTAL
+            else "dim" if celulas[0] == ROTULO_FALTANTE
+            else ""
+        )
+        tabela.add_row(*(Text(celula, style = estilo) for celula in celulas))
+    return tabela
+
+
+def _arvore_do_cruzamento(plano: PlanoCruzamento) -> Tree:
+    """
+    Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    for par in plano.cruzamento.pares:
+        ramo.add(
+            Text.assemble(
+                ("+ ", "green"), (par.tabela.nome, ""),
+                (f"   {len(par.combinacoes)} combinação(ões)", "dim"),
+            )
+        )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
 # flatcap relatorio
 
 @app.command()
@@ -1763,7 +1992,8 @@ def relatorio(
     Varre `3. Análises/`, lê o `manifesto.json` de cada rodada que estiver lá e
     monta um documento com as seções de todas elas: a tabela, as notas de
     denominador e a figura de cada uma. A descritiva dá uma seção por variável,
-    na ordem do dicionário; a normalidade dá a tabela de pressupostos e os Q-Q.
+    na ordem do dicionário; o cruzamento, uma seção por par; a normalidade, a
+    tabela de pressupostos e os Q-Q.
 
     A ordem das análises é a da lista `analises:` do `projeto.yaml` — o que foi
     combinado na reunião. O que não estiver na lista entra depois, e o que
