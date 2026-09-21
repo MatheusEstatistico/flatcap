@@ -5,11 +5,11 @@ Responde ao passo 2b do fluxo, e é o primeiro teste de hipótese entre duas
 variáveis da Fase 7. Para cada par de categóricas pedido na ficha, uma linha de
 tabela:
 
-    variável 1  variável 2     n   teste                               p-valor
-    Grupo       Desfecho      79   Qui-quadrado com correção de Yates    0,017
-    Grupo       Complicação   80   Exato de Fisher                       0,201
-    Grupo       Escolaridade  80   Exato de Fisher                       0,480
-    Grupo       Faixa etária  80   Qui-quadrado                          0,596
+    variável 1  variável 2     n  teste                               p-valor  V de Cramér
+    Grupo       Desfecho      79  Qui-quadrado com correção de Yates    0,017         0,29
+    Grupo       Complicação   80  Exato de Fisher                       0,201         0,19
+    Grupo       Escolaridade  80  Exato de Fisher                       0,480         0,19
+    Grupo       Faixa etária  80  Qui-quadrado                          0,596         0,11
 
 Segue o padrão das Fases 2 a 6, decidir e escrever separados:
 
@@ -118,8 +118,29 @@ manifesto desta rodada guarda as contagens de cada par, para conferência.
 isso está escrito na nota do `.csv`. A correção é decisão sua, e depende de quais
 hipóteses são confirmatórias.
 
-**Não desenha e não mede tamanho de efeito.** O V de Cramér é a pendência aberta
-desta análise.
+**Não desenha.**
+
+## O tamanho da associação: o V de Cramér
+
+O p responde se há evidência de associação, e depende do n: com n grande, uma
+associação irrelevante sai significante. O V responde o **tamanho** dela, de 0 a
+1, e é por isso que ele sai ao lado do p — é o argumento da normalidade, de que o
+valor-p sozinho não responde à pergunta. Na forma "uma contra várias" ele é o que
+permite comparar os pares entre si.
+
+Três decisões, escritas também na nota do `.csv`:
+
+* **o X² do V é sempre o de Pearson sem correção**, qualquer que seja o teste da
+  linha. É a definição, e é o que mantém o V comparável: com o X² de Yates, a
+  mesma 2×2 teria um V diferente conforme o teste escolhido;
+* **ele sai em toda tabela testável**, inclusive nas do Fisher e nas que passaram
+  do limite do cálculo exato — o V não depende do p;
+* **duas casas fixas**, que é como tamanho de efeito se escreve; o manifesto
+  guarda o número inteiro, e o X² de onde ele saiu.
+
+O que ele não faz é dizer se a associação é "pequena" ou "grande": os cortes de
+Cohen dependem dos graus de liberdade, e o V superestima em tabela pequena — as
+que vão para o Fisher. A leitura é sua, como a da normalidade.
 """
 
 from __future__ import annotations
@@ -199,6 +220,10 @@ FOLGA_RXC = 3.45254e-7    # `tol` do FEXACT, somada ao logaritmo
 # costuma mandar para o Fisher — uma 3 × 4 com n = 400 leva uns dois segundos —,
 # e limita a espera, quando a tabela não cabe, a poucos segundos.
 LIMITE_DO_CALCULO_EXATO = 1_500_000
+
+# O V de Cramér sai com duas casas, que é como tamanho de efeito se escreve num
+# artigo; o manifesto guarda o número inteiro.
+CASAS_V = 2
 
 # O sinal entre os dois rótulos nas notas e nos avisos. O mesmo do cruzamento.
 SINAL = " × "
@@ -354,7 +379,8 @@ class ParTestado:
     `teste` fica vazio e `p` fica `None` quando não houve teste; o motivo está em
     `motivo`, e a linha **sai assim mesmo** — um par pedido que sumisse da tabela
     seria a falta em que ninguém repara. `p` também fica `None` quando o Fisher foi
-    escolhido e passou do limite do cálculo exato: aí `teste` diz qual era.
+    escolhido e passou do limite do cálculo exato: aí `teste` diz qual era, e o V de
+    Cramér sai assim mesmo, porque ele não depende do p.
     """
 
     variavel_1: str
@@ -369,6 +395,11 @@ class ParTestado:
     estatistica: float | None = None  # X², só no qui-quadrado
     gl: int | None = None
     cochran: Cochran | None = None
+    # O V de Cramér e o X² sem correção de onde ele sai. Existem em toda tabela
+    # testável — inclusive nas do Fisher, e nas que passaram do limite do cálculo
+    # exato: o V não depende do p.
+    x2_sem_correcao: float | None = None
+    v_de_cramer: float | None = None
     motivo: str = ""
     avisos: tuple[str, ...] = ()
 
@@ -453,6 +484,8 @@ class ParTestado:
             "estatistica": _arredondar(self.estatistica),
             "gl": self.gl,
             "p": _arredondar(self.p),
+            "x2_sem_correcao": _arredondar(self.x2_sem_correcao),
+            "v_de_cramer": _arredondar(self.v_de_cramer),
             "motivo": self.motivo or None,
         }
 
@@ -807,7 +840,12 @@ def _testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParT
             ),
         )
 
-    cochran = regra_de_cochran(tabela.esperadas())
+    esperadas = tabela.esperadas()
+    cochran = regra_de_cochran(esperadas)
+    sem_correcao = _estatistica_de_pearson(tabela.contagens, esperadas)
+    base["x2_sem_correcao"] = sem_correcao
+    base["v_de_cramer"] = _v_de_cramer(sem_correcao, tabela.contagens)
+
     if cochran.atende:
         estatistica, gl, p, yates = qui_quadrado(tabela.contagens)
         return ParTestado(
@@ -907,14 +945,50 @@ def qui_quadrado(contagens: Sequence[Sequence[int]]) -> tuple[float, int, float,
     yates = linhas == 2 and colunas == 2
     correcao = min(0.5, min(diferencas)) if yates else 0.0
 
-    estatistica = math.fsum(
-        (abs(contagens[i][j] - esperadas[i][j]) - correcao) ** 2 / esperadas[i][j]
-        for i in range(linhas)
-        for j in range(colunas)
-    )
+    estatistica = _estatistica_de_pearson(contagens, esperadas, correcao)
     gl = (linhas - 1) * (colunas - 1)
     p = float(stats.chi2.sf(estatistica, gl))
     return estatistica, gl, p, yates
+
+
+def v_de_cramer(contagens: Sequence[Sequence[int]]) -> float:
+    """
+    O V de Cramér: `√(X² / (n · (k − 1)))`, com `k` o menor número de categorias
+    entre as duas variáveis.
+
+    **O X² é o de Pearson sem correção de continuidade** — o do
+    `chisq.test(x, correct = FALSE)` do R —, e isso vale para toda linha da tabela,
+    qualquer que seja o teste que a regra de Cochran escolheu para ela. É a
+    definição do V, e é o que o mantém comparável entre os pares: com o X² corrigido
+    por Yates, o V de uma 2×2 mudaria conforme o teste, e duas tabelas iguais
+    teriam dois tamanhos de associação.
+
+    Vai de 0 a 1, não tem sinal, e na 2×2 é o |φ|. O `min(1, …)` só segura o erro
+    de arredondamento de uma associação perfeita — o V nunca passa de 1.
+    """
+    return _v_de_cramer(_estatistica_de_pearson(contagens, _esperadas(contagens)), contagens)
+
+
+def _v_de_cramer(sem_correcao: float, contagens: Sequence[Sequence[int]]) -> float:
+    n = sum(sum(linha) for linha in contagens)
+    menor = min(len(contagens), len(contagens[0]))
+    return min(1.0, math.sqrt(sem_correcao / (n * (menor - 1))))
+
+
+def _estatistica_de_pearson(
+    contagens: Sequence[Sequence[int]],
+    esperadas: Sequence[Sequence[float]],
+    correcao: float = 0.0,
+) -> float:
+    """
+    `Σ (|O − E| − correção)² / E` — a do qui-quadrado com Yates quando a correção
+    vem, e a do V de Cramér quando não vem. Uma conta só para as duas.
+    """
+    return math.fsum(
+        (abs(contagens[i][j] - esperadas[i][j]) - correcao) ** 2 / esperadas[i][j]
+        for i in range(len(contagens))
+        for j in range(len(contagens[0]))
+    )
 
 
 def fisher_exato(
@@ -1225,14 +1299,21 @@ def _tabela(pares: tuple[ParTestado, ...], total: int) -> Tabela:
     """
     Uma tabela só, com uma linha por par, na ordem da ficha.
 
-    As cinco colunas pedidas — `variável 1`, `variável 2`, `n`, `teste` e
-    `p-valor` —, com os **rótulos** do dicionário nas duas primeiras, que é o que o
-    cliente lê. O resto do que decide cada linha — a dimensão da tabela, a menor
+    As seis colunas pedidas — `variável 1`, `variável 2`, `n`, `teste`, `p-valor` e
+    `V de Cramér` —, com os **rótulos** do dicionário nas duas primeiras, que é o que
+    o cliente lê. O resto do que decide cada linha — a dimensão da tabela, a menor
     esperada, quantas caselas abaixo de 5, o X² e os graus de liberdade — vai para
     as notas do `.csv`, uma frase por par, e para o manifesto.
     """
     corpo = tuple(
-        (par.rotulo_1, par.rotulo_2, str(par.validos), par.celula_do_teste, valor_p(par.p))
+        (
+            par.rotulo_1,
+            par.rotulo_2,
+            str(par.validos),
+            par.celula_do_teste,
+            valor_p(par.p),
+            _formatar_v(par.v_de_cramer),
+        )
         for par in pares
     )
     notas = (
@@ -1250,6 +1331,13 @@ def _tabela(pares: tuple[ParTestado, ...], total: int) -> Tabela:
         f"valor-p abaixo de {numero(MENOR_P, 3)} sai como `< {numero(MENOR_P, 3)}`; ele "
         "nunca é zero.",
         "cada linha é um teste; não há correção para comparações múltiplas.",
+        "V de Cramér: √(X² / (n × (k − 1))), com k o menor número de categorias entre "
+        "as duas variáveis e o X² de Pearson sem correção de continuidade — o do "
+        "chisq.test(x, correct = FALSE) do R —, em toda linha, qualquer que seja o "
+        "teste dela.",
+        "o V vai de 0 (nenhuma associação) a 1 (associação perfeita), não indica "
+        "direção e, na tabela 2×2, é o |φ|. Em tabela pequena — a que a regra de "
+        "Cochran manda para o Fisher — ele tende a superestimar a associação.",
     ) + tuple(par.justificativa for par in pares)
 
     return Tabela(
@@ -1258,7 +1346,7 @@ def _tabela(pares: tuple[ParTestado, ...], total: int) -> Tabela:
         # Vazia de propósito: esta tabela fala de vários pares.
         variavel="",
         titulo="Testes de associação",
-        colunas=("variável 1", "variável 2", "n", "teste", "p-valor"),
+        colunas=("variável 1", "variável 2", "n", "teste", "p-valor", "V de Cramér"),
         linhas=corpo,
         notas=notas,
     )
@@ -1537,6 +1625,8 @@ def montar_manifesto(associacao: Associacao, linhas: Sequence[Linha]) -> Manifes
             "fisher": "bilateral; 2×2 pela hipergeométrica (fisher.test do R, relErr "
             f"1 + {FOLGA_2X2:g}); maiores exato pelo algoritmo de rede (FEXACT, tol "
             f"{FOLGA_RXC:g}), sem simulação",
+            "v_de_cramer": "√(X² / (n × (min(linhas, colunas) − 1))), com o X² de "
+            "Pearson sem correção de continuidade, em todo par testável",
             "limite_do_calculo_exato": LIMITE_DO_CALCULO_EXATO,
             "faltantes": "por par",
             "comparacoes_multiplas": "nenhuma correção",
@@ -1647,6 +1737,19 @@ def _coluna(quadro: pd.DataFrame, nome: str) -> pd.Series | None:
     return None
 
 
+def _formatar_v(valor: float | None) -> str:
+    """
+    O V com casas fixas: `0,10` e não `0,1`.
+
+    Casas fixas pelo motivo dos percentuais da Fase 5: a coluna é lida de cima para
+    baixo, comparando pares, e uma coluna em que uns valores têm duas casas e outros
+    uma é uma coluna que não alinha.
+    """
+    if valor is None:
+        return _AUSENTE
+    return f"{valor:.{CASAS_V}f}".replace(".", ",")
+
+
 def _arredondar(valor: float | None) -> float | None:
     if valor is None:
         return None
@@ -1663,6 +1766,7 @@ def _integridade(confere: bool | None) -> str:
 
 __all__ = [
     "ARQUIVO_TABELA",
+    "CASAS_V",
     "ESPERADA_DE_REFERENCIA",
     "ESPERADA_MINIMA",
     "EXEMPLO_DA_FICHA",
@@ -1697,4 +1801,5 @@ __all__ = [
     "preparar_associacao",
     "qui_quadrado",
     "regra_de_cochran",
+    "v_de_cramer",
 ]
