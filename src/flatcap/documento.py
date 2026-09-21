@@ -439,11 +439,12 @@ def _escrever_tabela(
     Uma tabela do `.csv`, com a legenda em cima e as notas embaixo.
 
     O texto das células atravessa intacto: `28,7` no arquivo é `28,7` no Word. A
-    única decisão de apresentação é o alinhamento — a primeira coluna à esquerda,
-    porque é rótulo, e as demais à direita, porque são número e número se lê pela
-    unidade.
+    única decisão de apresentação é o alinhamento — texto à esquerda, porque se lê
+    pelo começo, e número à direita, porque se lê pela unidade. Ver
+    `_colunas_de_texto`.
     """
     _legenda(documento, f"Tabela {numero}. {tabela.titulo}", estilos)
+    de_texto = _colunas_de_texto(tabela)
 
     quadro = documento.add_table(rows=1, cols=max(1, tabela.largura))
     if estilos.tabela:
@@ -458,7 +459,7 @@ def _escrever_tabela(
         paragrafo = celula.paragraphs[0]
         _texto(paragrafo, nome, tamanho=_TABELA_PT, negrito=True, cor=TINTA,
                estilo=estilos.corpo)
-        _alinhar(paragrafo, posicao)
+        _alinhar(paragrafo, posicao in de_texto)
         paragrafo.paragraph_format.space_after = Pt(0)
     _repetir_cabecalho(quadro.rows[0])
 
@@ -478,7 +479,7 @@ def _escrever_tabela(
                 cor=TINTA if destaque else TINTA_SECUNDARIA,
                 estilo=estilos.corpo,
             )
-            _alinhar(paragrafo, posicao)
+            _alinhar(paragrafo, posicao in de_texto)
             paragrafo.paragraph_format.space_after = Pt(0)
 
     _repartir_larguras(quadro, _largura_util(documento), tabela.largura)
@@ -643,10 +644,45 @@ def _texto(
     return trecho
 
 
-def _alinhar(paragrafo, posicao: int) -> None:
-    paragrafo.alignment = (
-        WD_ALIGN_PARAGRAPH.LEFT if posicao == 0 else WD_ALIGN_PARAGRAPH.RIGHT
-    )
+def _alinhar(paragrafo, de_texto: bool) -> None:
+    paragrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT if de_texto else WD_ALIGN_PARAGRAPH.RIGHT
+
+
+# Uma célula que se lê como número: `15`, `26,8`, `+0,45`, `−1,2`, `< 0,001`,
+# `100,0%` — e a data `01/03/2026`, que numa tabela de período se alinha com os
+# números ao lado dela. O traço e a célula vazia não contam para lado nenhum: são o
+# "não se aplica" de qualquer coluna.
+_CELULA_NUMERICA = re.compile(
+    r"^(?:[<>≤≥]\s*)?[+\-−]?\d+(?:,\d+)?%?$|^\d{2}/\d{2}/\d{4}$"
+)
+_CELULA_NEUTRA = frozenset({"", "—", "-"})
+
+
+def _colunas_de_texto(tabela: TabelaLida) -> frozenset[int]:
+    """
+    As posições das colunas que são texto e vão à esquerda.
+
+    A primeira sempre: é o rótulo da linha. As outras, pelo **conteúdo**: basta uma
+    célula que não se leia como número para a coluna ser de texto.
+
+    Até a 1.4.0 a regra era a posição — a primeira à esquerda, o resto à direita —,
+    e ela valia porque toda tabela tinha um rótulo e depois números. O cruzamento
+    tem **dois** rótulos, `Sexo` e `Escolaridade`, e a segunda coluna sairia
+    empurrada para a direita, com `Fundamental` alinhado pela última letra. A
+    coluna `leitura` da normalidade já saía assim.
+
+    Pelo conteúdo, e não por uma marca no `.csv`, porque o `.csv` é o que a análise
+    escreve e o que você abre no Excel — acrescentar a ele uma linha de metadado de
+    alinhamento seria pôr apresentação dentro do dado.
+    """
+    de_texto = {0}
+    for posicao in range(1, tabela.largura):
+        for linha in tabela.linhas:
+            celula = linha[posicao].strip() if posicao < len(linha) else ""
+            if celula not in _CELULA_NEUTRA and not _CELULA_NUMERICA.match(celula):
+                de_texto.add(posicao)
+                break
+    return frozenset(de_texto)
 
 
 def _largura_util(documento):
