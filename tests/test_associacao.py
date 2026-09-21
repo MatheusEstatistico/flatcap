@@ -59,6 +59,7 @@ from flatcap.associacao import (
     preparar_associacao,
     qui_quadrado,
     regra_de_cochran,
+    v_de_cramer,
 )
 from flatcap.cruzamento import cruzar
 from flatcap.dicionario import CATEGORICA, IGNORAR, NUMERICA, Linha
@@ -342,30 +343,36 @@ def _esperadas(tabela):
 
 
 class TestATabela:
-    def test_as_cinco_colunas(self):
+    def test_as_seis_colunas(self):
         assert _associar().tabela.colunas == (
             "variável 1",
             "variável 2",
             "n",
             "teste",
             "p-valor",
+            "V de Cramér",
         )
 
     def test_a_tabela_do_banco_de_referencia(self):
         """
-        Linha por linha, com cada p conferido contra uma conta independente feita
-        sobre as contagens do `bancos.para_associar()`.
+        Linha por linha, com cada p e cada V conferidos contra uma conta
+        independente feita sobre as contagens do `bancos.para_associar()`.
         """
-        yates = stats.chi2_contingency([[27, 12], [16, 24]], correction=True).pvalue
-        fisher_2x2 = stats.fisher_exact([[39, 1], [35, 5]]).pvalue
-        fisher_2x4 = _fisher_forca_bruta([[10, 20, 9, 1], [8, 15, 15, 2]])
-        pearson = stats.chi2_contingency([[15, 15, 10], [12, 14, 14]]).pvalue
+        desfecho = [[27, 12], [16, 24]]
+        complicacao = [[39, 1], [35, 5]]
+        escolaridade = [[10, 20, 9, 1], [8, 15, 15, 2]]
+        faixa = [[15, 15, 10], [12, 14, 14]]
+
+        yates = stats.chi2_contingency(desfecho, correction=True).pvalue
+        fisher_2x2 = stats.fisher_exact(complicacao).pvalue
+        fisher_2x4 = _fisher_forca_bruta(escolaridade)
+        pearson = stats.chi2_contingency(faixa).pvalue
 
         assert _associar().tabela.linhas == (
-            ("Grupo", "Desfecho", "79", TESTE_YATES, valor_p(yates)),
-            ("Grupo", "Complicação", "80", TESTE_FISHER, valor_p(fisher_2x2)),
-            ("Grupo", "Escolaridade", "80", TESTE_FISHER, valor_p(fisher_2x4)),
-            ("Grupo", "Faixa etária", "80", TESTE_QUI_QUADRADO, valor_p(pearson)),
+            ("Grupo", "Desfecho", "79", TESTE_YATES, valor_p(yates), _v(desfecho)),
+            ("Grupo", "Complicação", "80", TESTE_FISHER, valor_p(fisher_2x2), _v(complicacao)),
+            ("Grupo", "Escolaridade", "80", TESTE_FISHER, valor_p(fisher_2x4), _v(escolaridade)),
+            ("Grupo", "Faixa etária", "80", TESTE_QUI_QUADRADO, valor_p(pearson), _v(faixa)),
         )
 
     def test_a_contingencia_esta_na_ordem_do_dicionario(self):
@@ -451,6 +458,71 @@ class TestATabela:
         assert "não há correção para comparações múltiplas" in tabela.texto()
 
 
+# ── O V de Cramér ───────────────────────────────────────────────────────────
+
+
+def _v(tabela) -> str:
+    """O V do `scipy`, sem correção, escrito com as duas casas da tabela."""
+    valor = stats.contingency.association(tabela, method="cramer", correction=False)
+    return f"{valor:.2f}".replace(".", ",")
+
+
+class TestVDeCramer:
+    def test_e_o_do_scipy(self):
+        gerador = random.Random(5)
+        for forma in ((2, 2), (2, 3), (3, 3), (3, 5), (4, 4)):
+            for _ in range(20):
+                tabela = _tabela_aleatoria(gerador, *forma, teto=30)
+                assert v_de_cramer(tabela) == pytest.approx(
+                    stats.contingency.association(tabela, method="cramer"), abs=1e-12
+                ), tabela
+
+    def test_usa_o_x2_sem_correcao_mesmo_na_linha_de_yates(self):
+        """
+        A linha é de Yates, e o V não é: com o X² corrigido, a mesma 2×2 teria um V
+        diferente conforme o teste escolhido para ela.
+        """
+        par = _par(_associar(), "desfecho")
+        assert par.teste == TESTE_YATES
+        corrigido = math.sqrt(par.estatistica / par.validos)
+        assert par.v_de_cramer == pytest.approx(v_de_cramer([[27, 12], [16, 24]]))
+        assert par.v_de_cramer > corrigido
+
+    def test_na_2x2_e_o_modulo_do_phi(self):
+        (a, b), (c, d) = tabela = [[12, 5], [7, 9]]
+        phi = (a * d - b * c) / math.sqrt((a + b) * (c + d) * (a + c) * (b + d))
+        assert v_de_cramer(tabela) == pytest.approx(abs(phi))
+
+    def test_vai_de_0_a_1(self):
+        assert v_de_cramer([[10, 10], [10, 10]]) == pytest.approx(0.0)
+        assert v_de_cramer([[20, 0, 0], [0, 15, 0], [0, 0, 7]]) == pytest.approx(1.0)
+
+    def test_sai_tambem_nas_linhas_do_fisher(self):
+        """O V não depende do teste: a linha do Fisher tem o dela."""
+        linhas = _associar().tabela.linhas
+        assert [linha[5] for linha in linhas] == [
+            _v([[27, 12], [16, 24]]),
+            _v([[39, 1], [35, 5]]),
+            _v([[10, 20, 9, 1], [8, 15, 15, 2]]),
+            _v([[15, 15, 10], [12, 14, 14]]),
+        ]
+
+    def test_duas_casas_fixas(self):
+        """`0,10` e não `0,1`: a coluna é lida de cima para baixo."""
+        quadro = pd.DataFrame(
+            {"a": ["x"] * 50 + ["y"] * 50, "b": ["s"] * 30 + ["n"] * 20 + ["s"] * 25 + ["n"] * 25}
+        )
+        linhas = (Linha("a", "A", CATEGORICA), Linha("b", "B", CATEGORICA))
+        celula = _associar(quadro, linhas, (("a", "b"),)).tabela.linhas[0][5]
+        assert celula == "0,10"
+
+    def test_a_nota_do_csv_diz_como_ele_e_calculado(self):
+        texto = _associar().tabela.texto()
+        assert "V de Cramér: √(X² / (n × (k − 1)))" in texto
+        assert "sem correção de continuidade" in texto
+        assert "tende a superestimar" in texto
+
+
 # ── Quando não há teste ─────────────────────────────────────────────────────
 
 
@@ -462,7 +534,7 @@ class TestSemTeste:
         """
         resultado = _associar(pedidos=(("grupo", "servico"),))
         assert resultado.tabela.linhas == (
-            ("Grupo", "Serviço", "80", "não testado: uma categoria só em Serviço", "—"),
+            ("Grupo", "Serviço", "80", "não testado: uma categoria só em Serviço", "—", "—"),
         )
         assert any("critério de inclusão" in aviso for aviso in resultado.avisos)
 
@@ -476,6 +548,7 @@ class TestSemTeste:
             "0",
             "não testado: nenhum caso com resposta nas duas variáveis",
             "—",
+            "—",
         )
 
     def test_o_limite_do_calculo_exato_vira_linha_sem_p_e_aviso(self):
@@ -486,7 +559,9 @@ class TestSemTeste:
         """
         resultado = _associar(limite=10)
         linha = resultado.tabela.linhas[2]
-        assert linha[3:] == (f"{TESTE_FISHER} (não calculado)", "—")
+        assert linha[3:5] == (f"{TESTE_FISHER} (não calculado)", "—")
+        # O V não depende do p: sai mesmo quando o p não foi calculado.
+        assert linha[5] == _v([[10, 20, 9, 1], [8, 15, 15, 2]])
         aviso = next(a for a in resultado.avisos if "FEXACT" in a)
         assert "10 operações" in aviso
         assert "1=Sim|2=Sim" in aviso
@@ -655,6 +730,19 @@ class TestManifesto:
         assert (complicacao["estatistica"], complicacao["gl"]) == (None, None)
         assert (detalhes["qui_quadrado_com_yates"], detalhes["fisher"]) == (1, 2)
 
+    def test_os_detalhes_levam_o_v_inteiro_e_o_x2_de_onde_ele_saiu(self):
+        """
+        Na linha de Yates o X² do teste é o corrigido, e o do V não: os dois ficam
+        no manifesto, para o V poder ser refeito à mão.
+        """
+        desfecho = montar_manifesto(_associar(), DICIONARIO).itens[0].detalhes["pares"][0]
+        referencia = stats.chi2_contingency([[27, 12], [16, 24]], correction=False)
+        assert desfecho["x2_sem_correcao"] == pytest.approx(referencia.statistic, abs=1e-6)
+        assert desfecho["x2_sem_correcao"] > desfecho["estatistica"]
+        assert desfecho["v_de_cramer"] == pytest.approx(
+            math.sqrt(referencia.statistic / 79), abs=1e-6
+        )
+
     def test_o_ambiente_declara_o_scipy_e_nao_o_matplotlib(self):
         ambiente = montar_manifesto(_associar(), DICIONARIO).ambiente
         assert ambiente["scipy"] == __import__("scipy").__version__
@@ -665,6 +753,7 @@ class TestManifesto:
         assert "Cochran" in regras["escolha_do_teste"]
         assert "sem simulação" in regras["fisher"]
         assert "chisq.test" in regras["qui_quadrado"]
+        assert "sem correção" in regras["v_de_cramer"]
 
     def test_fora_lista_quem_nao_esta_em_par(self):
         manifesto = montar_manifesto(_associar(), DICIONARIO)
@@ -793,7 +882,9 @@ class TestRelatorio:
         assert relatorio.analises == ("descritiva", "associacao")
         assert relatorio.alertas == ()
         secao = next(s for s in relatorio.secoes if s.rotulo == "Associação")
-        assert secao.tabelas[0].colunas == ("variável 1", "variável 2", "n", "teste", "p-valor")
+        assert secao.tabelas[0].colunas == (
+            "variável 1", "variável 2", "n", "teste", "p-valor", "V de Cramér",
+        )
         assert secao.tabelas[0].linhas[0][:4] == ("sexo", "escolaridade", "24", TESTE_FISHER)
 
     def test_sem_ficha_mandando_vem_depois_do_cruzamento(self, projeto_para_associar):
