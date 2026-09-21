@@ -76,18 +76,27 @@ class TestPrimeiraPagina:
         titulo = next(p for p in doc.paragraphs if p.text == primeira)
         assert titulo.paragraph_format.page_break_before is True
 
-    def test_sem_texto_de_abertura_nao_ha_quebra(self, projeto_com_rodada, monkeypatch):
+    def test_sem_texto_de_abertura_nao_ha_quebra(self, projeto_com_rodada, tmp_path):
         """
-        Sem ele, a primeira página seria só o título e o subtítulo, e a quebra
-        produziria uma página quase em branco que ninguém pediu.
-        """
-        import flatcap.relatorio as modulo
+        Sem texto e sem alerta, a primeira página seria só o título e o
+        subtítulo, e a quebra produziria uma página quase em branco.
 
-        monkeypatch.setattr(modulo, "TEXTO_PADRAO", ())
-        raiz = projeto_com_rodada()
-        plano = preparar_relatorio(raiz, agora=QUANDO)
-        executar_relatorio(plano)
-        doc = Document(str(plano.destino))
+        O `Relatorio` é montado à mão, e é o único jeito de chegar aqui: pelo
+        `flatcap relatorio` o texto nunca vem vazio, porque o `montar_abertura`
+        devolve pelo menos os dois marcadores `«a preencher: …»`. Trocar a
+        `TEXTO_PADRAO` não alcança o ramo — ela é o valor padrão de um
+        parâmetro, lido uma vez, quando o módulo é importado. A docstring de
+        `documento._texto_padrao` diz para quem o ramo existe.
+        """
+        from dataclasses import replace
+
+        from flatcap.documento import escrever
+
+        plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
+        destino = escrever(
+            replace(plano.relatorio, texto=(), alertas=()), tmp_path / "sem_abertura.docx"
+        )
+        doc = Document(str(destino))
         titulo = next(p for p in doc.paragraphs if p.text == plano.secoes[0].rotulo)
         assert not titulo.paragraph_format.page_break_before
 
