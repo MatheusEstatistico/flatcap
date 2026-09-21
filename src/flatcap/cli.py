@@ -61,6 +61,7 @@ from .projeto import (
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .associacao import Associacao, PlanoAssociacao
     from .cruzamento import ParCruzado, PlanoCruzamento
     from .descritiva import Descritiva, PlanoDescritiva
     from .normalidade import Normalidade, PlanoNormalidade
@@ -1945,6 +1946,273 @@ def _arvore_do_cruzamento(plano: PlanoCruzamento) -> Tree:
                 (f"   {len(par.combinacoes)} combinação(ões)", "dim"),
             )
         )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
+# flatcap associacao
+
+@app.command()
+def associacao(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Testa a associação entre pares de variáveis categóricas.
+
+    Para cada par da lista `associacao:` do projeto.yaml, o teste que a regra de
+    Cochran escolhe: qui-quadrado quando nenhuma frequência esperada é menor que 1
+    e no máximo 20% das caselas têm esperada menor que 5 — com a correção de Yates
+    nas tabelas 2×2 —, e exato de Fisher nos outros casos. Os dois como o R faz.
+    Sai uma tabela só, com variável 1, variável 2, n, teste e p-valor, em
+    `3. Análises/associacao/`, com um `manifesto.json`.
+
+    Os pares se escrevem na ficha — um par, ou uma variável contra várias:
+
+        associacao:
+          - \\[sexo, desfecho]
+          - desfecho: \\[sexo, escolaridade, tabagismo]
+
+    As variáveis precisam estar marcadas `categorica` no dicionario.csv —
+    inclusive uma numérica de poucos valores, como uma escala de 0 a 5.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
+    # banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
+    from .associacao import AssociacaoError, executar_associacao, preparar_associacao
+    from .banco import BancoError
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_associacao(raiz, aba = aba, conferir = not rapido)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except AssociacaoError as erro:
+        raise _abortar("Associação", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_da_associacao(plano))
+    console.print(_tabela_da_associacao(plano.associacao))
+    console.print(_nota_da_associacao(plano.associacao))
+    for aviso in plano.associacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_associacao(plano))
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_associacao(plano)
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao escrever em {plano.pasta}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+            "anterior — confira a pasta antes de rodar de novo."
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+                style = "dim",
+            )
+        )
+
+    quantos = len(plano.arquivos)
+    console.print(
+        f"\n[green]Associação escrita.[/green] {quantos} "
+        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+        f"{PASTA_ANALISES}/{plano.pasta.name}"
+    )
+
+
+def _cabecalho_da_associacao(plano: PlanoAssociacao) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantos pares entram.
+    """
+    associacao = plano.associacao
+    ficha = associacao.ficha
+    banco = associacao.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantos = len(associacao.pares)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantos} {_plural(quantos, 'par', 'pares')}", ""),
+            (" da lista `associacao:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_da_associacao(associacao: Associacao) -> Table:
+    """
+    Uma linha por par, com as mesmas células do `.csv`.
+
+    A tabela do terminal lê as células que vão para o disco e não reformata nada —
+    dois formatadores para o mesmo p é como o terminal diz `0.042` enquanto o
+    arquivo diz `0,042`. O p abaixo de 0,05 sai em negrito: é o destaque de quem
+    lê a simulação, e ele fica no terminal — o documento não marca nada.
+    """
+    from .normalidade import ALFA
+
+    tabela = Table(show_header = True, header_style = "bold")
+    for posicao, nome in enumerate(associacao.tabela.colunas):
+        if posicao in (2, 4):
+            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+        else:
+            tabela.add_column(Text(nome), overflow = "fold")
+
+    for par, celulas in zip(associacao.pares, associacao.tabela.linhas, strict=True):
+        if not par.testado:
+            estilo_p = "dim"
+        elif par.p is not None and par.p < ALFA:
+            estilo_p = "bold"
+        else:
+            estilo_p = ""
+        tabela.add_row(
+            Text(celulas[0]),
+            Text(celulas[1]),
+            Text(celulas[2]),
+            Text(celulas[3], style = "" if par.testado else "yellow"),
+            Text(celulas[4], style = estilo_p),
+        )
+    return tabela
+
+
+def _nota_da_associacao(associacao: Associacao) -> Text:
+    """
+    Por que cada par foi para o teste em que foi, e quantos testes são.
+
+    As frases são as mesmas das notas do `.csv` — uma por par, montadas num lugar
+    só —, e saem na simulação porque é nela que se confere a escolha antes de ela
+    ir para o documento.
+    """
+    from .associacao import TESTE_FISHER, TESTE_QUI_QUADRADO, TESTE_YATES
+
+    corpo = Text("\nEscolha do teste (regra de Cochran):", style = "bold")
+    for par in associacao.pares:
+        corpo.append("\n")
+        corpo.append(Text(par.justificativa, style = "dim"))
+
+    testados = len(associacao.testados)
+    contagem = [
+        (associacao.quantos(TESTE_QUI_QUADRADO), "qui-quadrado"),
+        (associacao.quantos(TESTE_YATES), "qui-quadrado com Yates"),
+        (associacao.quantos(TESTE_FISHER), "exato de Fisher"),
+    ]
+    resumo = ", ".join(f"{quantos} {nome}" for quantos, nome in contagem if quantos)
+    corpo.append("\n\n")
+    corpo.append(
+        Text.assemble(
+            (f"{testados} {_plural(testados, 'teste', 'testes')}", "bold"),
+            (f" ({resumo})" if resumo else "", ""),
+            (
+                ". Cada linha é um teste, sem correção para comparações múltiplas."
+                if testados > 1 else ".",
+                "dim",
+            ),
+        )
+    )
+    return corpo
+
+
+def _arvore_da_associacao(plano: PlanoAssociacao) -> Tree:
+    """
+    Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), (plano.tabela.nome, ""),
+            (f"   {len(plano.associacao.pares)} par(es), um por linha", "dim"),
+        )
+    )
     ramo.add(
         Text.assemble(
             ("+ ", "green"), ("manifesto.json", "bold"),
