@@ -148,7 +148,8 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
             f"HTTP {resposta.status_code}, Content-Type "
             f"{resposta.headers.get('Content-Type', '(ausente)')}, "
             f"{len(resposta.content)} bytes.\n"
-            "Confira no REDCap se o token tem a permissão de exportação correspondente a esta chamada."
+            "Confira no REDCap se o token tem a permissão de exportação correspondente "
+            "a esta chamada."
         )
 
     return corpo
@@ -177,8 +178,8 @@ def _lista(valores: list[str]) -> str:
 def exportar_projeto(cfg: Config) -> dict[str, Any]:
     """
     Devolve os metadados do projeto (`content = project`).
-    É a chamada mais barata da API e não depende de nenhum registro existir, por isso serve como teste
-    de conexão no `flatcap doctor`.
+    É a chamada mais barata da API e não depende de nenhum registro existir, por isso serve como
+    teste de conexão no `flatcap doctor`.
     """
     corpo = _post(cfg, {"content": "project"})
     if not isinstance(corpo, dict):
@@ -195,8 +196,8 @@ def exportar_registros(
     """
     Devolve as respostas do questionário (`content = record`).
       Args:
-        fields: campos a trazer. Pedir só o necessário reduz a resposta e evita trafegar campos que o
-        FlatCap não usa.
+        fields: campos a trazer. Pedir só o necessário reduz a resposta e evita trafegar campos que
+        o FlatCap não usa.
         records: limita a registros específicos.
 
     Os valores vêm crus (`rawOrLabel = raw`), então `intro` chega como "1"/"2" e não como
@@ -268,9 +269,9 @@ def exportar_arquivo(cfg: Config, record_id: str, campo: str) -> ArquivoRedcap:
 def tem_arquivo(cfg: Config, record_id: str, campo: str) -> bool:
     """
     Responde se existe anexo, sem que quem pergunta precise tratar exceção.
-    Custa um download completo: a API do REDCap não oferece uma consulta que responda "existe?" sem
-    trazer o conteúdo. Por isso é usada apenas sob demanda, pela opção `--conferir-anexos` do `flatcap
-    listar`, e não no caminho normal.
+    Custa um download completo: a API do REDCap não oferece uma consulta que responda "existe?"
+    sem trazer o conteúdo. Por isso é usada apenas sob demanda, pela opção `--conferir-anexos` do
+    `flatcap listar`, e não no caminho normal.
     """
     try:
         exportar_arquivo(cfg, record_id, campo)
@@ -313,8 +314,8 @@ def _nome_do_anexo(resposta: requests.Response) -> str | None:
 def _limpar_nome_de_arquivo(bruto: str) -> str:
     """
     Reduz o nome anunciado pelo servidor ao nome de arquivo puro.
-    Descarta qualquer componente de caminho (`../`, `C:\\`, `/etc/`) antes que ele chegue perto de um
-    `open()`. O nome vem de fora, e o que vem de fora não monta caminho.
+    Descarta qualquer componente de caminho (`../`, `C:\\`, `/etc/`) antes que ele chegue perto de
+    um `open()`. O nome vem de fora, e o que vem de fora não monta caminho.
     """
     nome = bruto.strip().strip("'\"").strip()
     nome = nome.replace("\\", "/").split("/")[-1]
