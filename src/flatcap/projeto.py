@@ -104,6 +104,11 @@ PASTA_DESCRITIVA = "descritiva"
 # carregam o `pandas` e o `scipy` para calculá-las.
 PASTA_NORMALIDADE = "normalidade"
 
+# A rodada do cruzamento. Mesmo motivo das duas de cima, e o mesmo nome em três
+# lugares: a pasta, o campo `analise` do manifesto e a chave da ficha — a lista
+# `analises:` e o bloco `cruzamento:` com os pares.
+PASTA_CRUZAMENTO = "cruzamento"
+
 # O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
 # arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
 # Ele estava escrito duas vezes — no `documento.py`, que é quem o grava, e no
