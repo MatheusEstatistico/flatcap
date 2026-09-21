@@ -31,6 +31,7 @@ from flatcap.projeto import (
     ARQUIVO_PROJETO,
     PASTA_ANALISES,
     PASTA_ANTIGAS,
+    PASTA_ASSOCIACAO,
     PASTA_CRUZAMENTO,
     PASTA_DESCRITIVA,
 )
@@ -503,6 +504,63 @@ class TestCruzamento:
         assert PASTA_ANTIGAS in saida
 
 
+class TestAssociacao:
+    BLOCO = "associacao:\n  - [sexo, escolaridade]\n"
+
+    def test_simula_por_padrao_e_mostra_a_tabela_e_a_escolha(self, rodar, projeto_com_rodada):
+        """
+        A simulação mostra a tabela que vai para o documento **e** por que cada par
+        foi para o teste em que foi — é nela que a escolha se confere.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("associacao", RECORD_ID)
+        assert resultado.exit_code == 0
+        assert not (raiz / PASTA_ANALISES / PASTA_ASSOCIACAO).exists()
+        saida = _saida(resultado)
+        assert "Exato de Fisher" in saida
+        assert "Escolha do teste (regra de Cochran)" in saida
+        assert "sexo × escolaridade: 2×3, n = 24" in saida
+        assert "Simulação" in saida
+
+    def test_com_sim_escreve_a_pasta(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert rodar("associacao", RECORD_ID, "--sim").exit_code == 0
+        pasta = raiz / PASTA_ANALISES / PASTA_ASSOCIACAO
+        assert (pasta / "associacao.csv").is_file()
+        assert (pasta / "manifesto.json").is_file()
+
+    def test_sem_a_lista_sai_com_um_e_ensina_as_duas_formas(self, rodar, projeto_com_rodada):
+        projeto_com_rodada()
+        resultado = rodar("associacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Associação" in saida
+        assert "- [sexo, desfecho]" in saida
+        assert "- desfecho: [sexo, escolaridade, tabagismo]" in saida
+
+    def test_o_help_mostra_as_duas_formas(self):
+        """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
+        saida = _saida(runner.invoke(app, ["associacao", "--help"]))
+        assert "- [sexo, desfecho]" in saida
+        assert "- desfecho: [sexo, escolaridade, tabagismo]" in saida
+
+    def test_par_com_numerica_sai_com_um(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "associacao:\n  - [sexo, idade]\n")
+        resultado = rodar("associacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        assert "`idade` está marcada `numerica`" in _saida(resultado)
+
+    def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        rodar("associacao", RECORD_ID, "--sim")
+        saida = _saida(rodar("associacao", RECORD_ID, "--sim"))
+        assert PASTA_ANTIGAS in saida
+
+
 class TestRelatorio:
     def test_simula_por_padrao(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -594,6 +652,7 @@ class TestInvariantes:
             ("descritiva", RECORD_ID),
             ("normalidade", RECORD_ID),
             ("cruzamento", RECORD_ID),
+            ("associacao", RECORD_ID),
             ("relatorio", RECORD_ID),
             ("template",),
         ],
@@ -614,13 +673,14 @@ class TestInvariantes:
             raise AssertionError("um comando de disco tentou falar com a rede")
 
         monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
-        acrescentar_a_ficha(projeto_com_rodada(), TestCruzamento.BLOCO)
+        acrescentar_a_ficha(projeto_com_rodada(), TestCruzamento.BLOCO + TestAssociacao.BLOCO)
         for comando in (
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
             ("descritiva", RECORD_ID),
             ("normalidade", RECORD_ID, "--sem-graficos"),
             ("cruzamento", RECORD_ID),
+            ("associacao", RECORD_ID),
             ("relatorio", RECORD_ID),
         ):
             assert rodar(*comando).exit_code == 0, comando
@@ -631,14 +691,15 @@ class TestInvariantes:
         from conftest import linhas_do_historico
 
         raiz = projeto_com_banco()
-        acrescentar_a_ficha(raiz, TestCruzamento.BLOCO)
+        acrescentar_a_ficha(raiz, TestCruzamento.BLOCO + TestAssociacao.BLOCO)
         antes = len(linhas_do_historico(raiz))
         rodar("perfil", RECORD_ID, "--sim")
         rodar("descritiva", RECORD_ID, "--sim")
         rodar("normalidade", RECORD_ID, "--sem-graficos", "--sim")
         rodar("cruzamento", RECORD_ID, "--sim")
+        rodar("associacao", RECORD_ID, "--sim")
         rodar("relatorio", RECORD_ID, "--sim")
-        assert len(linhas_do_historico(raiz)) == antes + 5
+        assert len(linhas_do_historico(raiz)) == antes + 6
 
     def test_a_cli_nao_tem_regra_de_negocio(self):
         """
