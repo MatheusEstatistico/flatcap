@@ -99,6 +99,7 @@ FORMATO = 1
 # sem que nada diga por quê.
 ANALISE_DESCRITIVA = "descritiva"
 ANALISE_NORMALIDADE = "normalidade"
+ANALISE_CRUZAMENTO = "cruzamento"
 
 # A ordem em que as análises aparecem no documento quando a ficha não manda.
 #
@@ -110,12 +111,18 @@ ANALISE_NORMALIDADE = "normalidade"
 # alfabética — determinística, e visivelmente no fim, que é o lugar certo para
 # uma análise que ninguém disse onde queria.
 #
+# O cruzamento entra logo depois da descritiva, e não no fim nem em ordem
+# alfabética — que o poria antes dela. Sem teste, ele ainda é descrição: são as
+# mesmas categóricas da descritiva, duas de cada vez, e se lê melhor junto delas
+# do que depois dos pressupostos das numéricas.
+#
 # Uma análise nova acrescenta uma linha aqui e nada mais. É o mesmo tipo de
 # registro que o `_FORMAS` do `graficos.py`, e existe pelo mesmo motivo: com
 # `if/elif` espalhado, a análise nova aparece no documento em um lugar que
 # ninguém escolheu.
 ORDEM_PADRAO_DAS_ANALISES: tuple[str, ...] = (
     ANALISE_DESCRITIVA,
+    ANALISE_CRUZAMENTO,
     ANALISE_NORMALIDADE,
 )
 
@@ -571,6 +578,7 @@ def _data_e_hora(valor: Any, caminho: Path | None) -> datetime:
 
 
 __all__ = [
+    "ANALISE_CRUZAMENTO",
     "ANALISE_DESCRITIVA",
     "ANALISE_NORMALIDADE",
     "ARQUIVO_MANIFESTO",
