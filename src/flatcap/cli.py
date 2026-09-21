@@ -1989,8 +1989,9 @@ def associacao(
     Cochran escolhe: qui-quadrado quando nenhuma frequência esperada é menor que 1
     e no máximo 20% das caselas têm esperada menor que 5 — com a correção de Yates
     nas tabelas 2×2 —, e exato de Fisher nos outros casos. Os dois como o R faz.
-    Sai uma tabela só, com variável 1, variável 2, n, teste e p-valor, em
-    `3. Análises/associacao/`, com um `manifesto.json`.
+    Sai uma tabela só, com variável 1, variável 2, n, teste, p-valor e o V de
+    Cramér — o tamanho da associação, de 0 a 1 —, em `3. Análises/associacao/`,
+    com um `manifesto.json`.
 
     Os pares se escrevem na ficha — um par, ou uma variável contra várias:
 
@@ -2125,7 +2126,7 @@ def _tabela_da_associacao(associacao: Associacao) -> Table:
 
     tabela = Table(show_header = True, header_style = "bold")
     for posicao, nome in enumerate(associacao.tabela.colunas):
-        if posicao in (2, 4):
+        if posicao in (2, 4, 5):  # n, p-valor e V: números, à direita
             tabela.add_column(Text(nome), justify = "right", no_wrap = True)
         else:
             tabela.add_column(Text(nome), overflow = "fold")
@@ -2143,6 +2144,7 @@ def _tabela_da_associacao(associacao: Associacao) -> Table:
             Text(celulas[2]),
             Text(celulas[3], style = "" if par.testado else "yellow"),
             Text(celulas[4], style = estilo_p),
+            Text(celulas[5], style = "" if par.v_de_cramer is not None else "dim"),
         )
     return tabela
 
