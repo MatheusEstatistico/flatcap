@@ -744,11 +744,16 @@ def _testar_variavel(
     )
 
 
-def _shapiro(
+def shapiro(
     variavel: str, valores: pd.Series, preenchidos: int
 ) -> tuple[float | None, float | None, str, str]:
     """
     O Shapiro-Wilk, com os dois casos em que ele não existe barrados antes.
+
+    Pública desde a 1.6.0, com o apelido privado que este módulo usa: a correlação
+    escolhe entre Pearson e Spearman por este teste, e uma segunda chamada ao
+    `scipy` com outras barreiras e outro tratamento de aviso é como a tabela de
+    normalidade e a nota da correlação passam a discordar sobre a mesma coluna.
 
     Devolve `(W, p, impedimento, aviso)`. `impedimento` é a frase que vai para a
     coluna `leitura` quando não houve teste — ela ocupa o lugar do resultado, e não
@@ -829,6 +834,9 @@ def _shapiro(
     if w is None or p is None:
         return None, None, "o teste não pôde ser calculado", aviso
     return w, p, "", aviso
+
+
+_shapiro = shapiro
 
 
 def _pontos_do_qq(
@@ -1435,5 +1443,6 @@ __all__ = [
     "executar_normalidade",
     "montar_manifesto",
     "preparar_normalidade",
+    "shapiro",
     "valor_p",
 ]
