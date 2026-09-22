@@ -189,6 +189,13 @@ _RESPIRO_CM = 0.4           # as margens da célula, 0,12 de cada lado, e um fio
 _MINIMO_NUMERICO_CM = 1.2   # para a coluna `n` não virar um fio
 _TEXTO_NATURAL = 40         # caracteres: acima disto, a coluna de texto aceita quebrar
 
+# Um caractere a mais para a palavra mais longa de uma coluna de texto. Os 0,19 cm
+# são a média, e palavra com `m`, `w` ou maiúscula passa dela: `Spearman`, na coluna
+# `método` da correlação, pedia 1,55 cm de texto e recebia 1,52 — e saía partida em
+# `Spearma` e `n`. A folga vale só para o piso, que é a promessa de "palavra curta
+# não quebra"; o resto da repartição continua na média.
+_FOLGA_DA_PALAVRA = 1
+
 
 def versao_do_python_docx() -> str:
     """
@@ -583,6 +590,7 @@ def _larguras_pelo_conteudo(
         if posicao in de_texto:
             pisos[posicao] = em_emu(
                 max((len(palavra) for texto in conteudo for palavra in texto.split()), default=1)
+                + _FOLGA_DA_PALAVRA
             )
             naturais[posicao] = max(em_emu(min(maior, _TEXTO_NATURAL)), pisos[posicao])
         else:
