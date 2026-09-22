@@ -114,6 +114,11 @@ PASTA_CRUZAMENTO = "cruzamento"
 # o bloco `associacao:` com os pares.
 PASTA_ASSOCIACAO = "associacao"
 
+# A rodada da correlação. O mesmo nome nos três lugares, como as duas de cima: a
+# pasta, o campo `analise` do manifesto e a chave da ficha — a lista `analises:` e
+# o bloco `correlacao:` com os pares.
+PASTA_CORRELACAO = "correlacao"
+
 # O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
 # arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
 # Ele estava escrito duas vezes — no `documento.py`, que é quem o grava, e no

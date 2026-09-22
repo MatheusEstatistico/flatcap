@@ -307,6 +307,51 @@ class TestFluxoCompleto:
         do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
         assert do_docx == do_csv
 
+    def test_a_correlacao_do_docx_e_a_do_csv(self, tmp_path, anexo):
+        """
+        A quinta análise, pela mesma régua: a tabela no documento é, célula por
+        célula, a do `.csv` — o coeficiente e o intervalo inclusive —, e a dispersão
+        entra como figura, sem o `relatorio` saber que a correlação existe.
+        """
+        from docx import Document
+
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            acrescentar_a_ficha(raiz, "correlacao:\n  - idade: [imc]\n")
+            for comando in (
+                ("perfil", "40", "--sim"),
+                ("descritiva", "40", "--sim"),
+                ("correlacao", "40", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        csv = raiz / "3. Análises" / "correlacao" / "correlacao.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_csv[0] == [
+            "variável 1", "variável 2", "n", "método", "coeficiente", "IC 95%", "p-valor",
+        ]
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == do_csv[0]
+        )
+        do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
+        assert do_docx == do_csv
+        legendas = [p.text for p in documento.paragraphs if p.text.startswith("Figura")]
+        assert any("Dispersão — idade × imc" in legenda for legenda in legendas)
+
 
 class TestSemRede:
     """
@@ -332,7 +377,8 @@ class TestSemRede:
         acrescentar_a_ficha(
             raiz,
             "cruzamento:\n  - [sexo, escolaridade]\n"
-            "associacao:\n  - [sexo, escolaridade]\n",
+            "associacao:\n  - [sexo, escolaridade]\n"
+            "correlacao:\n  - [idade, imc]\n",
         )
         return env, raiz
 
@@ -345,6 +391,7 @@ class TestSemRede:
             ("normalidade", "40", "--sim"),
             ("cruzamento", "40", "--sim"),
             ("associacao", "40", "--sim"),
+            ("correlacao", "40", "--sim"),
             ("relatorio", "40", "--sim"),
             ("template", "--sim"),
         ],

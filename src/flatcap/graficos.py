@@ -55,7 +55,8 @@ divisão da Fase 5 pagando antes de a conta chegar.
 
 O que a Fase 7 mudou foram duas coisas, e nenhuma é a pasta.
 
-**A espécie `qq`**, para a figura que acompanha o teste de normalidade.
+**As espécies `qq` e `dispersao`**, para as figuras que acompanham a normalidade e
+a correlação.
 
 **O despacho virou um registro, e espécie desconhecida estoura.** Antes era um
 `if/elif/else` com `_colunas` no fim, o que significava que uma espécie nova
@@ -147,6 +148,15 @@ _LARGURA_ROTULO = 28  # caracteres antes de quebrar o rótulo de uma categoria
 # como uma linha reta.
 _PONTO_QQ = 9
 _ALTURA_QQ = 3.6  # um dedo a mais que o padrão: o Q-Q é lido como um quadrado
+
+# O ponto da dispersão. A área cresce com o número de casos que caem no mesmo lugar
+# — área, e não raio, porque é a área que o olho compara —, e o maior ponto tem um
+# teto: numa escala de 0 a 5 com 500 casos, um ponto de área proporcional sem teto
+# cobriria o gráfico. Quando o teto aperta, todos encolhem na mesma proporção, e o
+# ponto de um caso só continua visível.
+_PONTO_DISPERSAO = 12
+_AREA_MAXIMA_DISPERSAO = 320
+_ALTURA_DISPERSAO = 3.6
 
 
 def versao_do_matplotlib() -> str:
@@ -414,16 +424,71 @@ def _qq(grafico: Grafico):
     return figura
 
 
+def _dispersao(grafico: Grafico):
+    """
+    Dispersão: um ponto por caso, a primeira variável do par no eixo x.
+
+    É a figura que acompanha a correlação, e pelo motivo do Q-Q: o coeficiente é um
+    número, e o número não mostra a curva, o caso extremo sozinho num canto ou os
+    dois grupos que juntos parecem uma reta. A dispersão mostra.
+
+    **Sem reta.** Ela afirmaria uma linearidade que o Spearman e o Kendall não
+    afirmam, e no Pearson repetiria o que o coeficiente, duas linhas acima na mesma
+    seção, já diz.
+
+    **O ponto cresce onde vários casos coincidem.** Numa escala de 0 a 5 cruzada
+    com outra, 180 casos caem em 36 lugares, e um ponto desenhado por cima do outro
+    esconde justamente onde os casos estão. As contagens vêm prontas do
+    `correlacao.py`; aqui elas só viram área. O contorno é a cor do fundo, para dois
+    pontos grandes vizinhos não virarem uma mancha.
+
+    **Eixo de código com marcas inteiras.** Quando todos os valores de um eixo são
+    inteiros — escala, código, contagem —, as marcas também são: `1,5` numa escala
+    de 1 a 3 é o `12,5 casos` da Fase 5 com outro nome.
+    """
+    figura, eixo = _figura(_ALTURA_DISPERSAO)
+
+    xs = list(grafico.pontos_x)
+    ys = list(grafico.pontos_y)
+    quantos = list(grafico.contagens) or [1] * len(xs)
+    maior = max(quantos, default=1)
+    unidade = min(_PONTO_DISPERSAO, _AREA_MAXIMA_DISPERSAO / maior)
+
+    eixo.scatter(
+        xs,
+        ys,
+        s=[unidade * q for q in quantos],
+        color=SERIE,
+        alpha=0.8,
+        edgecolors=SUPERFICIE,
+        linewidths=0.5 if maior > 1 else 0,
+        zorder=3,
+    )
+
+    eixo.set_xlabel(grafico.rotulo_categoria, fontsize=8.5, color=TINTA_SECUNDARIA)
+    eixo.set_ylabel(grafico.rotulo_valor, fontsize=8.5, color=TINTA_SECUNDARIA)
+    _eixo_de_valores(eixo, inteiro=_todos_inteiros(ys))
+    eixo.xaxis.set_major_locator(MaxNLocator(integer=_todos_inteiros(xs), nbins=6))
+    _titulo(eixo, grafico)
+    return figura
+
+
+def _todos_inteiros(valores: list[float]) -> bool:
+    return bool(valores) and all(float(valor).is_integer() for valor in valores)
+
+
 # O registro das espécies.
 #
 # Aqui embaixo, e não no topo do arquivo, porque ele nomeia funções que precisam
-# já existir. É a única coisa do módulo que a espécie nova toca: escrever
-# `_dispersao` para a correlação e acrescentar uma linha aqui é o trabalho inteiro.
+# já existir. É a única coisa do módulo que a espécie nova toca: escrever a função
+# e acrescentar uma linha aqui é o trabalho inteiro — foi o que a dispersão da
+# correlação fez.
 _FORMAS = {
     "barras": _barras,
     "histograma": _histograma,
     "colunas": _colunas,
     "qq": _qq,
+    "dispersao": _dispersao,
 }
 
 

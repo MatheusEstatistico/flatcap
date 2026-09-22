@@ -62,6 +62,7 @@ from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arqui
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .associacao import Associacao, PlanoAssociacao
+    from .correlacao import Correlacao, PlanoCorrelacao
     from .cruzamento import ParCruzado, PlanoCruzamento
     from .descritiva import Descritiva, PlanoDescritiva
     from .normalidade import Normalidade, PlanoNormalidade
@@ -2215,6 +2216,310 @@ def _arvore_da_associacao(plano: PlanoAssociacao) -> Tree:
             (f"   {len(plano.associacao.pares)} par(es), um por linha", "dim"),
         )
     )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
+# flatcap correlacao
+
+@app.command()
+def correlacao(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    sem_graficos: bool = typer.Option(
+        False, "--sem-graficos",
+        help = "Escreve só a tabela. Mais rápido, e o matplotlib nem é carregado."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Correlaciona pares de variáveis: Pearson, Spearman ou Kendall.
+
+    Para cada par da lista `correlacao:` do projeto.yaml, o método que a regra dos
+    pressupostos escolhe: Kendall quando alguma das duas tem até 10 valores
+    distintos, com repetição (escala ou código); Spearman quando alguma é
+    categórica ou quando o Shapiro-Wilk rejeita a normal em alguma das duas; e
+    Pearson nos outros casos. Os três como o cor.test do R. Sai uma tabela só, com
+    variável 1, variável 2, n, método, coeficiente, IC 95% e p-valor, e uma
+    dispersão por par, em `3. Análises/correlacao/`, com um `manifesto.json`.
+
+    Os pares se escrevem na ficha — um par, um par com o método, ou uma variável
+    contra várias:
+
+        correlacao:
+          - \\[idade, imc]
+          - idade: \\[pressao, colesterol]
+          - \\[dor, ansiedade, kendall]
+
+    O terceiro nome do par, quando vem, manda no método: pearson, spearman ou
+    kendall. Uma escala marcada `categorica` entra se o código for número — pela
+    ordem dos códigos, e só por Spearman ou Kendall.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `pandas`, o `scipy` e o `matplotlib` entram aqui dentro, como em todo
+    # comando que abre o banco: o `listar`, que roda várias vezes por dia, não deve
+    # pagar por eles.
+    from .banco import BancoError
+    from .correlacao import CorrelacaoError, executar_correlacao, preparar_correlacao
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_correlacao(
+            raiz, aba = aba, conferir = not rapido, com_graficos = not sem_graficos
+        )
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except CorrelacaoError as erro:
+        raise _abortar("Correlação", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_da_correlacao(plano))
+    console.print(_tabela_da_correlacao(plano.correlacao))
+    console.print(_nota_da_correlacao(plano.correlacao))
+    for aviso in plano.correlacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_correlacao(plano))
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_correlacao(plano)
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao escrever em {plano.pasta}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+            "anterior — confira a pasta antes de rodar de novo."
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+                style = "dim",
+            )
+        )
+
+    quantos = len(plano.arquivos)
+    console.print(
+        f"\n[green]Correlação escrita.[/green] {quantos} "
+        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+        f"{PASTA_ANALISES}/{plano.pasta.name}"
+    )
+
+
+def _cabecalho_da_correlacao(plano: PlanoCorrelacao) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantos pares entram.
+    """
+    correlacao = plano.correlacao
+    ficha = correlacao.ficha
+    banco = correlacao.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantos = len(correlacao.pares)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantos} {_plural(quantos, 'par', 'pares')}", ""),
+            (" da lista `correlacao:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_da_correlacao(correlacao: Correlacao) -> Table:
+    """
+    Uma linha por par, com as mesmas células do `.csv`.
+
+    A tabela do terminal lê as células que vão para o disco e não reformata nada —
+    dois formatadores para o mesmo coeficiente é como o terminal diz `0.31` enquanto
+    o arquivo diz `0,31`. O p abaixo de 0,05 sai em negrito, e o método escrito na
+    ficha contra a regra sai em amarelo: são destaques de quem lê a simulação, e
+    ficam no terminal — o documento não marca nada.
+    """
+    from .normalidade import ALFA
+
+    tabela = Table(show_header = True, header_style = "bold")
+    for posicao, nome in enumerate(correlacao.tabela.colunas):
+        if posicao in (2, 4, 5, 6):  # n, coeficiente, IC e p-valor: números, à direita
+            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+        else:
+            tabela.add_column(Text(nome), overflow = "fold")
+
+    for par, celulas in zip(correlacao.pares, correlacao.tabela.linhas, strict=True):
+        if not par.testado:
+            estilo_metodo, estilo_p = "yellow", "dim"
+        else:
+            contra = par.escolha is not None and par.escolha.contra_a_regra
+            estilo_metodo = "yellow" if contra else ""
+            coeficiente = par.coeficiente
+            estilo_p = "bold" if coeficiente is not None and coeficiente.p < ALFA else ""
+        tabela.add_row(
+            Text(celulas[0]),
+            Text(celulas[1]),
+            Text(celulas[2]),
+            Text(celulas[3], style = estilo_metodo),
+            Text(celulas[4], style = "" if par.testado else "dim"),
+            Text(celulas[5], style = "" if par.testado else "dim"),
+            Text(celulas[6], style = estilo_p),
+        )
+    return tabela
+
+
+def _nota_da_correlacao(correlacao: Correlacao) -> Text:
+    """
+    Por que cada par foi para o método em que foi, e quantos testes são.
+
+    As frases são as mesmas das notas do `.csv` — uma por par, montadas num lugar
+    só —, e saem na simulação porque é nela que se confere a escolha antes de ela
+    ir para o documento. Quando a ficha escolheu contra a regra, a frase diz o que
+    a regra teria escolhido.
+    """
+    from .correlacao import KENDALL, PEARSON, SPEARMAN
+
+    corpo = Text("\nEscolha do método (regra dos pressupostos):", style = "bold")
+    for par in correlacao.pares:
+        corpo.append("\n")
+        contra = par.escolha is not None and par.escolha.contra_a_regra
+        corpo.append(Text(par.justificativa, style = "yellow" if contra else "dim"))
+
+    testados = len(correlacao.testados)
+    contagem = [
+        (correlacao.quantos(PEARSON), PEARSON),
+        (correlacao.quantos(SPEARMAN), SPEARMAN),
+        (correlacao.quantos(KENDALL), KENDALL),
+    ]
+    resumo = ", ".join(f"{quantos} {nome}" for quantos, nome in contagem if quantos)
+    na_ficha = len(correlacao.pela_ficha)
+    corpo.append("\n\n")
+    corpo.append(
+        Text.assemble(
+            (f"{testados} {_plural(testados, 'teste', 'testes')}", "bold"),
+            (f" ({resumo})" if resumo else "", ""),
+            (
+                f"; {na_ficha} com o método escrito na ficha" if na_ficha else "",
+                "",
+            ),
+            (
+                ". Cada linha é um teste, sem correção para comparações múltiplas."
+                if testados > 1 else ".",
+                "dim",
+            ),
+        )
+    )
+    return corpo
+
+
+def _arvore_da_correlacao(plano: PlanoCorrelacao) -> Tree:
+    """
+    Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), (plano.tabela.nome, ""),
+            (f"   {len(plano.correlacao.pares)} par(es), um por linha", "dim"),
+        )
+    )
+
+    if plano.com_graficos:
+        ramo.add(
+            Text.assemble(
+                ("+ ", "green"), (f"{len(plano.graficos)} dispersão(ões) .png", ""),
+            )
+        )
+        sem_figura = len(plano.correlacao.pares) - len(plano.graficos)
+        if sem_figura:
+            ramo.add(
+                Text(f"({sem_figura} sem figura: o par não foi testado)", style = "yellow")
+            )
+    else:
+        ramo.add(Text("(sem gráficos: --sem-graficos)", style = "yellow"))
+
     ramo.add(
         Text.assemble(
             ("+ ", "green"), ("manifesto.json", "bold"),
