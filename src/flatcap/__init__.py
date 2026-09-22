@@ -15,6 +15,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     normalidade.py testa a normalidade das numéricas (Shapiro-Wilk, forma, Q-Q)
     cruzamento.py  cruza pares de categóricas: uma tabela por par
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
+    correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -186,6 +187,34 @@ conferência é contra os exemplos da documentação do R e contra a força brut
 É a quarta análise, e de novo o `relatorio.py` não muda uma linha. Ela entra na
 `ORDEM_PADRAO_DAS_ANALISES` logo depois do cruzamento, e o `valor_p` da
 normalidade ficou público: o p sai escrito do mesmo jeito nas duas tabelas.
+
+## 1.6.0 — a correlação
+
+**`correlacao.py`: Pearson, Spearman ou Kendall, escolhido pelos pressupostos de
+cada par.** Os pares vêm da lista `correlacao:` da ficha, nas duas formas da
+associação, e o par aceita um terceiro nome, que é o método: `[dor, ansiedade,
+kendall]`. Sem ele, a regra escolhe — Kendall quando alguma das duas tem até 10
+valores distintos, com repetição; Spearman quando alguma é categórica ou quando o
+Shapiro-Wilk rejeita a normal em alguma; Pearson nos outros casos. A frase de cada
+escolha vai para as notas do `.csv`, para o terminal e para o manifesto, e o
+método escrito contra a regra sai com aviso.
+
+Sai uma tabela só — variável 1, variável 2, n, método, coeficiente, IC 95% e
+p-valor — e uma dispersão por par, em que o ponto cresce onde vários casos
+coincidem. Os três são o `cor.test` do R, e o Spearman pede aritmética escrita
+aqui: o `scipy` usa sempre a aproximação t, e o R é exato até n = 1290 sem
+empates, pelo algoritmo AS 89 — transcrito do `prho.c`. O intervalo do Spearman e
+o do Kendall, que o R não dá, saem pela transformação de Fisher com os
+erros-padrão de Bonett e Wright.
+
+Uma escala marcada `categorica` entra, se o código for número: pela ordem dos
+códigos, e só por Spearman ou Kendall.
+
+É a quinta análise, e o `relatorio.py` continua sem mudar uma linha. O
+`graficos.py` ganhou a espécie `dispersao`, o Shapiro-Wilk da normalidade ficou
+público — a tabela de normalidade e a escolha da correlação saem da mesma
+chamada —, e a correlação entra na `ORDEM_PADRAO_DAS_ANALISES` logo depois da
+normalidade.
 """
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
