@@ -32,6 +32,7 @@ from flatcap.projeto import (
     PASTA_ANALISES,
     PASTA_ANTIGAS,
     PASTA_ASSOCIACAO,
+    PASTA_CORRELACAO,
     PASTA_CRUZAMENTO,
     PASTA_DESCRITIVA,
 )
@@ -562,6 +563,82 @@ class TestAssociacao:
         assert PASTA_ANTIGAS in saida
 
 
+class TestCorrelacao:
+    BLOCO = "correlacao:\n  - [idade, imc]\n"
+
+    def test_simula_por_padrao_e_mostra_a_tabela_e_a_escolha(self, rodar, projeto_com_rodada):
+        """
+        A simulação mostra a tabela que vai para o documento **e** por que cada par
+        foi para o método em que foi — é nela que a escolha se confere.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("correlacao", RECORD_ID)
+        assert resultado.exit_code == 0
+        assert not (raiz / PASTA_ANALISES / PASTA_CORRELACAO).exists()
+        saida = _saida(resultado)
+        assert "Pearson" in saida and "IC 95%" in saida
+        assert "Escolha do método (regra dos pressupostos)" in saida
+        assert "idade × imc: n = 24; o Shapiro-Wilk não rejeita a normal" in saida
+        assert "1 dispersão(ões) .png" in saida
+        assert "Simulação" in saida
+
+    def test_com_sim_escreve_a_pasta(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert rodar("correlacao", RECORD_ID, "--sim").exit_code == 0
+        pasta = raiz / PASTA_ANALISES / PASTA_CORRELACAO
+        assert (pasta / "correlacao.csv").is_file()
+        assert (pasta / "disp_idade_x_imc.png").is_file()
+        assert (pasta / "manifesto.json").is_file()
+
+    def test_sem_graficos_nao_desenha(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim").exit_code == 0
+        assert not list((raiz / PASTA_ANALISES / PASTA_CORRELACAO).glob("*.png"))
+
+    def test_sem_a_lista_sai_com_um_e_ensina_as_tres_formas(self, rodar, projeto_com_rodada):
+        projeto_com_rodada()
+        resultado = rodar("correlacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Correlação" in saida
+        assert "- [idade, imc]" in saida
+        assert "- [dor, ansiedade, kendall]" in saida
+
+    def test_o_help_mostra_as_tres_formas(self):
+        """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
+        saida = _saida(runner.invoke(app, ["correlacao", "--help"]))
+        assert "- [idade, imc]" in saida
+        assert "- idade: [pressao, colesterol]" in saida
+        assert "- [dor, ansiedade, kendall]" in saida
+
+    def test_categorica_em_texto_sai_com_um(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "correlacao:\n  - [escolaridade, idade]\n")
+        resultado = rodar("correlacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Correlação" in saida
+        assert "chegaram em texto" in saida
+
+    def test_o_metodo_contra_a_regra_aparece_na_simulacao(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "correlacao:\n  - [idade, imc, kendall]\n")
+        saida = _saida(rodar("correlacao", RECORD_ID))
+        assert "Kendall escrito na ficha" in saida
+        assert "contra a regra — ela escolheria Pearson" in saida
+        assert "1 com o método escrito na ficha" in saida
+
+    def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim")
+        saida = _saida(rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim"))
+        assert PASTA_ANTIGAS in saida
+
+
 class TestRelatorio:
     def test_simula_por_padrao(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -654,6 +731,7 @@ class TestInvariantes:
             ("normalidade", RECORD_ID),
             ("cruzamento", RECORD_ID),
             ("associacao", RECORD_ID),
+            ("correlacao", RECORD_ID),
             ("relatorio", RECORD_ID),
             ("template",),
         ],
@@ -674,7 +752,10 @@ class TestInvariantes:
             raise AssertionError("um comando de disco tentou falar com a rede")
 
         monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
-        acrescentar_a_ficha(projeto_com_rodada(), TestCruzamento.BLOCO + TestAssociacao.BLOCO)
+        acrescentar_a_ficha(
+            projeto_com_rodada(),
+            TestCruzamento.BLOCO + TestAssociacao.BLOCO + TestCorrelacao.BLOCO,
+        )
         for comando in (
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
@@ -682,6 +763,7 @@ class TestInvariantes:
             ("normalidade", RECORD_ID, "--sem-graficos"),
             ("cruzamento", RECORD_ID),
             ("associacao", RECORD_ID),
+            ("correlacao", RECORD_ID, "--sem-graficos"),
             ("relatorio", RECORD_ID),
         ):
             assert rodar(*comando).exit_code == 0, comando
@@ -692,15 +774,18 @@ class TestInvariantes:
         from conftest import linhas_do_historico
 
         raiz = projeto_com_banco()
-        acrescentar_a_ficha(raiz, TestCruzamento.BLOCO + TestAssociacao.BLOCO)
+        acrescentar_a_ficha(
+            raiz, TestCruzamento.BLOCO + TestAssociacao.BLOCO + TestCorrelacao.BLOCO
+        )
         antes = len(linhas_do_historico(raiz))
         rodar("perfil", RECORD_ID, "--sim")
         rodar("descritiva", RECORD_ID, "--sim")
         rodar("normalidade", RECORD_ID, "--sem-graficos", "--sim")
         rodar("cruzamento", RECORD_ID, "--sim")
         rodar("associacao", RECORD_ID, "--sim")
+        rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim")
         rodar("relatorio", RECORD_ID, "--sim")
-        assert len(linhas_do_historico(raiz)) == antes + 6
+        assert len(linhas_do_historico(raiz)) == antes + 7
 
     def test_a_cli_nao_tem_regra_de_negocio(self):
         """
