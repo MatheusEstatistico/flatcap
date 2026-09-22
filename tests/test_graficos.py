@@ -49,6 +49,13 @@ COLUNAS = Grafico(
     rotulos=("8", "9", "7"),
 )
 
+DISPERSAO = Grafico(
+    nome="disp_dor_x_idade.png", especie="dispersao", variavel="", titulo="Dor × Idade",
+    subtitulo="n = 24 · o tamanho do ponto é o número de casos",
+    rotulo_categoria="Dor", rotulo_valor="Idade",
+    pontos_x=(0.0, 1.0, 1.0, 3.0), pontos_y=(23.0, 31.0, 45.0, 62.0), contagens=(5, 12, 1, 6),
+)
+
 
 class TestArquitetura:
     def test_e_o_unico_modulo_que_importa_o_matplotlib(self):
@@ -112,7 +119,7 @@ class TestArquitetura:
 
 
 class TestDesenho:
-    @pytest.mark.parametrize("grafico", [BARRAS, HISTOGRAMA, COLUNAS])
+    @pytest.mark.parametrize("grafico", [BARRAS, HISTOGRAMA, COLUNAS, DISPERSAO])
     def test_escreve_um_png_valido(self, tmp_path, grafico):
         caminho = desenhar(grafico, tmp_path / grafico.nome)
         assert caminho.is_file()
@@ -177,6 +184,22 @@ class TestDesenho:
         fonte = inspect.getsource(modulo)
         assert fonte.count("color=SERIE") >= 3
         assert "colormap" not in fonte and "cmap" not in fonte
+
+    def test_a_dispersao_sem_contagens_desenha_um_ponto_por_caso(self, tmp_path):
+        """
+        Numa dispersão de duas contínuas nenhum ponto junta casos, e as contagens
+        podem vir vazias: cada ponto vale um.
+        """
+        from dataclasses import replace
+
+        grafico = replace(DISPERSAO, contagens=(), subtitulo="n = 4")
+        assert desenhar(grafico, tmp_path / "d.png").read_bytes().startswith(b"\x89PNG")
+
+    def test_especie_desconhecida_estoura_com_as_que_existem(self, tmp_path):
+        from dataclasses import replace
+
+        with pytest.raises(ValueError, match="dispersao"):
+            desenhar(replace(DISPERSAO, especie="dispercao"), tmp_path / "d.png")
 
     def test_a_versao_e_informavel(self):
         assert versao_do_matplotlib()[0].isdigit()
