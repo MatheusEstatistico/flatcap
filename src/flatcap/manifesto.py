@@ -101,6 +101,7 @@ ANALISE_DESCRITIVA = "descritiva"
 ANALISE_NORMALIDADE = "normalidade"
 ANALISE_CRUZAMENTO = "cruzamento"
 ANALISE_ASSOCIACAO = "associacao"
+ANALISE_CORRELACAO = "correlacao"
 
 # A ordem em que as análises aparecem no documento quando a ficha não manda.
 #
@@ -122,6 +123,10 @@ ANALISE_ASSOCIACAO = "associacao"
 # não tem normalidade a testar. Os pressupostos das numéricas ficam depois dela,
 # perto dos testes que vão precisar deles.
 #
+# A correlação vem logo depois da normalidade: é o primeiro teste que precisa dos
+# pressupostos das numéricas, e é na tabela de normalidade que o leitor acabou de
+# ver a forma das variáveis que ela vai cruzar.
+#
 # Uma análise nova acrescenta uma linha aqui e nada mais. É o mesmo tipo de
 # registro que o `_FORMAS` do `graficos.py`, e existe pelo mesmo motivo: com
 # `if/elif` espalhado, a análise nova aparece no documento em um lugar que
@@ -131,6 +136,7 @@ ORDEM_PADRAO_DAS_ANALISES: tuple[str, ...] = (
     ANALISE_CRUZAMENTO,
     ANALISE_ASSOCIACAO,
     ANALISE_NORMALIDADE,
+    ANALISE_CORRELACAO,
 )
 
 # A semente.
@@ -236,13 +242,15 @@ class Grafico:
 
     Os campos são a união do que cada espécie precisa, e cada uma usa os seus:
     `categorias`/`valores`/`rotulos` nas barras e nas colunas, `bordas`/`contagens`
-    no histograma, `pontos_x`/`pontos_y`/`reta` no Q-Q. Uma `dataclass` por espécie
-    daria um despacho por tipo no `graficos.py`, que é mais código para dizer o que
-    o campo `especie` já diz.
+    no histograma, `pontos_x`/`pontos_y`/`reta` no Q-Q, e `pontos_x`/`pontos_y`/
+    `contagens` na dispersão — onde `contagens` é quantos casos caem em cada ponto,
+    que é a mesma pergunta que ela responde no histograma: quantos casos há ali.
+    Uma `dataclass` por espécie daria um despacho por tipo no `graficos.py`, que é
+    mais código para dizer o que o campo `especie` já diz.
     """
 
     nome: str
-    especie: str  # barras | histograma | colunas | qq
+    especie: str  # barras | histograma | colunas | qq | dispersao
     variavel: str
     titulo: str
     subtitulo: str = ""
@@ -586,6 +594,7 @@ def _data_e_hora(valor: Any, caminho: Path | None) -> datetime:
 
 __all__ = [
     "ANALISE_ASSOCIACAO",
+    "ANALISE_CORRELACAO",
     "ANALISE_CRUZAMENTO",
     "ANALISE_DESCRITIVA",
     "ANALISE_NORMALIDADE",
