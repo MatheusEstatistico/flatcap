@@ -358,6 +358,42 @@ class TestSecoes:
         for posicao in (2, 3, 4, 6):
             assert larguras[posicao] >= len(colunas[posicao]) * _CM_POR_CARACTERE * _EMU_POR_CM
 
+    def test_a_palavra_curta_de_texto_leva_um_caractere_de_folga(self):
+        """
+        O defeito da tabela da correlação: `Spearman`, na coluna `método`, recebia a
+        largura média de oito caracteres, e o `m` passa da média — a palavra saía
+        partida em `Spearma` e `n`. O piso da coluna de texto é a palavra mais longa
+        com um caractere a mais.
+        """
+        from flatcap.documento import (
+            _CM_POR_CARACTERE,
+            _EMU_POR_CM,
+            _RESPIRO_CM,
+            _colunas_de_texto,
+            _larguras_pelo_conteudo,
+        )
+        from flatcap.relatorio import TabelaLida
+
+        tabela = TabelaLida(
+            "correlacao.csv",
+            "correlacao",
+            "Correlações",
+            colunas=(
+                "variável 1", "variável 2", "n", "método", "coeficiente", "IC 95%", "p-valor",
+            ),
+            linhas=(
+                ("Idade (anos)", "Renda familiar (R$)", "118", "Spearman", "-0,01",
+                 "-0,19 a 0,17", "0,919"),
+                ("Intensidade da dor (0 a 5)", "Escore de ansiedade (0 a 10)", "120",
+                 "Kendall", "0,42", "0,31 a 0,51", "< 0,001"),
+            ),
+        )
+        larguras = _larguras_pelo_conteudo(tabela, _colunas_de_texto(tabela), int(Pt(453)))
+        assert larguras is not None
+        assert larguras[3] >= ((len("Spearman") + 1) * _CM_POR_CARACTERE + _RESPIRO_CM) * (
+            _EMU_POR_CM
+        ) - 1
+
     def test_quando_nem_as_palavras_cabem_volta_a_reparticao_de_sempre(self):
         from flatcap.documento import _colunas_de_texto, _larguras_pelo_conteudo
         from flatcap.relatorio import TabelaLida
