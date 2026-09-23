@@ -353,6 +353,51 @@ class TestFluxoCompleto:
         assert any("Dispersão — idade × imc" in legenda for legenda in legendas)
 
 
+    def test_a_comparacao_do_docx_e_a_do_csv(self, tmp_path, anexo):
+        """
+        A sexta análise, pela mesma régua: a tabela no documento é, célula por célula,
+        a do `.csv` — a média, o intervalo e a referência inclusive —, sem o
+        `relatorio` saber que a comparação existe.
+        """
+        from docx import Document
+
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, 25]\n  - [idade, 40, t]\n")
+            for comando in (
+                ("perfil", "40", "--sim"),
+                ("descritiva", "40", "--sim"),
+                ("comparacao", "40", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        csv = raiz / "3. Análises" / "comparacao" / "uma_amostra.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_csv[0] == [
+            "variável", "n", "média (DP)", "IC 95% da média", "referência", "teste", "p-valor",
+        ]
+        assert [linha[5] for linha in do_csv[1:]] == ["t de Student", "t de Student"]
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == do_csv[0]
+        )
+        do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
+        assert do_docx == do_csv
+
+
 class TestSemRede:
     """
     Do `dados adicionar` em diante, nada toca o REDCap — e a prova é rodar com
@@ -378,7 +423,8 @@ class TestSemRede:
             raiz,
             "cruzamento:\n  - [sexo, escolaridade]\n"
             "associacao:\n  - [sexo, escolaridade]\n"
-            "correlacao:\n  - [idade, imc]\n",
+            "correlacao:\n  - [idade, imc]\n"
+            "comparacao:\n  - [imc, 25]\n",
         )
         return env, raiz
 
@@ -392,6 +438,7 @@ class TestSemRede:
             ("cruzamento", "40", "--sim"),
             ("associacao", "40", "--sim"),
             ("correlacao", "40", "--sim"),
+            ("comparacao", "40", "--sim"),
             ("relatorio", "40", "--sim"),
             ("template", "--sim"),
         ],
