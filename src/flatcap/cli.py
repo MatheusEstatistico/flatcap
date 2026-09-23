@@ -62,6 +62,7 @@ from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arqui
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .associacao import Associacao, PlanoAssociacao
+    from .comparacao import Comparacao, PlanoComparacao
     from .correlacao import Correlacao, PlanoCorrelacao
     from .cruzamento import ParCruzado, PlanoCruzamento
     from .descritiva import Descritiva, PlanoDescritiva
@@ -2520,6 +2521,280 @@ def _arvore_da_correlacao(plano: PlanoCorrelacao) -> Tree:
     else:
         ramo.add(Text("(sem gráficos: --sem-graficos)", style = "yellow"))
 
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
+# flatcap comparacao
+
+@app.command()
+def comparacao(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Compara a média de variáveis numéricas com um valor de referência.
+
+    Para cada item da lista `comparacao:` do projeto.yaml — a variável e o valor de
+    referência —, o teste que a regra dos pressupostos escolhe: o t de Student para
+    uma amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R.
+    Quando rejeita, a regra escolhe o Wilcoxon, que ainda não está no FlatCap, e a
+    linha sai sem teste, com o motivo. Sai uma tabela só, com variável, n, média
+    (DP), IC 95% da média, referência, teste e p-valor, em `3. Análises/comparacao/`,
+    com um `manifesto.json`.
+
+    Os itens se escrevem na ficha — a variável e a referência, com ponto decimal:
+
+        comparacao:
+          - \\[imc, 25]
+          - \\[pas, 120, t]
+
+    O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
+    # banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
+    from .banco import BancoError
+    from .comparacao import ComparacaoError, executar_comparacao, preparar_comparacao
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_comparacao(raiz, aba = aba, conferir = not rapido)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except ComparacaoError as erro:
+        raise _abortar("Comparação", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_da_comparacao(plano))
+    console.print(_tabela_da_comparacao(plano.comparacao))
+    console.print(_nota_da_comparacao(plano.comparacao))
+    for aviso in plano.comparacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_comparacao(plano))
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_comparacao(plano)
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao escrever em {plano.pasta}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+            "anterior — confira a pasta antes de rodar de novo."
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+                style = "dim",
+            )
+        )
+
+    quantos = len(plano.arquivos)
+    console.print(
+        f"\n[green]Comparação escrita.[/green] {quantos} "
+        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+        f"{PASTA_ANALISES}/{plano.pasta.name}"
+    )
+
+
+def _cabecalho_da_comparacao(plano: PlanoComparacao) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantos itens entram.
+    """
+    comparacao = plano.comparacao
+    ficha = comparacao.ficha
+    banco = comparacao.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantos = len(comparacao.variaveis)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantos} {_plural(quantos, 'item', 'itens')}", ""),
+            (" da lista `comparacao:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_da_comparacao(comparacao: Comparacao) -> Table:
+    """
+    Uma linha por item, com as mesmas células do `.csv`.
+
+    A tabela do terminal lê as células que vão para o disco e não reformata nada —
+    dois formatadores para a mesma média é como o terminal diz `25.93` enquanto o
+    arquivo diz `25,93`. O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com
+    o método escrito contra a regra sai com a coluna `teste` em amarelo: são destaques
+    de quem lê a simulação, e ficam no terminal — o documento não marca nada.
+    """
+    from .normalidade import ALFA
+
+    tabela = Table(show_header = True, header_style = "bold")
+    for posicao, nome in enumerate(comparacao.tabela.colunas):
+        if posicao in (1, 4, 6):  # n, referência e p-valor: números, à direita
+            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+        else:
+            tabela.add_column(Text(nome), overflow = "fold")
+
+    for variavel, celulas in zip(comparacao.variaveis, comparacao.tabela.linhas, strict=True):
+        contra = variavel.escolha is not None and variavel.escolha.contra_a_regra
+        resultado = variavel.resultado
+        if resultado is None:
+            estilo_teste, estilo_p = "yellow", "dim"
+        else:
+            estilo_teste = "yellow" if contra else ""
+            estilo_p = "bold" if resultado.p < ALFA else ""
+        tabela.add_row(
+            Text(celulas[0]),
+            Text(celulas[1]),
+            Text(celulas[2]),
+            Text(celulas[3], style = "" if variavel.testada else "dim"),
+            Text(celulas[4]),
+            Text(celulas[5], style = estilo_teste),
+            Text(celulas[6], style = estilo_p),
+        )
+    return tabela
+
+
+def _nota_da_comparacao(comparacao: Comparacao) -> Text:
+    """
+    Por que cada item foi para o teste em que foi, e quantos testes são.
+
+    As frases são as mesmas das notas do `.csv` — uma por item, montadas num lugar
+    só —, e saem na simulação porque é nela que se confere a escolha antes de ela ir
+    para o documento. Quando a ficha escolheu contra a regra, ou quando a regra
+    escolheu um teste que ainda não existe, a frase sai em amarelo.
+    """
+    corpo = Text("\nEscolha do teste (regra dos pressupostos):", style = "bold")
+    for variavel in comparacao.variaveis:
+        corpo.append("\n")
+        destaque = not variavel.testada or (
+            variavel.escolha is not None and variavel.escolha.contra_a_regra
+        )
+        corpo.append(Text(variavel.justificativa, style = "yellow" if destaque else "dim"))
+
+    testadas = len(comparacao.testadas)
+    sem_teste = len(comparacao.sem_teste)
+    na_ficha = len(comparacao.pela_ficha)
+    corpo.append("\n\n")
+    corpo.append(
+        Text.assemble(
+            (f"{testadas} {_plural(testadas, 'teste', 'testes')}", "bold"),
+            (f"; {sem_teste} {_plural(sem_teste, 'item', 'itens')} sem teste"
+             if sem_teste else "", ""),
+            (
+                f"; {na_ficha} com o método escrito na ficha" if na_ficha else "",
+                "",
+            ),
+            (
+                ". Cada linha é um teste, sem correção para comparações múltiplas."
+                if testadas > 1 else ".",
+                "dim",
+            ),
+        )
+    )
+    return corpo
+
+
+def _arvore_da_comparacao(plano: PlanoComparacao) -> Tree:
+    """
+    Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), (plano.tabela.nome, ""),
+            (f"   {len(plano.comparacao.variaveis)} item(ns), um por linha", "dim"),
+        )
+    )
     ramo.add(
         Text.assemble(
             ("+ ", "green"), ("manifesto.json", "bold"),
