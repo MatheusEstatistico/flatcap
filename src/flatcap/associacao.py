@@ -880,7 +880,7 @@ def _testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParT
     return ParTestado(**base, teste=TESTE_FISHER, p=p, cochran=cochran)
 
 
-def _na_ordem_do_dicionario(observados: set[str], linha: Linha) -> tuple[str, ...]:
+def na_ordem_do_dicionario(observados: set[str], linha: Linha) -> tuple[str, ...]:
     """
     Os rótulos observados, na ordem declarada no dicionário; o resto depois, em
     ordem alfabética.
@@ -888,6 +888,12 @@ def _na_ordem_do_dicionario(observados: set[str], linha: Linha) -> tuple[str, ..
     A ordem não muda nenhum p — o qui-quadrado e o Fisher são os mesmos para
     qualquer permutação de linhas e colunas —, mas muda o manifesto, e duas rodadas
     sobre o mesmo banco precisam dar o mesmo arquivo.
+
+    Pública desde a 1.8.0, com o apelido privado que este módulo usa. A comparação
+    entre grupos põe os grupos na tabela nesta mesma ordem — e é ela que decide o
+    sinal da diferença de médias, o primeiro grupo menos o segundo. Uma segunda regra
+    de ordem seria como o `Feminino` vem antes na associação e depois na comparação,
+    na mesma página.
     """
     ordem: list[str] = []
     for codigo in linha.categorias_ordem:
@@ -895,6 +901,9 @@ def _na_ordem_do_dicionario(observados: set[str], linha: Linha) -> tuple[str, ..
         if rotulo in observados and rotulo not in ordem:
             ordem.append(rotulo)
     return tuple(ordem + sorted(observados - set(ordem)))
+
+
+_na_ordem_do_dicionario = na_ordem_do_dicionario
 
 
 # A regra e os testes
@@ -1797,6 +1806,7 @@ __all__ = [
     "executar_associacao",
     "fisher_exato",
     "montar_manifesto",
+    "na_ordem_do_dicionario",
     "pares_da_ficha",
     "preparar_associacao",
     "qui_quadrado",
