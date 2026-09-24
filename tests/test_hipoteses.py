@@ -4,9 +4,10 @@ Os testes do `hipoteses.py` — a aritmética, sem projeto, banco nem ficha.
 **Nenhum número daqui é conferido contra o próprio módulo.** As referências são três,
 e independentes dele:
 
-* o **R 4.3.3**: `t.test(x, mu = mu)` rodado sobre os mesmos números, com o
-  resultado copiado para `REFERENCIAS_DO_R` — o t, os graus de liberdade, o p, os dois
-  limites do intervalo e a média;
+* o **R 4.3.3**: `t.test(x, mu = mu)` e `t.test(x, y, var.equal = TRUE)` rodados
+  sobre os mesmos números, com o resultado copiado para `REFERENCIAS_DO_R` e
+  `REFERENCIAS_DO_R_STUDENT` — o t, os graus de liberdade, o p, os dois limites do
+  intervalo e a estimativa;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
   `sleep` do R. O t pareado que a documentação imprime — t = 4,0621, 9 gl,
   p = 0,002833 — é o t de uma amostra sobre as diferenças, que é a razão de o motor
@@ -27,10 +28,13 @@ from scipy import stats
 import flatcap.hipoteses as hipoteses
 from flatcap.hipoteses import (
     CONFIANCA,
+    MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
     Resultado,
     sem_variacao,
+    sem_variacao_em_duas,
+    t_de_student,
     t_uma_amostra,
 )
 
@@ -95,6 +99,45 @@ REFERENCIAS_DO_R = [
 ]
 
 
+# Os pares de `REFERENCIAS_DO_R_STUDENT`. O `sleep` é o exemplo da documentação do
+# `t.test` como dois grupos, e o `um_so` é o caso de canto que o R aceita no de
+# Student: um grupo de um valor, com a variância combinada toda do outro.
+DUAS_AMOSTRAS: dict[str, tuple[list[float], list[float]]] = {
+    "grupos": (
+        [24.1, 27.3, 22.8, 30.2, 25.5, 26.9, 23.4, 28.8, 25.0, 27.7],
+        [26.5, 29.9, 31.2, 24.8, 33.0, 28.1, 30.4, 27.6, 35.2, 26.3, 29.8, 32.7],
+    ),
+    "sleep": (SONO_1, SONO_2),
+    "um_so": (
+        [30.0],
+        [26.5, 29.9, 31.2, 24.8, 33.0, 28.1, 30.4, 27.6, 35.2, 26.3, 29.8, 32.7],
+    ),
+    "mesma_media": ([1.0, 2.0, 3.0], [1.5, 2.5]),
+    "um_constante": ([5.0, 5.0, 5.0], [4.0, 6.0, 7.0]),
+    "desiguais": (
+        [10.2, 11.5, 9.8, 12.1],
+        [20.5, 35.2, 18.9, 42.3, 25.6, 30.1, 22.2, 38.8],
+    ),
+}
+
+# `t.test(x, y, var.equal = TRUE)` no R 4.3.3:
+#
+#     (caso, t, gl, p, limite inferior, limite superior, diferença das médias)
+REFERENCIAS_DO_R_STUDENT = [
+    ("grupos", -2.8701134295652397, 20, 0.0094640119779283785,
+     -5.9660518755334566, -0.94394812446654075, -3.4549999999999983),
+    ("sleep", -1.8608134674868528, 18, 0.079186714215938175,
+     -3.3638740322875984, 0.20387403228759859, -1.5800000000000001),
+    ("um_so", 0.1162591710745048, 11, 0.90954249918663643,
+     -6.7243920514487918, 7.4743920514487909, 0.375),
+    ("mesma_media", 0, 3, 1, -2.6520385877364232, 2.6520385877364232, 0),
+    ("um_constante", -0.75592894601845484, 4, 0.4917670010221688,
+     -3.1152610923919757, 1.7819277590586422, -0.66666666666666696),
+    ("desiguais", -4.0375369892520725, 10, 0.0023705935415861629,
+     -28.398964071386029, -8.2010359286139671, -18.299999999999997),
+]
+
+
 # ── O R ─────────────────────────────────────────────────────────────────────
 
 
@@ -137,6 +180,40 @@ class TestReferenciasDoR:
         assert contra_zero.p != contra_um.p
 
 
+class TestStudentDoR:
+    @pytest.mark.parametrize(
+        ("caso", "t", "gl", "p", "baixo", "alto", "diferenca"),
+        REFERENCIAS_DO_R_STUDENT,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_STUDENT],
+    )
+    def test_o_t_test_do_r_com_var_equal(self, caso, t, gl, p, baixo, alto, diferenca):
+        x, y = DUAS_AMOSTRAS[caso]
+        resultado = t_de_student(x, y)
+        assert resultado.estatistica == pytest.approx(t, rel=1e-12, abs=1e-12)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert resultado.ic == pytest.approx((baixo, alto), rel=1e-12)
+        assert resultado.estimativa == pytest.approx(diferenca, rel=1e-12, abs=1e-12)
+        assert resultado.referencia == 0.0
+
+    def test_o_exemplo_da_documentacao(self):
+        """
+        `t.test(extra ~ group, data = sleep, var.equal = TRUE)`: t = −1,8608, 18 gl,
+        p = 0,07919 — o sono como dois grupos, e não como pareado.
+        """
+        resultado = t_de_student(SONO_1, SONO_2)
+        assert round(resultado.estatistica, 4) == -1.8608
+        assert resultado.gl == (18.0,)
+        assert round(resultado.p, 5) == 0.07919
+
+    def test_trocar_a_ordem_troca_o_sinal_e_mais_nada(self):
+        x, y = DUAS_AMOSTRAS["desiguais"]
+        ida, volta = t_de_student(x, y), t_de_student(y, x)
+        assert volta.estatistica == pytest.approx(-ida.estatistica, rel=1e-14)
+        assert volta.p == pytest.approx(ida.p, rel=1e-14)
+        assert volta.ic == pytest.approx((-ida.ic[1], -ida.ic[0]), rel=1e-14)
+
+
 # ── As fórmulas, escritas de novo ───────────────────────────────────────────
 
 
@@ -161,6 +238,25 @@ class TestFormula:
     def test_a_referencia_na_media_da_t_zero_e_p_um(self):
         resultado = t_uma_amostra(_dados("no_centro"), 3)
         assert (resultado.estatistica, resultado.p) == (0.0, 1.0)
+
+    @pytest.mark.parametrize("caso", ["grupos", "sleep", "um_so", "desiguais"])
+    def test_o_de_student_pela_formula(self, caso):
+        """A variância combinada, escrita com o `statistics`; o `scipy` só na cauda."""
+        x, y = DUAS_AMOSTRAS[caso]
+        n1, n2 = len(x), len(y)
+        soma = sum((n - 1) * statistics.variance(v) for n, v in ((n1, x), (n2, y)) if n > 1)
+        combinada = soma / (n1 + n2 - 2)
+        erro = math.sqrt(combinada * (1 / n1 + 1 / n2))
+        diferenca = statistics.fmean(x) - statistics.fmean(y)
+        t = diferenca / erro
+        quantil = stats.t.ppf((1 + CONFIANCA) / 2, n1 + n2 - 2)
+
+        resultado = t_de_student(x, y)
+        assert resultado.estatistica == pytest.approx(t, rel=1e-10)
+        assert resultado.p == pytest.approx(2 * stats.t.sf(abs(t), n1 + n2 - 2), rel=1e-9)
+        assert resultado.ic == pytest.approx(
+            (diferenca - quantil * erro, diferenca + quantil * erro), rel=1e-12
+        )
 
 
 # ── O que ele recusa ────────────────────────────────────────────────────────
@@ -210,6 +306,50 @@ class TestRecusas:
         with pytest.raises(ValueError, match="vetor"):
             t_uma_amostra([[1.0, 2.0], [3.0, 4.0]], 0)
 
+    def test_o_de_student_com_um_grupo_vazio(self):
+        with pytest.raises(ValueError, match="um valor em cada grupo"):
+            t_de_student([], [1.0, 2.0, 3.0])
+
+    def test_o_de_student_com_dois_valores_no_total(self):
+        """O `not enough observations` do R: um em cada grupo não deixa grau de liberdade."""
+        with pytest.raises(ValueError, match="pelo menos 3 valores"):
+            t_de_student([1.0], [2.0])
+
+    def test_dois_grupos_que_nao_variam_por_dentro(self):
+        """
+        Cada grupo com o seu valor: as médias diferem, e o R recusa assim mesmo — o
+        erro-padrão combinado é zero, e o t seria infinito.
+        """
+        with pytest.raises(ValueError, match="não variam"):
+            t_de_student([5.0, 5.0, 5.0], [6.0, 6.0, 6.0, 6.0])
+        assert sem_variacao_em_duas([5.0, 5.0, 5.0], [6.0, 6.0, 6.0, 6.0])
+        assert sem_variacao_em_duas([5.0, 5.0], [6.0, 6.0], variancias_iguais=False)
+
+    def test_um_grupo_que_nao_varia_nao_basta(self):
+        """
+        A variância combinada é a do outro grupo, e o t existe — o `um_constante` das
+        referências. E sai calado: o «Precision loss» que o `scipy` emite para o grupo
+        constante não vai para o terminal, porque ali a conta está certa.
+        """
+        import warnings
+
+        assert not sem_variacao_em_duas([5.0, 5.0, 5.0], [4.0, 6.0, 7.0])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            assert t_de_student([5.0, 5.0, 5.0], [4.0, 6.0, 7.0]).gl == (4.0,)
+
+    def test_o_criterio_de_duas_amostras_e_o_do_r(self):
+        """O último bit de diferença não é variação, nem com dois grupos."""
+        base = 1e6
+        quase = [base, math.nextafter(base, math.inf), base]
+        assert sem_variacao_em_duas(quase, [base, base])
+        assert not sem_variacao_em_duas([base, base + 0.01, base], [base, base])
+
+    def test_abaixo_do_minimo_a_pergunta_da_constante_nao_se_faz(self):
+        """O tamanho barra antes, com a frase dele."""
+        assert not sem_variacao_em_duas([1.0], [1.0])
+        assert not sem_variacao_em_duas([1.0], [1.0, 1.0], variancias_iguais=False)
+
 
 # ── O contrato ──────────────────────────────────────────────────────────────
 
@@ -231,6 +371,14 @@ class TestContrato:
     def test_o_minimo_e_o_do_r(self):
         assert MINIMO_T == 2
         assert t_uma_amostra([24.0, 27.0], 25).gl == (1.0,)
+        assert MINIMO_STUDENT == 3
+        assert t_de_student([24.0], [27.0, 28.0]).gl == (1.0,)
+
+    def test_o_de_student_estima_a_diferenca(self):
+        resultado = t_de_student(*DUAS_AMOSTRAS["grupos"])
+        assert resultado.metodo == T_DE_STUDENT
+        assert resultado.nome_da_estimativa == "diferença de médias"
+        assert resultado.calculo_do_p == "t de Student com n₁ + n₂ − 2 graus de liberdade"
 
     def test_nenhum_nome_publico_comeca_com_test(self):
         """
