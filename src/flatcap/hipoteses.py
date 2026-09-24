@@ -44,9 +44,10 @@ foi decidida antes.
 
 A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 
-1. **o `scipy` faz o que o R faz** → importar. É o caso do t: `ttest_1samp` e o
-   `confidence_interval()` dele dão o t, os graus de liberdade, o p e o intervalo do
-   `t.test`, conferidos até a décima quarta casa;
+1. **o `scipy` faz o que o R faz** → importar. É o caso do t: `ttest_1samp`,
+   `ttest_ind` e o `confidence_interval()` deles dão o t, os graus de liberdade, o p e
+   o intervalo do `t.test`, conferidos até a décima quarta casa — no de duas amostras,
+   inclusive com um grupo de um valor só;
 2. **o `scipy` calcula igual e escolhe diferente** → escrever a escolha do R e
    importar a conta. É o caso do Wilcoxon e do Mann-Whitney, que vêm depois: o R usa
    o p exato só com menos de 50 casos, sem empate e sem zero, e a aproximação normal
@@ -59,10 +60,12 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 
 Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not enough
 'x' observations`), valores que não variam (`data are essentially constant`), e
-valor ausente ou infinito no vetor. Quem chega aqui pelo `comparacao.py` já passou
-por essas barreiras, uma a uma, com a frase de cada uma na tabela; o `ValueError` é
-para quem chamar a função direto — em teste, ou no dia em que outra análise precisar
-dela —, e é erro de programação: dado que não dá teste não é resultado.
+valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do
+R para ele: um valor em cada grupo e três no total (`not enough observations`). Quem
+chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
+de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
+ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
+dá teste não é resultado.
 
 **Nenhuma função daqui começa com `test`.** `t_uma_amostra`, e não `teste_t`: o
 `pytest` coleta como caso de teste qualquer objeto `test*` importado num arquivo de
@@ -78,7 +81,9 @@ from __future__ import annotations
 
 import math
 import sys
-from collections.abc import Sequence
+import warnings
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 # O nível do intervalo. O mesmo 95% da correlação e do `conf.level` padrão do R.
@@ -86,6 +91,10 @@ CONFIANCA = 0.95
 
 # O menor número de valores com que o `t.test` do R calcula o t de uma amostra.
 MINIMO_T = 2
+
+# O menor número de valores, somados os dois grupos, com que o `t.test` do R calcula o
+# t de Student de duas amostras: um em cada grupo, e um grau de liberdade que sobre.
+MINIMO_STUDENT = 3
 
 # O nome de cada teste, como ele vai para a coluna `teste` da tabela. É o `method`
 # do `htest`, em português.
@@ -170,6 +179,58 @@ def t_uma_amostra(x: Sequence[float], mu: float) -> Resultado:
     )
 
 
+def t_de_student(x: Sequence[float], y: Sequence[float]) -> Resultado:
+    """
+    O `t.test(x, y, var.equal = TRUE)` do R: duas amostras independentes, a variância
+    dos dois grupos combinada, bilateral, n₁ + n₂ − 2 graus de liberdade, e o intervalo
+    de 95% **da diferença das médias**, `média(x) − média(y)` — a ordem dos dois
+    vetores é a do sinal.
+
+        s² = [(n₁ − 1) s₁² + (n₂ − 1) s₂²] / (n₁ + n₂ − 2)
+        t  = (x̄ − ȳ) / √[s² (1/n₁ + 1/n₂)]
+
+    Pelo `scipy`, como o de uma amostra: `ttest_ind(equal_var=True)` e o
+    `confidence_interval()` dele dão o t, os gl, o p e os dois limites do R. Conferido
+    também no caso de canto que o R aceita e o de Welch não: um grupo de um valor só,
+    em que a variância combinada é toda do outro grupo.
+
+    Raises:
+        ValueError: grupo vazio, menos de três valores somados os dois grupos, valores
+            que não variam, ou valor ausente ou infinito.
+    """
+    from scipy import stats
+
+    primeiro, segundo = _vetor(x), _vetor(y)
+    n1, n2 = primeiro.shape[0], segundo.shape[0]
+    if n1 < 1 or n2 < 1:
+        raise ValueError(
+            f"o t de Student precisa de pelo menos um valor em cada grupo, e vieram {n1} e {n2}"
+        )
+    if n1 + n2 < MINIMO_STUDENT:
+        raise ValueError(
+            f"o t de Student precisa de pelo menos {MINIMO_STUDENT} valores somados os dois "
+            f"grupos, e vieram {n1 + n2}"
+        )
+    if sem_variacao_em_duas(primeiro, segundo, variancias_iguais=True):
+        raise ValueError("os valores não variam dentro dos grupos: o t é uma divisão por zero")
+
+    with _sem_o_aviso_de_precisao():
+        resultado = stats.ttest_ind(primeiro, segundo, equal_var=True)
+        intervalo = resultado.confidence_interval(confidence_level=CONFIANCA)
+    return Resultado(
+        metodo=T_DE_STUDENT,
+        estatistica=float(resultado.statistic),
+        nome_da_estatistica="t",
+        p=min(1.0, float(resultado.pvalue)),
+        gl=(float(resultado.df),),
+        calculo_do_p="t de Student com n₁ + n₂ − 2 graus de liberdade",
+        estimativa=float(primeiro.mean() - segundo.mean()),
+        nome_da_estimativa="diferença de médias",
+        ic=(float(intervalo.low), float(intervalo.high)),
+        referencia=0.0,
+    )
+
+
 def sem_variacao(x: Sequence[float]) -> bool:
     """
     Os valores não variam — o `data are essentially constant` do `t.test`.
@@ -188,6 +249,63 @@ def sem_variacao(x: Sequence[float]) -> bool:
     media = float(valores.mean())
     erro_padrao = float(valores.std(ddof=1)) / math.sqrt(n)
     return erro_padrao == 0 or erro_padrao < 10 * sys.float_info.epsilon * abs(media)
+
+
+def sem_variacao_em_duas(
+    x: Sequence[float], y: Sequence[float], variancias_iguais: bool = True
+) -> bool:
+    """
+    Os valores dos dois grupos não variam — o `data are essentially constant` do
+    `t.test` de duas amostras.
+
+    O critério é o do R: o erro-padrão da diferença abaixo de dez épsilons vezes a
+    maior das duas médias em valor absoluto. O erro-padrão é o do teste — com a
+    variância combinada no de Student, com a soma das duas no de Welch —, e por isso
+    a pergunta leva o teste junto. Dois grupos que não variam por dentro, cada um com
+    o seu valor, param aqui mesmo com médias diferentes: o R recusa esse t, e não o
+    devolve infinito.
+
+    Com menos valores do que o teste exige, devolve `False`: a barreira do tamanho
+    vem antes, com a frase dela.
+    """
+    primeiro, segundo = _vetor(x), _vetor(y)
+    n1, n2 = primeiro.shape[0], segundo.shape[0]
+    if variancias_iguais:
+        if n1 < 1 or n2 < 1 or n1 + n2 < MINIMO_STUDENT:
+            return False
+        soma = 0.0
+        if n1 > 1:
+            soma += (n1 - 1) * float(primeiro.var(ddof=1))
+        if n2 > 1:
+            soma += (n2 - 1) * float(segundo.var(ddof=1))
+        erro_padrao = math.sqrt(soma / (n1 + n2 - 2) * (1 / n1 + 1 / n2))
+    else:
+        if n1 < MINIMO_T or n2 < MINIMO_T:
+            return False
+        erro_padrao = math.sqrt(
+            float(primeiro.var(ddof=1)) / n1 + float(segundo.var(ddof=1)) / n2
+        )
+    maior = max(abs(float(primeiro.mean())), abs(float(segundo.mean())))
+    return erro_padrao == 0 or erro_padrao < 10 * sys.float_info.epsilon * maior
+
+
+@contextmanager
+def _sem_o_aviso_de_precisao() -> Iterator[None]:
+    """
+    Cala o «Precision loss occurred in moment calculation» do `scipy` — e só ele.
+
+    O `scipy` o emite quando um grupo não varia, e ali a conta está certa: a variância
+    de um grupo constante é zero de verdade, e o t sai igual ao do R, conferido. O caso
+    em que o aviso diria a verdade — valores que variam só no último bit — para antes,
+    na barreira do R (`sem_variacao_em_duas`). Solto, ele iria para o `stderr` no meio
+    da saída do comando, que é o recado que o usuário aprende a ignorar; é a manobra do
+    `normalidade.shapiro`, com o filtro pela mensagem.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore", message="Precision loss occurred", category=RuntimeWarning
+        )
+        yield
 
 
 def _vetor(x: Sequence[float]):
@@ -209,9 +327,12 @@ def _vetor(x: Sequence[float]):
 
 __all__ = [
     "CONFIANCA",
+    "MINIMO_STUDENT",
     "MINIMO_T",
     "T_DE_STUDENT",
     "Resultado",
     "sem_variacao",
+    "sem_variacao_em_duas",
+    "t_de_student",
     "t_uma_amostra",
 ]
