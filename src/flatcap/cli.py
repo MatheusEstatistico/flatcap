@@ -2558,21 +2558,24 @@ def comparacao(
     ),
 ) -> None:
     """
-    Compara a média de variáveis numéricas com um valor de referência.
+    Compara a média de variáveis numéricas com um valor de referência ou entre grupos.
 
-    Para cada item da lista `comparacao:` do projeto.yaml — a variável e o valor de
-    referência —, o teste que a regra dos pressupostos escolhe: o t de Student para
-    uma amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R.
-    Quando rejeita, a regra escolhe o Wilcoxon, que ainda não está no FlatCap, e a
-    linha sai sem teste, com o motivo. Sai uma tabela só, com variável, n, média
-    (DP), IC 95% da média, referência, teste e p-valor, em `3. Análises/comparacao/`,
-    com um `manifesto.json`.
+    Para cada item da lista `comparacao:` do projeto.yaml, o teste que a regra dos
+    pressupostos escolhe. Contra um valor de referência, o t de Student para uma
+    amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R. Entre os
+    dois grupos de uma variável categórica, o t de Welch quando o Shapiro-Wilk não
+    rejeita a normal em nenhum dos grupos — e ele ainda não está no FlatCap: o t de
+    Student roda quando está escrito no item. Onde a regra escolhe um teste que ainda
+    não existe, a linha sai sem teste, com o motivo. Sai uma tabela por delineamento
+    em `3. Análises/comparacao/`, com um `manifesto.json`.
 
-    Os itens se escrevem na ficha — a variável e a referência, com ponto decimal:
+    Os itens se escrevem na ficha — a variável e a referência, com ponto decimal, ou a
+    variável e a de grupo:
 
         comparacao:
           - \\[imc, 25]
           - \\[pas, 120, t]
+          - \\[imc, sexo, student]
 
     O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra.
 
@@ -2602,7 +2605,8 @@ def comparacao(
         raise _abortar("Leitura em disco", str(erro)) from erro
 
     console.print(_cabecalho_da_comparacao(plano))
-    console.print(_tabela_da_comparacao(plano.comparacao))
+    for tabela in _tabelas_da_comparacao(plano.comparacao):
+        console.print(tabela)
     console.print(_nota_da_comparacao(plano.comparacao))
     for aviso in plano.comparacao.avisos:
         erro_console.print(Text(f"\n{aviso}", style = "yellow"))
@@ -2687,43 +2691,65 @@ def _cabecalho_da_comparacao(plano: PlanoComparacao) -> Text:
     return cabecalho
 
 
-def _tabela_da_comparacao(comparacao: Comparacao) -> Table:
+def _tabelas_da_comparacao(comparacao: Comparacao) -> list[Table]:
     """
-    Uma linha por item, com as mesmas células do `.csv`.
+    Uma tabela por delineamento, com as mesmas células do `.csv`.
 
     A tabela do terminal lê as células que vão para o disco e não reformata nada —
     dois formatadores para a mesma média é como o terminal diz `25.93` enquanto o
-    arquivo diz `25,93`. O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com
-    o método escrito contra a regra sai com a coluna `teste` em amarelo: são destaques
-    de quem lê a simulação, e ficam no terminal — o documento não marca nada.
+    arquivo diz `25,93`. As linhas de cada item saem da mesma `linhas_da_tabela` que
+    monta o arquivo: uma na uma amostra, o bloco da comparação e dos grupos entre
+    grupos.
+
+    O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com o método escrito
+    contra a regra sai com a coluna `teste` em amarelo: são destaques de quem lê a
+    simulação, e ficam no terminal — o documento não marca nada.
     """
+    from .comparacao import linhas_da_tabela
     from .normalidade import ALFA
 
-    tabela = Table(show_header = True, header_style = "bold")
-    for posicao, nome in enumerate(comparacao.tabela.colunas):
-        if posicao in (1, 4, 6):  # n, referência e p-valor: números, à direita
-            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
-        else:
-            tabela.add_column(Text(nome), overflow = "fold")
-
-    for variavel, celulas in zip(comparacao.variaveis, comparacao.tabela.linhas, strict=True):
-        contra = variavel.escolha is not None and variavel.escolha.contra_a_regra
-        resultado = variavel.resultado
-        if resultado is None:
-            estilo_teste, estilo_p = "yellow", "dim"
-        else:
-            estilo_teste = "yellow" if contra else ""
-            estilo_p = "bold" if resultado.p < ALFA else ""
-        tabela.add_row(
-            Text(celulas[0]),
-            Text(celulas[1]),
-            Text(celulas[2]),
-            Text(celulas[3], style = "" if variavel.testada else "dim"),
-            Text(celulas[4]),
-            Text(celulas[5], style = estilo_teste),
-            Text(celulas[6], style = estilo_p),
+    # n, referência e p-valor: números, à direita. Pelo nome, e não pela posição —
+    # cada delineamento tem as suas colunas.
+    a_direita = {"n", "referência", "p-valor"}
+    tabelas: list[Table] = []
+    for csv in comparacao.tabelas:
+        tabela = Table(
+            show_header = True, header_style = "bold", title = csv.titulo,
+            title_style = "bold", title_justify = "left",
         )
-    return tabela
+        for nome in csv.colunas:
+            if nome in a_direita:
+                tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+            else:
+                tabela.add_column(Text(nome), overflow = "fold")
+
+        teste = csv.colunas.index("teste")
+        valor = csv.colunas.index("p-valor")
+        for variavel in comparacao.do_delineamento(csv.especie):
+            contra = variavel.escolha is not None and variavel.escolha.contra_a_regra
+            resultado = variavel.resultado
+            if resultado is None:
+                estilo_teste, estilo_p = "yellow", "dim"
+            else:
+                estilo_teste = "yellow" if contra else ""
+                estilo_p = "bold" if resultado.p < ALFA else ""
+            for ordem, celulas in enumerate(linhas_da_tabela(variavel)):
+                estilos = [""] * len(celulas)
+                if ordem == 0:
+                    estilos[teste], estilos[valor] = estilo_teste, estilo_p
+                    if not variavel.testada:
+                        estilos = [
+                            "dim" if celula == "—" and posicao != teste else estilo
+                            for posicao, (celula, estilo) in enumerate(
+                                zip(celulas, estilos, strict=True)
+                            )
+                        ]
+                tabela.add_row(
+                    *(Text(celula, style = estilo)
+                      for celula, estilo in zip(celulas, estilos, strict=True))
+                )
+        tabelas.append(tabela)
+    return tabelas
 
 
 def _nota_da_comparacao(comparacao: Comparacao) -> Text:
@@ -2757,7 +2783,7 @@ def _nota_da_comparacao(comparacao: Comparacao) -> Text:
                 "",
             ),
             (
-                ". Cada linha é um teste, sem correção para comparações múltiplas."
+                ". Cada item é um teste, sem correção para comparações múltiplas."
                 if testadas > 1 else ".",
                 "dim",
             ),
@@ -2770,6 +2796,8 @@ def _arvore_da_comparacao(plano: PlanoComparacao) -> Tree:
     """
     Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
     """
+    from .comparacao import UMA_AMOSTRA
+
     arvore = Tree(Text(str(plano.raiz), style = "dim"))
 
     if plano.arquivamento is not None:
@@ -2789,12 +2817,15 @@ def _arvore_da_comparacao(plano: PlanoComparacao) -> Tree:
             ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
         )
     )
-    ramo.add(
-        Text.assemble(
-            ("+ ", "green"), (plano.tabela.nome, ""),
-            (f"   {len(plano.comparacao.variaveis)} item(ns), um por linha", "dim"),
+    for tabela in plano.tabelas:
+        itens = len(plano.comparacao.do_delineamento(tabela.especie))
+        forma = "um por linha" if tabela.especie == UMA_AMOSTRA else "um bloco por item"
+        ramo.add(
+            Text.assemble(
+                ("+ ", "green"), (tabela.nome, ""),
+                (f"   {itens} item(ns), {forma}", "dim"),
+            )
         )
-    )
     ramo.add(
         Text.assemble(
             ("+ ", "green"), ("manifesto.json", "bold"),
