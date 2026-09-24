@@ -18,7 +18,9 @@ e independentes dele:
   tabela de normalidade da mesma variável.
 
 O banco de referência é o `bancos.para_comparar()`: sessenta casos e uma variável
-para cada caminho da regra.
+para cada caminho da regra. Entre grupos, o `bancos.para_comparar_grupos()`, com o
+`t.test(y ~ sexo, var.equal = TRUE)` e o `shapiro.test` de cada grupo rodados no R
+sobre ele — em `STUDENT_DO_R`.
 """
 
 from __future__ import annotations
@@ -38,17 +40,24 @@ from conftest import (
     linhas_do_historico,
 )
 from flatcap.comparacao import (
+    ARQUIVO_DOIS_GRUPOS,
     ARQUIVO_TABELA,
+    DOIS_GRUPOS,
+    MANN_WHITNEY,
     REGRA,
+    T_DE_WELCH,
     UMA_AMOSTRA,
     WILCOXON,
+    Grupo,
     ItemInvalidoError,
     Normal,
+    Pedido,
     SemItensError,
     VariavelIncompativelError,
     comparar,
     executar_comparacao,
     itens_da_ficha,
+    linhas_da_tabela,
     metodo_escrito,
     montar_manifesto,
     preparar_comparacao,
@@ -111,6 +120,35 @@ REFERENCIAS_DO_R = [
 ]
 
 
+ESCOLARIDADE = Linha(
+    "escolaridade", "Escolaridade", CATEGORICA, ("Fundamental", "Médio", "Superior")
+)
+UNICO = Linha("unico", "Único", CATEGORICA, ("Sim", "Não"))
+DICIONARIO_DOS_GRUPOS = (IMC, RENDA, PAS, SEXO, ESCOLARIDADE, UNICO)
+
+# `t.test(y ~ sexo, var.equal = TRUE)` e `shapiro.test` de cada grupo no R 4.3.3,
+# sobre os casos com as duas respostas de `bancos.para_comparar_grupos()`:
+#
+#     (variável, t, gl, p, IC 95% da diferença, diferença,
+#      (n, média, DP, W, p do Shapiro-Wilk) de Feminino, e de Masculino)
+STUDENT_DO_R = [
+    ("imc", -2.4618783619938953, 55, 0.016984290698757613,
+     (-4.2106960953985766, -0.4316684366211293), -2.3211822660098527,
+     (29, 25.093103448275862, 2.991169269041642, 0.99818204123713317, 0.99999999852886789),
+     (28, 27.414285714285715, 4.0642719985634423, 0.99749191686668337, 0.99999994602138065)),
+    ("renda", -1.3648620657924699, 56, 0.17775536880382911,
+     (-3667.5803695350742, 695.1406076303125), -1486.2198809523807,
+     (30, 4027.2683333333334, 3446.6945090363411, 0.80787831480217842,
+      9.1554482106078337e-05),
+     (28, 5513.4882142857141, 4780.9913942186704, 0.80993134361523256,
+      0.00016056404374919313)),
+    ("pas", -1.6947084199135862, 56, 0.09568549835895368,
+     (-10.988211946722654, 0.91678337529406928), -5.0357142857142918,
+     (30, 120, 5.0172117548598099, 0.99680258517098719, 0.99999886442708763),
+     (28, 125.03571428571429, 15.433206485816951, 0.99656497471796757, 0.99999845897126383)),
+]
+
+
 def _comparar(quadro=None, linhas=DICIONARIO, itens=ITENS):
     quadro = bancos.para_comparar() if quadro is None else quadro
     return comparar(banco_em_memoria(quadro), ficha_em_memoria(), linhas, itens, AGORA)
@@ -138,6 +176,17 @@ def _duas_casas(valor: float) -> str:
 def _uma(nome: str, valores: list) -> tuple[pd.DataFrame, tuple[Linha, ...]]:
     """Um banco de uma coluna só, com a linha do dicionário que a declara numérica."""
     return pd.DataFrame({nome: valores}), (Linha(nome, nome.upper(), NUMERICA),)
+
+
+def _grupos(itens, quadro=None, linhas=DICIONARIO_DOS_GRUPOS):
+    quadro = bancos.para_comparar_grupos() if quadro is None else quadro
+    return comparar(banco_em_memoria(quadro), ficha_em_memoria(), linhas, itens, AGORA)
+
+
+def _dois(a: list, b: list) -> tuple[pd.DataFrame, tuple[Linha, ...]]:
+    """Um banco de dois grupos escritos à mão: `y` numérica, `g` com `A` e `B`."""
+    quadro = pd.DataFrame({"y": [*a, *b], "g": ["A"] * len(a) + ["B"] * len(b)})
+    return quadro, (Linha("y", "Y", NUMERICA), Linha("g", "G", CATEGORICA, ("A", "B")))
 
 
 # ── O R ─────────────────────────────────────────────────────────────────────
@@ -213,7 +262,8 @@ class TestRegra:
         linha = _linha(comparacao, "dor")
         assert linha.celula_do_teste == "não testado: normal rejeitada"
         assert "o Shapiro-Wilk rejeita a normal (p = 0,005)" in linha.justificativa
-        assert "o Shapiro-Wilk rejeita a normal (p = 0,005)" in comparacao.tabela.texto()
+        texto = comparacao.tabela_de(UMA_AMOSTRA).texto()
+        assert "o Shapiro-Wilk rejeita a normal (p = 0,005)" in texto
 
     def test_a_linha_sem_teste_ensina_a_escrever_t_no_item(self):
         avisos = _comparar().avisos
@@ -263,7 +313,7 @@ class TestRegra:
         assert regra(UMA_AMOSTRA, Normal(w=0.97, p=0.0499)).metodo == ""
 
     def test_a_escolha_de_cada_linha_esta_escrita_na_nota(self):
-        texto = _comparar().tabela.texto()
+        texto = _comparar().tabela_de(UMA_AMOSTRA).texto()
         assert (
             "IMC (kg/m²): n = 57; o Shapiro-Wilk não rejeita a normal (p = 1,000) → "
             "t de Student (t = 2,16; 56 gl)." in texto
@@ -320,7 +370,7 @@ class TestSemTeste:
     def test_um_valor_so_em_todas_as_linhas(self):
         resultado = _comparar()
         assert _linha(resultado, "servico").resultado is None
-        assert resultado.tabela.linhas[4] == (
+        assert resultado.tabela_de(UMA_AMOSTRA).linhas[4] == (
             "Serviço", "60", "1 (0)", "—", "1", "não testado: um valor só em todas as linhas",
             "—",
         )
@@ -328,24 +378,24 @@ class TestSemTeste:
 
     def test_nenhum_valor_preenchido(self):
         quadro, linhas = _uma("a", [None, None, None])
-        linha = _comparar(quadro, linhas, (("a", 25),)).tabela.linhas[0]
+        linha = _comparar(quadro, linhas, (("a", 25),)).tabela_de(UMA_AMOSTRA).linhas[0]
         assert linha == ("A", "0", "—", "—", "25", "não testado: nenhum valor preenchido", "—")
 
     def test_um_valor_preenchido(self):
         quadro, linhas = _uma("a", [None, 30.0, None])
-        linha = _comparar(quadro, linhas, (("a", 25, "t"),)).tabela.linhas[0]
+        linha = _comparar(quadro, linhas, (("a", 25, "t"),)).tabela_de(UMA_AMOSTRA).linhas[0]
         assert linha[5] == "não testado: 1 valor — o teste precisa de pelo menos 2"
 
     def test_valores_que_so_variam_no_ultimo_bit(self):
         """O `data are essentially constant` do R: variar no último bit não é variar."""
         base = 1e6
         quadro, linhas = _uma("a", [base, math.nextafter(base, math.inf), base, base])
-        linha = _comparar(quadro, linhas, (("a", 25, "t"),)).tabela.linhas[0]
+        linha = _comparar(quadro, linhas, (("a", 25, "t"),)).tabela_de(UMA_AMOSTRA).linhas[0]
         assert linha[5] == "não testado: os valores praticamente não variam"
 
     def test_a_media_sai_mesmo_sem_teste(self):
         """A média e o desvio descrevem a variável, e não dependem de pressuposto."""
-        linha = _comparar().tabela.linhas[1]
+        linha = _comparar().tabela_de(UMA_AMOSTRA).linhas[1]
         assert linha[:3] == ("Renda", "60", "3406,12 (3005,93)")
         assert (linha[3], linha[6]) == ("—", "—")
 
@@ -440,10 +490,11 @@ class TestFicha:
         )
         assert [(i.variavel, i.referencia, i.metodo) for i in itens] == [
             ("imc", 25.0, ""),
-            ("pas", 120.5, T_DE_STUDENT),
+            ("pas", 120.5, "t"),
             ("imc", 24.9, ""),
-            ("delta", -1.5, T_DE_STUDENT),
+            ("delta", -1.5, "student"),
         ]
+        assert {metodo_escrito(i.metodo) for i in itens if i.metodo} == {T_DE_STUDENT}
 
     def test_a_virgula_decimal_recusa_e_escreve_o_numero_certo(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, 24,9]\n")
@@ -478,10 +529,6 @@ class TestFicha:
     def test_falta_a_referencia(self, projeto_vazio):
         assert "falta o valor de referência" in _recusa(projeto_vazio, "  - [imc]\n")
 
-    def test_comparar_grupos_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, sexo]\n")
-        assert "`sexo` não é um número" in mensagem
-        assert "ainda não está no FlatCap" in mensagem
 
     def test_o_wilcoxon_escrito_ainda_nao_existe(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, 25, Wilcoxon]\n")
@@ -490,10 +537,10 @@ class TestFicha:
     def test_o_terceiro_nome_que_nao_e_metodo(self, projeto_vazio):
         assert "`mediana` não é um método" in _recusa(projeto_vazio, "  - [imc, 25, mediana]\n")
 
-    def test_a_forma_com_dois_pontos_recusa_e_ensina(self, projeto_vazio):
+    def test_a_referencia_depois_dos_dois_pontos_recusa_e_ensina(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - imc: 25\n  - sexo: [imc, pas]\n")
+        assert "1 item(ns) fora do formato" in mensagem
         assert "vai dentro dos colchetes, junto do nome: `[imc, 25]`" in mensagem
-        assert "chega com a comparação entre grupos" in mensagem
 
     def test_texto_solto_recusa(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - imc 25\n")
@@ -517,7 +564,7 @@ class TestFicha:
         assert "4 itens" in _recusa(projeto_vazio, "  - [imc, 25, t, x]\n")
 
     def test_todos_os_itens_errados_de_uma_vez(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc]\n  - [pas, 120]\n  - [dor, x]\n")
+        mensagem = _recusa(projeto_vazio, "  - [imc]\n  - [pas, 120]\n  - [dor, true]\n")
         assert "2 item(ns) fora do formato" in mensagem
         assert "1º item" in mensagem and "3º item" in mensagem
 
@@ -538,7 +585,7 @@ class TestFicha:
 
 class TestATabela:
     def test_as_sete_colunas(self):
-        assert _comparar().tabela.colunas == (
+        assert _comparar().tabela_de(UMA_AMOSTRA).colunas == (
             "variável",
             "n",
             "média (DP)",
@@ -564,7 +611,7 @@ class TestATabela:
         def faixa(ic):
             return f"{_duas_casas(ic[0])} a {_duas_casas(ic[1])}"
 
-        assert _comparar().tabela.linhas == (
+        assert _comparar().tabela_de(UMA_AMOSTRA).linhas == (
             ("IMC (kg/m²)", "57", media_dp(imc), faixa(imc[6]), "25", T_DE_STUDENT,
              valor_p(imc[5])),
             ("Renda", "60", media_dp(renda), "—", "2500", "não testado: normal rejeitada",
@@ -589,7 +636,8 @@ class TestATabela:
         for nome in ("imc", "renda", "pas", "dor", "servico"):
             resumo = next(v for v in descritiva.variaveis if v.variavel == nome).tabelas[0]
             celulas = dict(resumo.linhas)
-            linha = comparacao.tabela.linhas[[v.variavel for v in comparacao.variaveis].index(nome)]
+            posicao = [v.variavel for v in comparacao.variaveis].index(nome)
+            linha = comparacao.tabela_de(UMA_AMOSTRA).linhas[posicao]
             assert linha[2] == f"{celulas['média']} ({celulas['desvio padrão']})"
 
     def test_o_intervalo_tem_casas_fixas_e_nunca_menos_zero(self):
@@ -615,11 +663,11 @@ class TestATabela:
         assert (imc.validos, imc.faltantes) == (57, 3)
 
     def test_o_p_nunca_sai_zero(self):
-        linha = _comparar(itens=(("imc", 20),)).tabela.linhas[0]
+        linha = _comparar(itens=(("imc", 20),)).tabela_de(UMA_AMOSTRA).linhas[0]
         assert linha[6] == "< 0,001"
 
     def test_a_tabela_nao_e_de_uma_variavel(self):
-        tabela = _comparar().tabela
+        tabela = _comparar().tabela_de(UMA_AMOSTRA)
         assert (tabela.variavel, tabela.nome) == ("", ARQUIVO_TABELA)
         texto = tabela.texto()
         assert "# variável:" not in texto
@@ -665,7 +713,8 @@ class TestManifesto:
     def test_as_regras_dizem_como_o_r_faz(self):
         regras = montar_manifesto(_comparar(), DICIONARIO).regras
         assert "t.test do R" in regras["t_de_student"]
-        assert "Wilcoxon, que ainda não está no FlatCap" in regras["escolha_do_teste"]
+        escolha = regras["escolha_do_teste"][UMA_AMOSTRA]
+        assert "Wilcoxon, que ainda não está no FlatCap" in escolha
         assert regras["hipotese"] == "bilateral"
 
     def test_fora_lista_quem_nao_esta_em_item(self):
@@ -676,6 +725,506 @@ class TestManifesto:
         posicao = ORDEM_PADRAO_DAS_ANALISES.index
         assert posicao(ANALISE_COMPARACAO) == posicao(ANALISE_CORRELACAO) + 1
         assert ORDEM_PADRAO_DAS_ANALISES[-1] == ANALISE_COMPARACAO
+
+
+# ── Entre dois grupos: o R ──────────────────────────────────────────────────
+
+
+class TestGruposDoR:
+    @pytest.mark.parametrize(
+        ("variavel", "t", "gl", "p", "ic", "diferenca", "feminino", "masculino"),
+        STUDENT_DO_R,
+        ids=[variavel for variavel, *_ in STUDENT_DO_R],
+    )
+    def test_o_t_test_e_o_shapiro_test_de_cada_grupo(
+        self, variavel, t, gl, p, ic, diferenca, feminino, masculino
+    ):
+        """
+        Com `student` escrito, o t de Student sai em todas as colunas — mesmo onde a
+        regra não o escolheria —, e dá para conferir cada uma contra o R: o t, os gl,
+        o p, o intervalo e a diferença, e de cada grupo o n, a média, o desvio e o
+        Shapiro-Wilk.
+        """
+        comparada = _grupos(((variavel, "sexo", "student"),)).variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.estatistica == pytest.approx(t, rel=1e-12)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert resultado.estimativa == pytest.approx(diferenca, rel=1e-12)
+        assert [g.rotulo for g in comparada.grupos] == ["Feminino", "Masculino"]
+        for grupo, (n, media, dp, w, p_shapiro) in zip(
+            comparada.grupos, (feminino, masculino), strict=True
+        ):
+            assert grupo.n == n
+            assert grupo.resumo["media"] == pytest.approx(media, rel=1e-12)
+            assert grupo.resumo["desvio"] == pytest.approx(dp, rel=1e-12)
+            assert grupo.normal.w == pytest.approx(w, rel=1e-6)
+            assert grupo.normal.p == pytest.approx(p_shapiro, rel=1e-4)
+
+    def test_o_um_valor_num_grupo_do_r(self):
+        """
+        `t.test(30, y, var.equal = TRUE)`: o R aceita um grupo de um valor no de
+        Student — t = 0,1163, 11 gl, p = 0,9095. A normalidade desse grupo não se
+        verifica, e o teste roda porque está escrito no item.
+        """
+        y = [26.5, 29.9, 31.2, 24.8, 33.0, 28.1, 30.4, 27.6, 35.2, 26.3, 29.8, 32.7]
+        quadro, linhas = _dois([30.0], y)
+        comparada = _grupos((("y", "g", "student"),), quadro, linhas).variaveis[0]
+        assert comparada.resultado.estatistica == pytest.approx(0.1162591710745048, rel=1e-12)
+        assert comparada.resultado.gl == (11.0,)
+        assert comparada.resultado.p == pytest.approx(0.90954249918663643, rel=1e-10)
+        assert comparada.escolha.da_regra == MANN_WHITNEY
+
+
+# ── Entre dois grupos: a regra ──────────────────────────────────────────────
+
+
+class TestRegraEntreGrupos:
+    def test_a_normal_nos_dois_grupos_escolhe_o_welch_que_ainda_nao_existe(self):
+        comparada = _grupos((("imc", "sexo"),)).variaveis[0]
+        assert comparada.resultado is None
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", T_DE_WELCH)
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk não rejeita a normal em nenhum dos dois grupos "
+            "(Feminino: p = 1,000; Masculino: p = 1,000)"
+        )
+        assert comparada.celula_do_teste == "não testado: t de Welch ainda não está no FlatCap"
+
+    def test_a_linha_sem_o_welch_ensina_a_escrever_student(self):
+        avisos = _grupos((("imc", "sexo"),)).avisos
+        assert any(
+            "a regra escolheria t de Welch, que ainda não está no FlatCap" in aviso
+            and "supõe a mesma variância nos grupos" in aviso
+            and "`[imc, sexo, student]`" in aviso
+            for aviso in avisos
+        )
+
+    def test_a_normal_rejeitada_em_algum_grupo_escolhe_o_mann_whitney(self):
+        comparada = _grupos((("renda", "sexo"),)).variaveis[0]
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", MANN_WHITNEY)
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001)"
+        )
+        assert comparada.celula_do_teste == "não testado: normal rejeitada"
+
+    def test_basta_um_grupo_rejeitar(self):
+        rejeita = regra(
+            DOIS_GRUPOS,
+            (
+                Grupo("A", 30, normal=Normal(w=0.98, p=0.61)),
+                Grupo("B", 30, normal=Normal(w=0.91, p=0.012)),
+            ),
+        )
+        assert rejeita.da_regra == MANN_WHITNEY
+        assert rejeita.motivo == "o Shapiro-Wilk rejeita a normal em B (p = 0,012)"
+
+    def test_o_limite_da_regra_e_o_alfa_da_normalidade_em_cada_grupo(self):
+        def com(p):
+            return (
+                Grupo("A", 30, normal=Normal(w=0.97, p=0.5)),
+                Grupo("B", 30, normal=Normal(w=0.97, p=p)),
+            )
+
+        assert regra(DOIS_GRUPOS, com(0.05)).da_regra == T_DE_WELCH
+        assert regra(DOIS_GRUPOS, com(0.0499)).da_regra == MANN_WHITNEY
+
+    def test_um_grupo_com_dois_valores_nao_verifica_a_normalidade(self):
+        quadro, linhas = _dois([24.0, 27.0], [25.0, 26.5, 28.0, 30.1, 27.2])
+        comparada = _grupos((("y", "g"),), quadro, linhas).variaveis[0]
+        assert comparada.escolha.da_regra == MANN_WHITNEY
+        assert "a normalidade não pôde ser verificada em A (2 valor(es)" in (
+            comparada.escolha.motivo
+        )
+        assert comparada.celula_do_teste == "não testado: normalidade não verificável em A"
+
+    def test_um_grupo_que_nao_varia_nao_verifica_a_normalidade(self):
+        """A frase é do grupo, e não a da coluna que o `normalidade.shapiro` escreveria."""
+        quadro, linhas = _dois([5.0, 5.0, 5.0, 5.0], [4.0, 6.0, 7.0, 5.5])
+        comparada = _grupos((("y", "g"),), quadro, linhas).variaveis[0]
+        assert "em A (um valor só no grupo)" in comparada.escolha.motivo
+        assert not any("a coluna tem um valor só" in aviso for aviso in comparada.avisos)
+
+    def test_o_student_escrito_contra_a_regra_diz_o_que_ela_faria(self):
+        comparacao = _grupos((("renda", "sexo", "student"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.metodo == "t de Student"
+        assert comparada.escolha.contra_a_regra
+        assert any(
+            "`renda` por `sexo`: t de Student escrito na ficha, contra a regra" in aviso
+            for aviso in comparacao.avisos
+        )
+        assert comparada.justificativa == (
+            "Renda por Sexo: n = 58 (30 em Feminino e 28 em Masculino); t de Student escrito "
+            "na ficha (t = -1,36; 56 gl), contra a regra — ela escolheria Mann-Whitney, que "
+            "ainda não está no FlatCap: o Shapiro-Wilk rejeita a normal em Feminino "
+            "(p < 0,001) e Masculino (p < 0,001)."
+        )
+
+    def test_o_student_no_lugar_do_welch_tambem_e_contra_a_regra(self):
+        """
+        A regra escolheria o de Welch; o de Student escrito é uma escolha sua, e a
+        nota diz qual seria a da regra.
+        """
+        comparada = _grupos((("imc", "sexo", "student"),)).variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert "ela escolheria t de Welch, que ainda não está no FlatCap" in (
+            comparada.justificativa
+        )
+
+    def test_o_metodo_quer_dizer_um_teste_em_cada_delineamento(self):
+        assert metodo_escrito("student", DOIS_GRUPOS) == "t de Student"
+        assert metodo_escrito("t", UMA_AMOSTRA) == "t de Student"
+        assert metodo_escrito("t", DOIS_GRUPOS) == ""  # o de Welch, que ainda não existe
+        assert metodo_escrito("welsh", DOIS_GRUPOS) == ""
+        assert metodo_escrito("T de Student", DOIS_GRUPOS) == "t de Student"
+
+    def test_o_registro_da_regra_entre_dois_grupos(self):
+        assert REGRA[DOIS_GRUPOS] == (T_DE_WELCH, MANN_WHITNEY)
+
+
+# ── Entre dois grupos: os avisos ────────────────────────────────────────────
+
+
+class TestAvisosEntreGrupos:
+    def test_o_student_com_desvios_muito_diferentes_avisa(self):
+        """
+        O de Student supõe a mesma variância; na `pas`, o desvio de um grupo é três
+        vezes o do outro, e o aviso escreve os dois e a razão.
+        """
+        avisos = _grupos((("pas", "sexo", "student"),)).avisos
+        assert any(
+            "o desvio padrão de Masculino (15,43) é 3,1 vezes o de Feminino (5,02)" in aviso
+            and "O t de Welch, que ainda não está no FlatCap, não supõe" in aviso
+            for aviso in avisos
+        )
+
+    def test_o_student_com_desvios_parecidos_nao_avisa(self):
+        avisos = _grupos((("imc", "sexo", "student"),)).avisos
+        assert not any("vezes o de" in aviso for aviso in avisos)
+
+    def test_o_student_com_um_grupo_que_nao_varia_avisa(self):
+        quadro, linhas = _dois([5.0, 5.0, 5.0], [4.0, 6.0, 7.0])
+        avisos = _grupos((("y", "g", "student"),), quadro, linhas).avisos
+        assert any("e A não varia" in aviso for aviso in avisos)
+
+    def test_a_escala_com_a_normal_rejeitada_avisa_que_e_discreta(self):
+        escala = [0] * 14 + [1] * 4 + [2] * 2
+        quadro, linhas = _dois(escala, list(reversed(escala)))
+        avisos = _grupos((("y", "g"),), quadro, linhas).avisos
+        assert any("`y` por `g`: 3 valores distintos em 40 casos" in a for a in avisos)
+
+    def test_cada_linha_tem_a_frase_da_escolha_na_nota(self):
+        texto = _grupos((("imc", "sexo"), ("renda", "sexo"))).tabela_de(DOIS_GRUPOS).texto()
+        assert (
+            "IMC (kg/m²) por Sexo: n = 57 (29 em Feminino e 28 em Masculino); o Shapiro-Wilk "
+            "não rejeita a normal em nenhum dos dois grupos (Feminino: p = 1,000; Masculino: "
+            "p = 1,000) → t de Welch, que ainda não está no FlatCap: a linha sai sem teste."
+        ) in texto
+
+
+# ── Entre dois grupos: o que o banco decide ─────────────────────────────────
+
+
+class TestGruposNoBanco:
+    def test_os_faltantes_sao_por_comparacao(self):
+        """Uma célula vazia no IMC e duas no sexo: 57 casos com as duas respostas."""
+        comparada = _grupos((("imc", "sexo", "student"),)).variaveis[0]
+        assert (comparada.validos, comparada.faltantes) == (57, 3)
+        assert [g.n for g in comparada.grupos] == [29, 28]
+
+    def test_a_ordem_dos_grupos_e_a_do_dicionario_e_decide_o_sinal(self):
+        invertido = Linha(
+            "sexo",
+            "Sexo",
+            CATEGORICA,
+            ("2", "1"),
+            rotulos_das_categorias=(("1", "Feminino"), ("2", "Masculino")),
+        )
+        linhas = (IMC, RENDA, PAS, invertido, ESCOLARIDADE, UNICO)
+        comparada = _grupos((("imc", "sexo", "student"),), linhas=linhas).variaveis[0]
+        assert [g.rotulo for g in comparada.grupos] == ["Masculino", "Feminino"]
+        assert comparada.resultado.estimativa == pytest.approx(2.3211822660098527, rel=1e-12)
+        assert comparada.resultado.p == pytest.approx(0.016984290698757613, rel=1e-10)
+
+    def test_dois_codigos_com_o_mesmo_rotulo_sao_um_grupo(self):
+        agrupada = Linha(
+            "escolaridade",
+            "Escolaridade",
+            CATEGORICA,
+            ("Fundamental", "Médio", "Superior"),
+            rotulos_das_categorias=(("Fundamental", "Básico"), ("Médio", "Básico")),
+        )
+        linhas = (IMC, RENDA, PAS, SEXO, agrupada, UNICO)
+        comparada = _grupos((("pas", "escolaridade", "student"),), linhas=linhas).variaveis[0]
+        assert [(g.rotulo, g.n) for g in comparada.grupos] == [("Básico", 40), ("Superior", 20)]
+        assert comparada.testada
+
+    def test_tres_grupos_recusa_e_ensina_a_agrupar(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos((("imc", "escolaridade"),))
+        mensagem = str(erro.value)
+        assert "`escolaridade` tem 3 grupos" in mensagem
+        assert "(Fundamental, Médio, Superior)" in mensagem
+        assert "três ou mais grupos ainda não está no FlatCap" in mensagem
+        assert "`1=Sim|2=Sim`" in mensagem
+
+    def test_os_problemas_do_banco_saem_todos_de_uma_vez(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos((("imc", "escolaridade"), ("imc", "sexo"), ("pas", "escolaridade")))
+        assert "2 item(ns) que este banco não deixa comparar" in str(erro.value)
+
+
+# ── Entre dois grupos: quando não há teste ──────────────────────────────────
+
+
+class TestSemTesteEntreGrupos:
+    def test_um_grupo_so(self):
+        comparada = _grupos((("imc", "unico", "student"),)).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: um grupo só"
+        assert any("são todos Sim" in aviso for aviso in comparada.avisos)
+
+    def test_nenhum_caso_com_as_duas_respostas(self):
+        quadro = bancos.para_comparar_grupos().assign(sexo=None)
+        comparada = _grupos((("imc", "sexo"),), quadro).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: nenhum caso com as duas respostas"
+        assert linhas_da_tabela(comparada) == (
+            ("IMC (kg/m²)", "Sexo", "0", "", "—", comparada.celula_do_teste, "—"),
+        )
+
+    def test_um_valor_so_em_todas_as_linhas(self):
+        quadro, linhas = _dois([5.0, 5.0], [5.0, 5.0, 5.0])
+        comparada = _grupos((("y", "g", "student"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: um valor só em todas as linhas"
+
+    def test_um_valor_em_cada_grupo_nao_da_o_student(self):
+        """O `not enough observations` do R, com o método escrito e tudo."""
+        quadro, linhas = _dois([24.0], [27.0])
+        comparada = _grupos((("y", "g", "student"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: um valor em cada grupo — o t de Student precisa de pelo menos 3 "
+            "no total"
+        )
+        assert "t de Student escrito na ficha, que não pôde ser calculado" in (
+            comparada.justificativa
+        )
+
+    def test_dois_grupos_que_nao_variam_por_dentro(self):
+        """As médias diferem, e o R recusa assim mesmo: o t seria uma divisão por zero."""
+        quadro, linhas = _dois([5.0, 5.0, 5.0], [6.0, 6.0, 6.0])
+        comparada = _grupos((("y", "g", "student"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: os valores não variam dentro dos grupos"
+
+
+# ── Entre dois grupos: a tabela ─────────────────────────────────────────────
+
+
+class TestTabelaDoisGrupos:
+    def test_as_sete_colunas(self):
+        tabela = _grupos((("imc", "sexo"),)).tabela_de(DOIS_GRUPOS)
+        assert tabela.colunas == (
+            "variável",
+            "grupo",
+            "n",
+            "média (DP)",
+            "diferença (IC 95%)",
+            "teste",
+            "p-valor",
+        )
+        assert (tabela.nome, tabela.especie, tabela.variavel) == (
+            ARQUIVO_DOIS_GRUPOS,
+            DOIS_GRUPOS,
+            "",
+        )
+
+    def test_o_bloco_de_uma_comparacao(self):
+        """
+        A linha da comparação e uma por grupo, com cada número tirado do R: a
+        diferença e o intervalo com duas casas fixas, a média e o desvio como a
+        descritiva escreve.
+        """
+        imc = STUDENT_DO_R[0]
+        _, _, _, p, ic, diferenca, feminino, masculino = imc
+
+        def media_dp(grupo):
+            return f"{_como_a_descritiva(grupo[1])} ({_como_a_descritiva(grupo[2])})"
+
+        assert _grupos((("imc", "sexo", "student"),)).tabela_de(DOIS_GRUPOS).linhas == (
+            ("IMC (kg/m²)", "Sexo", "57", "",
+             f"{_duas_casas(diferenca)} ({_duas_casas(ic[0])} a {_duas_casas(ic[1])})",
+             "t de Student", valor_p(p)),
+            ("", "Feminino", "29", media_dp(feminino), "", "", ""),
+            ("", "Masculino", "28", media_dp(masculino), "", "", ""),
+        )
+
+    def test_sem_teste_a_diferenca_e_o_p_saem_com_o_traco(self):
+        cabeca, *grupos = linhas_da_tabela(_grupos((("renda", "sexo"),)).variaveis[0])
+        assert (cabeca[4], cabeca[5], cabeca[6]) == ("—", "não testado: normal rejeitada", "—")
+        assert [linha[3] for linha in grupos] == ["4027,27 (3446,69)", "5513,49 (4780,99)"]
+
+    def test_a_tabela_e_as_linhas_do_terminal_sao_as_mesmas(self):
+        comparacao = _grupos((("imc", "sexo"), ("pas", "sexo", "student")))
+        tabela = comparacao.tabela_de(DOIS_GRUPOS)
+        assert tabela.linhas == tuple(
+            linha for comparada in comparacao.variaveis for linha in linhas_da_tabela(comparada)
+        )
+
+    def test_as_notas_dizem_como_o_r_faz_e_o_que_falta(self):
+        texto = _grupos((("imc", "sexo"),)).tabela_de(DOIS_GRUPOS).texto()
+        assert "var.equal = TRUE" in texto
+        assert "a média do primeiro grupo menos a do segundo" in texto
+        assert "Os dois ainda não estão no FlatCap" in texto
+        assert "os faltantes são por comparação" in texto
+
+    def test_uma_tabela_por_delineamento_na_ordem(self):
+        comparacao = _grupos((("imc", "sexo"), ("imc", 25)))
+        assert [t.nome for t in comparacao.tabelas] == [ARQUIVO_TABELA, ARQUIVO_DOIS_GRUPOS]
+        assert [v.delineamento for v in comparacao.variaveis] == [DOIS_GRUPOS, UMA_AMOSTRA]
+
+    def test_so_grupos_nao_tem_a_tabela_da_uma_amostra(self):
+        comparacao = _grupos((("imc", "sexo"),))
+        assert comparacao.tabela_de(UMA_AMOSTRA) is None
+        assert [t.nome for t in comparacao.tabelas] == [ARQUIVO_DOIS_GRUPOS]
+
+
+# ── Entre dois grupos: as recusas do dicionário ─────────────────────────────
+
+
+class TestRecusasEntreGrupos:
+    def _recusa(self, *itens, linhas=DICIONARIO_DOS_GRUPOS) -> str:
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos(itens, linhas=linhas)
+        return str(erro.value)
+
+    def test_os_dois_trocados(self):
+        mensagem = self._recusa(("sexo", "imc"))
+        assert "os dois estão trocados" in mensagem
+        assert "`[imc, sexo]`" in mensagem
+
+    def test_duas_numericas_sao_uma_correlacao(self):
+        mensagem = self._recusa(("imc", "pas"))
+        assert "a variável de grupo é categórica" in mensagem
+        assert "`correlacao:`" in mensagem
+
+    def test_duas_categoricas_sao_uma_associacao(self):
+        mensagem = self._recusa(("sexo", "escolaridade"))
+        assert "`associacao:`" in mensagem
+
+    def test_a_mesma_variavel_duas_vezes(self):
+        assert "duas vezes" in self._recusa(("sexo", "sexo"))
+
+    def test_o_mesmo_item_com_e_sem_metodo(self):
+        mensagem = self._recusa(("imc", "sexo"), ("imc", "sexo", "student"))
+        assert "repete [imc, sexo]" in mensagem
+
+    def test_a_variavel_de_grupo_fora_do_dicionario(self):
+        assert "`sexoo` não está no dicionario.csv" in self._recusa(("imc", "sexoo"))
+
+    def test_a_data_nao_forma_grupos(self):
+        linhas = (*DICIONARIO_DOS_GRUPOS, Linha("coleta", "Coleta", DATA))
+        mensagem = self._recusa(("imc", "coleta"), linhas=linhas)
+        assert "`coleta` está marcada `data`" in mensagem
+
+    def test_contra_uma_referencia_e_entre_grupos_sao_duas_perguntas(self):
+        comparacao = _grupos((("imc", 25), ("imc", "sexo")))
+        assert len(comparacao.variaveis) == 2
+
+
+# ── Entre dois grupos: a ficha ──────────────────────────────────────────────
+
+
+class TestFichaEntreGrupos:
+    def test_as_formas_entre_grupos(self, projeto_vazio):
+        itens = _itens(
+            projeto_vazio,
+            "  - [imc, sexo]\n"
+            "  - [pas, sexo, Student]\n"
+            "  - sexo: [renda, idade]\n"
+            "  - [imc, pas_0]\n",
+        )
+        assert itens == (
+            Pedido("imc", grupos="sexo"),
+            Pedido("pas", metodo="student", grupos="sexo"),
+            Pedido("renda", grupos="sexo"),
+            Pedido("idade", grupos="sexo"),
+            Pedido("imc", grupos="pas_0"),
+        )
+
+    def test_t_entre_grupos_e_o_welch_que_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, t]\n  - [pas, sexo, welsh]\n")
+        assert "`t` entre grupos é o t de Welch, que ainda não está no FlatCap" in mensagem
+        assert "`welsh` entre grupos é o t de Welch" in mensagem
+        assert "o método que se escreve é `student`" in mensagem
+
+    def test_a_anova_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, ANOVA]\n")
+        assert "a ANOVA ainda não está no FlatCap" in mensagem
+
+    def test_o_wilcoxon_nao_se_aplica_a_grupos(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, wilcoxon]\n")
+        assert "`wilcoxon` não se aplica à comparação entre grupos" in mensagem
+
+    def test_uma_terceira_variavel_ensina_a_forma_uma_contra_varias(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, idade]\n")
+        assert "`idade` não é um método" in mensagem
+        assert "`- sexo: [imc, idade]`" in mensagem
+
+    def test_o_metodo_na_forma_uma_contra_varias(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - sexo: [imc, student]\n")
+        assert "`student` é um método" in mensagem
+        assert "`- [imc, sexo, student]`" in mensagem
+
+    def test_quatro_itens_entre_grupos(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, student, pas]\n")
+        assert "4 itens" in mensagem
+        assert "`- sexo: [imc, pas]`" in mensagem
+
+    def test_a_lista_vazia_depois_dos_dois_pontos(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - sexo: []\n")
+        assert "com pelo menos um nome" in mensagem
+
+
+# ── Entre dois grupos: o manifesto ──────────────────────────────────────────
+
+
+class TestManifestoEntreGrupos:
+    def test_os_detalhes_de_cada_grupo(self):
+        comparacao = _grupos((("imc", "sexo", "student"), ("imc", 25)))
+        detalhes = montar_manifesto(comparacao, DICIONARIO_DOS_GRUPOS).itens[0].detalhes
+        (imc,) = detalhes[DOIS_GRUPOS]
+        assert (imc["variavel"], imc["grupos"], imc["n"], imc["faltantes"]) == (
+            "imc",
+            "sexo",
+            57,
+            3,
+        )
+        assert [g["grupo"] for g in imc["por_grupo"]] == ["Feminino", "Masculino"]
+        assert imc["por_grupo"][0]["shapiro"]["rejeita"] is False
+        assert imc["estimativa"] == {"nome": "diferença de médias", "valor": -2.321182}
+        assert (imc["teste"], imc["teste_da_regra"], imc["escrito_na_ficha"]) == (
+            "t de Student",
+            T_DE_WELCH,
+            True,
+        )
+        assert len(detalhes[UMA_AMOSTRA]) == 1
+
+    def test_um_artefato_por_tabela_e_as_colunas_de_grupo(self):
+        comparacao = _grupos((("imc", 25), ("pas", "sexo")))
+        (item,) = montar_manifesto(comparacao, DICIONARIO_DOS_GRUPOS).itens
+        assert [a.arquivo for a in item.artefatos] == [ARQUIVO_TABELA, ARQUIVO_DOIS_GRUPOS]
+        assert item.colunas == ("imc", "pas", "sexo")
+
+    def test_a_variavel_de_grupo_nao_esta_fora(self):
+        manifesto = montar_manifesto(_grupos((("imc", "sexo"),)), DICIONARIO_DOS_GRUPOS)
+        assert {f["variavel"] for f in manifesto.fora} == {
+            "renda", "pas", "escolaridade", "unico"
+        }
+
+    def test_as_regras_de_dois_grupos(self):
+        regras = montar_manifesto(_grupos((("imc", "sexo"),)), DICIONARIO_DOS_GRUPOS).regras
+        assert "t de Welch" in regras["escolha_do_teste"][DOIS_GRUPOS]
+        assert "var.equal = TRUE" in regras["t_de_student"]
+        assert regras["minimo"] == {"t_uma_amostra": 2, "t_de_student": 3}
 
 
 # ── No disco ────────────────────────────────────────────────────────────────
@@ -772,6 +1321,19 @@ class TestEscrita:
         with pytest.raises(ItemInvalidoError):
             preparar_comparacao(raiz, agora=AGORA)
 
+    def test_com_grupos_escreve_as_duas_tabelas(self, projeto_para_comparar):
+        raiz = projeto_para_comparar("comparacao:\n  - [imc, 25]\n  - [imc, sexo, student]\n")
+        executar_comparacao(preparar_comparacao(raiz, agora=AGORA))
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        assert sorted(p.name for p in pasta.iterdir()) == [
+            ARQUIVO_DOIS_GRUPOS,
+            ARQUIVO_MANIFESTO,
+            ARQUIVO_TABELA,
+        ]
+        manifesto = ler_manifesto(pasta)
+        assert manifesto.itens[0].colunas == ("imc", "sexo")
+        assert len(manifesto.itens[0].artefatos) == 2
+
     def test_a_simulacao_e_a_execucao_dao_o_mesmo_arquivo(self, projeto_para_comparar):
         raiz = projeto_para_comparar()
         plano = preparar_comparacao(raiz, agora=AGORA)
@@ -779,7 +1341,7 @@ class TestEscrita:
         escrito = (raiz / PASTA_ANALISES / PASTA_COMPARACAO / ARQUIVO_TABELA).read_text(
             encoding="utf-8"
         )
-        assert escrito == plano.tabela.texto()
+        assert escrito == plano.comparacao.tabela_de(UMA_AMOSTRA).texto()
 
 
 # ── O relatório, que não muda uma linha ─────────────────────────────────────
@@ -820,6 +1382,24 @@ class TestRelatorio:
         assert comparacao.tabelas[0].linhas[0][2] == (
             f"{celulas['média']} ({celulas['desvio padrão']})"
         )
+
+    def test_as_duas_tabelas_na_mesma_secao(self, projeto_para_comparar):
+        """
+        A seção Comparação é uma só, com uma tabela por delineamento, e o relatório
+        não muda uma linha para ler a segunda.
+        """
+        from flatcap.relatorio import preparar_relatorio
+
+        raiz = projeto_para_comparar("comparacao:\n  - [imc, 25]\n  - [imc, sexo, student]\n")
+        executar_comparacao(preparar_comparacao(raiz, agora=AGORA))
+        relatorio = preparar_relatorio(raiz, agora=AGORA).relatorio
+        assert relatorio.alertas == ()
+        secao = next(s for s in relatorio.secoes if s.rotulo == "Comparação")
+        assert [t.especie for t in secao.tabelas] == [UMA_AMOSTRA, DOIS_GRUPOS]
+        grupos = secao.tabelas[1]
+        assert grupos.colunas[1] == "grupo"
+        assert [linha[1] for linha in grupos.linhas] == ["sexo", "Feminino", "Masculino"]
+        assert grupos.linhas[0][5] == "t de Student"
 
     def test_sem_ficha_mandando_vem_no_fim(self, projeto_para_comparar):
         from flatcap.normalidade import executar_normalidade, preparar_normalidade
