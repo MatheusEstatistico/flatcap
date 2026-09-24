@@ -16,6 +16,8 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     cruzamento.py  cruza pares de categóricas: uma tabela por par
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
+    hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
+    comparacao.py  compara a média de numéricas com uma referência (t de uma amostra)
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -215,6 +217,39 @@ códigos, e só por Spearman ou Kendall.
 público — a tabela de normalidade e a escolha da correlação saem da mesma
 chamada —, e a correlação entra na `ORDEM_PADRAO_DAS_ANALISES` logo depois da
 normalidade.
+
+## 1.7.0 — a comparação
+
+**`comparacao.py`: a média de uma numérica contra um valor de referência — o t de
+Student para uma amostra.** Os itens vêm da lista `comparacao:` da ficha, `[imc,
+25]`, e um terceiro nome, `t`, força o teste. Sai uma tabela só — variável, n,
+média (DP), IC 95% da média, referência, teste e p-valor —, com a frase de cada
+escolha nas notas do `.csv`, no terminal e no manifesto.
+
+**Uma análise para todos os testes de comparação**, e não um módulo por teste: o
+que se escreve na reunião é a pergunta, e o teste sai do delineamento e dos
+pressupostos. A regra é a da correlação: o Shapiro-Wilk sobre os valores da
+variável, pela mesma função da normalidade; o t quando ele não rejeita a normal, e
+o Wilcoxon quando rejeita. O Wilcoxon está na regra e ainda não no cálculo: a linha
+dele sai sem teste, com o motivo, e o aviso ensina a escrever `t` no item quando o
+t valer ali.
+
+**`hipoteses.py`: a aritmética dos testes, fora da análise.** Recebe números e
+devolve um `Resultado`, que é o `htest` do R. O t de uma amostra é o `t.test`, pelo
+`scipy`, que aqui faz igual. A fronteira existe porque o pareado é a uma amostra
+sobre as diferenças, e o motor precisa estar onde os próximos delineamentos o
+alcancem.
+
+**A vírgula decimal da ficha.** `[imc, 24,9]` é lido pelo YAML como três itens, e a
+recusa reconhece o engano e escreve o número certo para copiar — com o zero à
+esquerda da parte decimal, que o `24,05` perderia, e o aviso de que o sinal de
+`-0,5` não sobrevive à leitura.
+
+**`descritiva.resumo_numerico` ficou pública**, com o apelido privado: a média da
+tabela da comparação é, letra por letra, a do `resumo_<variável>.csv`.
+
+É a sexta análise, e o `relatorio.py` continua sem mudar uma linha. Ela entra na
+`ORDEM_PADRAO_DAS_ANALISES` no fim, depois da correlação.
 """
 
-__version__ = "1.6.0"
+__version__ = "1.7.0"

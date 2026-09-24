@@ -119,6 +119,12 @@ PASTA_ASSOCIACAO = "associacao"
 # o bloco `correlacao:` com os pares.
 PASTA_CORRELACAO = "correlacao"
 
+# A rodada da comparação. O mesmo nome nos três lugares, como as de cima: a pasta,
+# o campo `analise` do manifesto e a chave da ficha — a lista `analises:` e o bloco
+# `comparacao:` com os itens. Uma pasta só para todos os testes de comparação: o
+# teste é escolhido dentro da análise, e não é uma análise por teste.
+PASTA_COMPARACAO = "comparacao"
+
 # O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
 # arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
 # Ele estava escrito duas vezes — no `documento.py`, que é quem o grava, e no

@@ -394,6 +394,57 @@ def para_correlacionar() -> pd.DataFrame:
     )
 
 
+def para_comparar() -> pd.DataFrame:
+    """
+    Sessenta casos e uma variável para cada caminho da regra da comparação com um
+    valor de referência.
+
+    Comparada com a referência da ficha, cada coluna cai num caminho diferente:
+
+    * `imc` — escores normais, com **três células vazias**: o Shapiro-Wilk não
+      rejeita, **t de Student**, sobre 57 valores e não 60;
+    * `renda` — a exponencial de escores normais, assimétrica à direita: o
+      Shapiro-Wilk rejeita, a regra escolhe o **Wilcoxon**, que ainda não existe, e a
+      linha sai **sem teste**;
+    * `pas` — medida em doze casos só: **t com menos de 20 valores**, e o aviso;
+    * `dor` — escala de 0 a 5 marcada `numerica`: seis valores distintos, o
+      Shapiro-Wilk rejeita, e o **aviso de variável discreta**;
+    * `servico` — `1` em todas as linhas: **um valor só**, sem teste;
+    * `sexo` — código `1`/`2`, marcada `categorica`: **recusada** — a média de um
+      código não é uma média.
+
+    Nada é sorteado: os escores normais são os quantis da normal em posições
+    igualmente espaçadas, e a ordem é embaralhada por uma permutação fixa — `(7 i)
+    mod 60` —, como no `para_correlacionar`. Os p do teste são conferidos contra o R
+    sobre estes mesmos números.
+    """
+    from statistics import NormalDist
+
+    n = 60
+    normal = NormalDist()
+    escores = [normal.inv_cdf((i + 0.5) / n) for i in range(n)]
+    embaralhados = [escores[(7 * i) % n] for i in range(n)]
+
+    imc: list[float | None] = [round(26 + 3.2 * z, 1) for z in embaralhados]
+    for posicao in (4, 31, 50):
+        imc[posicao] = None
+    renda = [round(2500 * 2.718281828459045 ** (0.8 * z), 2) for z in embaralhados]
+    pas: list[float | None] = [None] * n
+    for ordem, posicao in enumerate(range(0, n, 5)):
+        pas[posicao] = float(round(128 + 14 * normal.inv_cdf((ordem + 0.5) / 12)))
+    dor = [min(5, max(0, round(2.5 + 1.2 * z))) for z in embaralhados]
+    return pd.DataFrame(
+        {
+            "imc": imc,
+            "renda": renda,
+            "pas": pas,
+            "dor": dor,
+            "servico": [1] * n,
+            "sexo": _repetir([1, 2], n),
+        }
+    )
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

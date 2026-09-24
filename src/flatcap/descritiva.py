@@ -1672,7 +1672,16 @@ def _como_data(serie: pd.Series) -> tuple[pd.Series, str | None, int]:
     return convertidas, formato, nao_convertidos
 
 
-def _resumo_numerico(valores: pd.Series) -> dict[str, float]:
+def resumo_numerico(valores: pd.Series) -> dict[str, float]:
+    """
+    Mínimo, quartis, mediana, máximo, média e desvio padrão de uma coluna já sem os
+    faltantes.
+
+    Pública desde a 1.7.0, com o apelido privado que este módulo usa. A comparação
+    imprime a média e o desvio da mesma variável na tabela dela, e uma segunda conta
+    é como a média do `resumo_imc.csv` diz `26,41` e a da comparação, na página
+    seguinte, `26,4` — a manobra do `numero` e do `percentual`.
+    """
     return {
         "minimo": float(valores.min()),
         "q1": float(valores.quantile(0.25)),
@@ -1682,6 +1691,9 @@ def _resumo_numerico(valores: pd.Series) -> dict[str, float]:
         "media": float(valores.mean()),
         "desvio": float(valores.std()) if int(valores.shape[0]) > 1 else 0.0,
     }
+
+
+_resumo_numerico = resumo_numerico
 
 
 def _contar_periodos(datas: pd.Series, passo: str) -> list[tuple[str, int]]:
