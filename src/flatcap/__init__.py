@@ -17,7 +17,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
-    comparacao.py  compara a média de numéricas com uma referência (t de uma amostra)
+    comparacao.py  compara médias: contra uma referência, e entre dois grupos
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -250,6 +250,32 @@ tabela da comparação é, letra por letra, a do `resumo_<variável>.csv`.
 
 É a sexta análise, e o `relatorio.py` continua sem mudar uma linha. Ela entra na
 `ORDEM_PADRAO_DAS_ANALISES` no fim, depois da correlação.
+
+## 1.8.0 — dois grupos, e o t de Student
+
+**A comparação entre os dois grupos de uma categórica.** `[imc, sexo]` na lista
+`comparacao:`, ou `sexo: [imc, idade]` para várias de uma vez. Os grupos saem do
+banco, e não do dicionário: os rótulos com resposta entre os casos que responderam
+as duas variáveis, pelas mesmas `serie_de_texto` e `rotulo_de` da associação, na
+ordem do dicionário — que decide o sinal da diferença. Três ou mais grupos ainda não
+estão no FlatCap, e o item é recusado com a frase que diz isso.
+
+**A regra é a mesma, grupo a grupo.** O Shapiro-Wilk em cada grupo; a normal se
+sustenta quando se sustenta em todos. O paramétrico da regra é o **t de Welch** — o
+padrão do `t.test` do R, que não supõe variâncias iguais e dispensa o Levene —, e
+ele ainda não está no FlatCap: sem método escrito, a linha sai sem teste, e o aviso
+ensina a escrever `student`. **O t de Student** roda quando está escrito no item, é o
+`t.test(var.equal = TRUE)` do R pelo `scipy`, e sai com o aviso de quanto o maior
+desvio padrão passa do menor quando passa de duas vezes.
+
+**Uma tabela por delineamento, na mesma pasta.** `uma_amostra.csv`, como antes, e
+`dois_grupos.csv`, com um bloco por item: a linha da comparação — n, diferença das
+médias com o IC 95%, teste e p — e uma linha por grupo, com n, média e desvio. O
+manifesto ganha um artefato por tabela, e o documento, as duas tabelas na mesma
+seção. O `relatorio.py` não mudou.
+
+**`associacao.na_ordem_do_dicionario` ficou pública**, com o apelido privado: os
+grupos da comparação saem na mesma ordem das categorias da associação.
 """
 
-__version__ = "1.7.0"
+__version__ = "1.8.0"
