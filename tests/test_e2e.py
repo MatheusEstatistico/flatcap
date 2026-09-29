@@ -370,7 +370,8 @@ class TestFluxoCompleto:
             raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
             acrescentar_a_ficha(
                 raiz,
-                "comparacao:\n  - [imc, 25]\n  - [idade, 40, t]\n  - [imc, sexo, student]\n",
+                "comparacao:\n  - [imc, 25]\n  - [idade, 40, t]\n  - [imc, sexo, student]\n"
+                "  - [idade, escolaridade, anova]\n",
             )
             for comando in (
                 ("perfil", "40", "--sim"),
@@ -417,6 +418,20 @@ class TestFluxoCompleto:
             if [c.text.strip() for c in t.rows[0].cells] == grupos_csv[0]
         )
         assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == grupos_csv
+
+        csv = raiz / "3. Análises" / "comparacao" / "k_grupos.csv"
+        k_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert k_csv[0] == ["variável", "grupo", "n", "média (DP)", "teste", "p-valor"]
+        assert [linha[4] for linha in k_csv[1:]] == ["ANOVA", "", "", ""]
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == k_csv[0]
+        )
+        assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == k_csv
 
 
 class TestSemRede:
