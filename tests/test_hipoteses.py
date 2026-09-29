@@ -8,7 +8,9 @@ e independentes dele:
   `t.test(x, y)`, `oneway.test(y ~ g, var.equal = TRUE)` e `oneway.test(y ~ g)` rodados
   sobre os mesmos números, com o resultado copiado para `REFERENCIAS_DO_R`,
   `REFERENCIAS_DO_R_STUDENT`, `REFERENCIAS_DO_R_WELCH`, `REFERENCIAS_DO_R_ANOVA` e
-  `REFERENCIAS_DO_R_ANOVA_DE_WELCH` — a estatística, os graus de
+  `REFERENCIAS_DO_R_ANOVA_DE_WELCH` — e as medidas repetidas, com o F do
+  `aov(y ~ t + Error(id / t))` e o ε de Greenhouse-Geisser do `anova.mlm`, em
+  `REFERENCIAS_DO_R_REPETIDAS` — a estatística, os graus de
   liberdade, o p, os dois limites do intervalo e a estimativa, quando há. O
   `PlantGrowth` e o `InsectSprays` são os bancos dos exemplos da documentação do R;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
@@ -31,6 +33,7 @@ from scipy import stats
 import flatcap.hipoteses as hipoteses
 from flatcap.hipoteses import (
     ANOVA,
+    ANOVA_DE_MEDIDAS_REPETIDAS,
     ANOVA_DE_WELCH,
     CONFIANCA,
     MINIMO_STUDENT,
@@ -38,10 +41,12 @@ from flatcap.hipoteses import (
     T_DE_STUDENT,
     T_DE_WELCH,
     Resultado,
+    anova_de_medidas_repetidas,
     anova_de_um_fator,
     anova_de_welch,
     sem_variacao,
     sem_variacao_em_duas,
+    sem_variacao_entre_medidas,
     sem_variacao_nos_grupos,
     t_de_student,
     t_de_welch,
@@ -210,6 +215,53 @@ REFERENCIAS_DO_R_ANOVA_DE_WELCH = [
     ("insetos", 36.065443893577253, 5, 30.04256050876738, 7.9993794556733478e-12),
     ("tres", 8.7738753291135048, 2, 17.341354929364982, 0.002330898076787043),
     ("medias_iguais", 0, 2, 3.2941176470588234, 1),
+]
+
+
+# As medidas de `REFERENCIAS_DO_R_REPETIDAS`, uma lista por medida, os casos na mesma
+# ordem. O `vinte` é gerado como no R: `base = 50 + (7 i mod 20)` e três medidas a mais,
+# cada uma com o seu passo.
+def _medidas(caso: str) -> list[list[float]]:
+    pas = [
+        [132, 140, 128, 150, 138, 126, 145, 133, 129, 141],
+        [128, 135, 127, 142, 131, 124, 139, 130, 126, 133],
+        [125, 136, 121, 139, 128, 125, 132, 124, 123, 130],
+    ]
+    quarta = [120, 131, 119, 137, 127, 120, 130, 120, 121, 126]
+    if caso == "pas":
+        return pas
+    if caso == "quatro":
+        return [*pas, quarta]
+    if caso == "dois_casos":
+        return [medida[:2] for medida in pas]
+    if caso == "tres_casos_quatro_medidas":
+        return [medida[:3] for medida in (*pas, quarta)]
+    base = [50 + (i * 7) % 20 for i in range(20)]
+    return [
+        base,
+        [b + 2 + ((i * 3) % 5) / 2 for i, b in enumerate(base)],
+        [b + 3 + ((i * 11) % 7) / 2 for i, b in enumerate(base)],
+        [b + 5 + (i * 13) % 9 for i, b in enumerate(base)],
+    ]
+
+
+# O F do `aov(y ~ t + Error(id / t))`, o ε de Greenhouse-Geisser do `anova.mlm`, e o p
+# da F com os graus de liberdade multiplicados pelo ε — no R 4.3.3:
+#
+#     (caso, F, ε, gl do numerador corrigido, p)
+#
+# O F vem do `aov`, e não do `anova.mlm`: o `anova.mlm` chega a ele por outro caminho, e
+# no `pas` erra na décima casa — o do `aov` e o daqui batem com a conta em frações.
+REFERENCIAS_DO_R_REPETIDAS = [
+    ("pas", 35.438902743142577, 0.8080641757064535, 1.616128351412907,
+     5.4960377561965596e-06),
+    ("quatro", 61.873563218390821, 0.62401792513726873, 1.8720537754118061,
+     2.3709405744829341e-08),
+    ("dois_casos", 7.9230769230769331, 0.5, 1.0, 0.21731524321988152),
+    ("tres_casos_quatro_medidas", 20.774193548386979, 0.48461926374180081,
+     1.4538577912254025, 0.019901211578070056),
+    ("vinte", 130.61587708066605, 0.48050003558028331, 1.4415001067408499,
+     2.0847458777942073e-13),
 ]
 
 
@@ -400,6 +452,49 @@ class TestAnovaDeWelchDoR:
         assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
 
 
+class TestRepetidasDoR:
+    @pytest.mark.parametrize(
+        ("caso", "f", "epsilon", "gl1", "p"),
+        REFERENCIAS_DO_R_REPETIDAS,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_REPETIDAS],
+    )
+    def test_o_aov_e_o_anova_mlm_do_r(self, caso, f, epsilon, gl1, p):
+        """
+        O ε e o p com tolerância de 1e-9: o `sphericity` do R, que dá o ε, erra na
+        décima segunda casa — a conta daqui bate com a em frações até a décima quinta.
+        """
+        medidas = _medidas(caso)
+        n, k = len(medidas[0]), len(medidas)
+        resultado = anova_de_medidas_repetidas(medidas)
+        assert resultado.estatistica == pytest.approx(f, rel=1e-12)
+        assert resultado.epsilon == pytest.approx(epsilon, rel=1e-9)
+        assert resultado.gl == pytest.approx((gl1, gl1 * (n - 1)), rel=1e-9)
+        assert resultado.gl[0] == pytest.approx(resultado.epsilon * (k - 1), rel=1e-14)
+        assert resultado.p == pytest.approx(p, rel=1e-8)
+
+    def test_com_duas_medidas_e_o_t_pareado_ao_quadrado(self):
+        """
+        Com duas medidas o ε é 1 — não há esfericidade a violar —, e o F é o t pareado
+        ao quadrado: `t.test(pas_0, pas_1, paired = TRUE)`, t² = 35,4385, p = 0,0002145.
+        """
+        pas = _medidas("pas")[:2]
+        resultado = anova_de_medidas_repetidas(pas)
+        assert resultado.epsilon == pytest.approx(1.0, rel=1e-12)
+        assert resultado.estatistica == pytest.approx(35.438502673796798, rel=1e-12)
+        assert resultado.p == pytest.approx(0.00021453897703870372, rel=1e-9)
+        diferencas = [a - b for a, b in zip(pas[0], pas[1], strict=True)]
+        assert resultado.estatistica == pytest.approx(
+            t_uma_amostra(diferencas, 0).estatistica ** 2, rel=1e-12
+        )
+
+    def test_o_epsilon_fica_entre_os_limites(self):
+        """Entre 1/(k − 1) — o limite inferior de Greenhouse e Geisser — e 1."""
+        for caso in ("pas", "quatro", "dois_casos", "vinte"):
+            medidas = _medidas(caso)
+            epsilon = anova_de_medidas_repetidas(medidas).epsilon
+            assert 1 / (len(medidas) - 1) - 1e-12 <= epsilon <= 1 + 1e-12
+
+
 # ── As fórmulas, escritas de novo ───────────────────────────────────────────
 
 
@@ -420,6 +515,45 @@ class TestFormula:
         assert resultado.ic == pytest.approx(
             (media - quantil * erro, media + quantil * erro), rel=1e-12
         )
+
+    @pytest.mark.parametrize("caso", ["pas", "quatro", "vinte"])
+    def test_as_medidas_repetidas_em_fracoes(self, caso):
+        """
+        O F e o ε pela definição, em aritmética exata com `Fraction`: as somas de
+        quadrados do modelo caso + medida, e o ε pela covariância centrada nas linhas e
+        nas colunas.
+        """
+        from fractions import Fraction
+
+        medidas = [[Fraction(valor) for valor in medida] for medida in _medidas(caso)]
+        k, n = len(medidas), len(medidas[0])
+        geral = sum(sum(medida) for medida in medidas) / (n * k)
+        por_medida = [sum(medida) / n for medida in medidas]
+        por_caso = [sum(medida[i] for medida in medidas) / k for i in range(n)]
+        ss_medidas = n * sum((m - geral) ** 2 for m in por_medida)
+        ss_erro = sum(
+            (medidas[j][i] - por_caso[i] - por_medida[j] + geral) ** 2
+            for i in range(n)
+            for j in range(k)
+        )
+        f = (ss_medidas / (k - 1)) / (ss_erro / ((n - 1) * (k - 1)))
+        desvios = [[valor - por_medida[j] for valor in medidas[j]] for j in range(k)]
+        cov = [
+            [sum(x * y for x, y in zip(desvios[a], desvios[b], strict=True)) / (n - 1)
+             for b in range(k)]
+            for a in range(k)
+        ]
+        linha = [sum(c) / k for c in cov]
+        coluna = [sum(cov[a][b] for a in range(k)) / k for b in range(k)]
+        media = sum(linha) / k
+        centrada = [[cov[a][b] - linha[a] - coluna[b] + media for b in range(k)] for a in range(k)]
+        traco = sum(centrada[a][a] for a in range(k))
+        traco_quadrado = sum(centrada[a][b] * centrada[b][a] for a in range(k) for b in range(k))
+        epsilon = traco**2 / ((k - 1) * traco_quadrado)
+
+        resultado = anova_de_medidas_repetidas(_medidas(caso))
+        assert resultado.estatistica == pytest.approx(float(f), rel=1e-13)
+        assert resultado.epsilon == pytest.approx(float(epsilon), rel=1e-13)
 
     def test_a_referencia_na_media_da_t_zero_e_p_um(self):
         resultado = t_uma_amostra(_dados("no_centro"), 3)
@@ -596,6 +730,36 @@ class TestRecusas:
         quase = [[base, math.nextafter(base, math.inf)], [base, base], [base, base]]
         assert sem_variacao_nos_grupos(quase)
 
+    def test_as_repetidas_com_uma_medida(self):
+        with pytest.raises(ValueError, match="pelo menos 2 medidas"):
+            anova_de_medidas_repetidas([[1.0, 2.0, 3.0]])
+
+    def test_as_repetidas_com_tamanhos_diferentes(self):
+        """Medidas de casos diferentes não são repetidas — quem chama tira os faltantes."""
+        with pytest.raises(ValueError, match="os mesmos casos"):
+            anova_de_medidas_repetidas([[1.0, 2.0, 3.0], [1.0, 2.0], [4.0, 5.0, 6.0]])
+
+    def test_as_repetidas_com_um_caso(self):
+        with pytest.raises(ValueError, match="pelo menos 2 casos"):
+            anova_de_medidas_repetidas([[1.0], [2.0], [3.0]])
+
+    def test_medidas_que_nao_variam_dentro_dos_casos(self):
+        """
+        Cada caso muda o mesmo tanto — o F é uma divisão por zero. O R devolve um F de
+        10²³ feito de arredondamento; aqui é recusa.
+        """
+        aditivas = [[10.0, 12.0, 15.0, 11.0], [11.0, 13.0, 16.0, 12.0], [13.0, 15.0, 18.0, 14.0]]
+        assert sem_variacao_entre_medidas(aditivas)
+        with pytest.raises(ValueError, match="não variam dentro dos casos"):
+            anova_de_medidas_repetidas(aditivas)
+        iguais = [[10.0, 12.0, 15.0]] * 3
+        assert sem_variacao_entre_medidas(iguais)
+        assert not sem_variacao_entre_medidas(_medidas("pas"))
+
+    def test_as_repetidas_com_valor_ausente(self):
+        with pytest.raises(ValueError, match="ausente ou infinito"):
+            anova_de_medidas_repetidas([[1.0, math.nan, 3.0], [1.0, 2.0, 3.0], [4.0, 5.0, 7.0]])
+
     def test_um_grupo_que_nao_varia_nao_basta(self):
         """
         A variância combinada é a do outro grupo, e o t existe — o `um_constante` das
@@ -652,6 +816,20 @@ class TestContrato:
         assert resultado.nome_da_estatistica == "F"
         assert (resultado.estimativa, resultado.ic, resultado.referencia) == (None, None, None)
         assert resultado.calculo_do_p == "F com k − 1 e N − k graus de liberdade"
+
+    def test_as_repetidas_devolvem_o_epsilon(self):
+        """
+        O único campo fora do `htest`: o ε que corrigiu os gl, que já saem corrigidos.
+        Nos outros testes ele fica `None`.
+        """
+        resultado = anova_de_medidas_repetidas(_medidas("pas"))
+        assert resultado.metodo == ANOVA_DE_MEDIDAS_REPETIDAS == "ANOVA de medidas repetidas"
+        assert resultado.nome_da_estatistica == "F"
+        assert (resultado.estimativa, resultado.ic) == (None, None)
+        assert "Greenhouse-Geisser" in resultado.calculo_do_p
+        assert 0 < resultado.epsilon < 1
+        assert anova_de_welch(VARIOS_GRUPOS["plantas"]).epsilon is None
+        assert t_uma_amostra(_dados("imc15"), 25).epsilon is None
 
     def test_a_de_welch_tambem_nao_estima_nada(self):
         resultado = anova_de_welch(VARIOS_GRUPOS["plantas"])
