@@ -525,6 +525,60 @@ def para_comparar_grupos() -> pd.DataFrame:
     )
 
 
+def para_comparar_repetidas() -> pd.DataFrame:
+    """
+    Quarenta casos medidos três vezes, para a comparação entre medidas repetidas.
+
+    * `pas_0`, `pas_1`, `pas_2` — a PAS de cada caso em torno de um nível próprio, que
+      cai três e seis pontos nas medidas seguintes, com um ruído de cada medida: normal
+      nas três, e a regra escolhe a **ANOVA de medidas repetidas**. `pas_1` tem uma
+      célula vazia, e `pas_2` outra, em casos diferentes: **38 casos completos**;
+    * `dor_0`, `dor_1`, `dor_2` — uma escala de 0 a 4 com muitos zeros: o Shapiro-Wilk
+      rejeita, a regra escolhe o **Friedman**, que ainda não existe, e o aviso de
+      variável discreta;
+    * `peso_0`, `peso_1`, `peso_2` — cada caso ganha exatamente um quilo por medida:
+      **as medidas não variam dentro dos casos**, e o F seria uma divisão por zero;
+    * `sexo` — código `1`/`2`, para as recusas de tipo.
+
+    Nada é sorteado: os escores são os quantis da normal em quarenta posições, em
+    permutações fixas — `(7 i)`, `(11 i)`, `(13 i)` e `(17 i) mod 40`.
+    """
+    from statistics import NormalDist
+
+    n = 40
+    normal = NormalDist()
+    escores = [normal.inv_cdf((j + 0.5) / n) for j in range(n)]
+
+    def z(passo: int, i: int) -> float:
+        return escores[(passo * i) % n]
+
+    nivel = [130 + 12 * z(7, i) for i in range(n)]
+    pas_0: list[float | None] = [float(round(nivel[i] + 3 * z(11, i))) for i in range(n)]
+    pas_1: list[float | None] = [float(round(nivel[i] - 3 + 3 * z(13, i))) for i in range(n)]
+    pas_2: list[float | None] = [float(round(nivel[i] - 6 + 4 * z(17, i))) for i in range(n)]
+    pas_1[5] = None
+    pas_2[12] = None
+
+    def escala(deslocamento: float, passo: int) -> list[int]:
+        return [min(4, max(0, round(deslocamento + 1.3 * z(passo, i)))) for i in range(n)]
+
+    peso_0 = [round(70 + 9 * z(7, i), 1) for i in range(n)]
+    return pd.DataFrame(
+        {
+            "pas_0": pas_0,
+            "pas_1": pas_1,
+            "pas_2": pas_2,
+            "dor_0": escala(0.6, 11),
+            "dor_1": escala(0.3, 13),
+            "dor_2": escala(0.0, 17),
+            "peso_0": peso_0,
+            "peso_1": [round(valor + 1, 1) for valor in peso_0],
+            "peso_2": [round(valor + 2, 1) for valor in peso_0],
+            "sexo": _repetir([1, 2], n),
+        }
+    )
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.
