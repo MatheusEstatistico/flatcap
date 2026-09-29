@@ -12,7 +12,7 @@ tem a sua tabela, na mesma pasta:
 
     dois_grupos.csv
     variável     grupo        n  média (DP)    diferença (IC 95%)     teste         p-valor
-    IMC (kg/m²)  Sexo       116                -1,52 (-3,21 a 0,17)   t de Student    0,078
+    IMC (kg/m²)  Sexo       116                -1,52 (-3,24 a 0,20)   t de Welch      0,083
                  Feminino    60  25,70 (4,41)
                  Masculino   56  27,22 (4,70)
 
@@ -83,8 +83,7 @@ padrão do `t.test` do R, perde pouco quando as variâncias são iguais e proteg
 não são (Delacre, Lakens e Leys, 2017) — e dispensa o teste de Levene, que seria um
 teste preliminar a mais antes do teste que interessa. O de Student roda quando está
 escrito no item, `[imc, sexo, student]`, e o aviso diz quanto os desvios padrão dos
-grupos diferem. **Nesta versão o de Welch ainda não tem aritmética**: sem `student`
-escrito, a linha sai sem teste, com o motivo — e o aviso diz como escrevê-lo.
+grupos diferem.
 
 **A normalidade é a função, e não a rodada.** O teste é o `normalidade.shapiro`, o
 mesmo que a correlação chama, com as mesmas barreiras e os mesmos avisos — e não o
@@ -105,7 +104,8 @@ pequena, por exemplo. A decisão é sua, e fica registrada contra a regra.
     comparacao:
       - [imc, 25]                # a média do IMC difere de 25?
       - [pas, 120, t]            # o t, mesmo que a regra discorde
-      - [imc, sexo, student]     # o IMC difere entre os sexos? pelo t de Student
+      - [imc, sexo]              # o IMC difere entre os sexos?
+      - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
 
 **A referência é obrigatória.** O padrão do R é `mu = 0`, que nunca é a hipótese de
@@ -177,10 +177,12 @@ from .hipoteses import (
     MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
+    T_DE_WELCH,
     Resultado,
     sem_variacao,
     sem_variacao_em_duas,
     t_de_student,
+    t_de_welch,
     t_uma_amostra,
 )
 from .manifesto import (
@@ -236,7 +238,6 @@ ARQUIVOS: dict[str, str] = {
 # os escolhe, e a linha sai sem teste, com o motivo.
 WILCOXON = "Wilcoxon"
 MANN_WHITNEY = "Mann-Whitney"
-T_DE_WELCH = "t de Welch"
 
 # A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
 # quando não. Entre dois grupos o paramétrico é o de Welch, o padrão do `t.test` do R.
@@ -250,6 +251,7 @@ REGRA: dict[str, tuple[str, str]] = {
 # estar na regra: ele roda quando o item o pede.
 _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
     (UMA_AMOSTRA, T_DE_STUDENT): t_uma_amostra,
+    (DOIS_GRUPOS, T_DE_WELCH): t_de_welch,
     (DOIS_GRUPOS, T_DE_STUDENT): t_de_student,
 }
 
@@ -315,7 +317,7 @@ _PARECE_NUMERO = re.compile(r"^[+\-]?[\d.,\s]*\d[\d.,\s]*$")
 EXEMPLO_DA_FICHA = f"""  {PASTA_COMPARACAO}:
     - [imc, 25]
     - [pas, 120, t]
-    - [imc, sexo, student]"""
+    - [imc, sexo]"""
 
 
 class ComparacaoError(RuntimeError):
@@ -1347,10 +1349,21 @@ def _impedimento_do_teste(
     que mudam de teste para teste.
 
     O t de Student aceita um grupo de um valor só, desde que haja três no total: a
-    variância combinada é toda do outro grupo, e o R calcula. E recusa, como o R, dois
-    grupos que não variam por dentro — mesmo com médias diferentes, o t seria uma
-    divisão por zero.
+    variância combinada é toda do outro grupo, e o R calcula. O de Welch não: cada
+    grupo entra com a sua variância, e a de um valor só não existe. Os dois recusam,
+    como o R, dois grupos que não variam por dentro — mesmo com médias diferentes, o t
+    seria uma divisão por zero.
     """
+    if metodo == T_DE_WELCH:
+        primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
+        pequenos = [grupo for grupo in grupos if grupo.n < MINIMO_T]
+        if pequenos:
+            return (
+                f"{pequenos[0].rotulo} tem {pequenos[0].n} valor — o t de Welch precisa de "
+                f"pelo menos {MINIMO_T} em cada grupo"
+            )
+        if sem_variacao_em_duas(primeiro, segundo, variancias_iguais=False):
+            return _sem_variacao_nos_grupos(amostras)
     if metodo == T_DE_STUDENT:
         primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
         if primeiro.shape[0] + segundo.shape[0] < MINIMO_STUDENT:
@@ -1734,8 +1747,8 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
     `diferença (IC 95%)`, `teste` e `p-valor`. A coluna `grupo` leva o rótulo da
     variável de grupo na linha da comparação e o de cada grupo nas seguintes, que é
     como uma tabela descritiva põe uma categórica: o nome, e as categorias embaixo.
-    A diferença é a do teste da linha, com o intervalo dele — do de Student, com a
-    variância combinada.
+    A diferença é a do teste da linha, com o intervalo dele — o do de Welch não é o do
+    de Student, e é o do teste que rodou que vai para a célula.
     """
     corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
     menor_p = numero(MENOR_P, 3)
@@ -1746,6 +1759,9 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
         "seguintes, cada grupo, na ordem do dicionário.",
         "diferença: a média do primeiro grupo menos a do segundo, com o IC 95% do teste "
         "da linha.",
+        "t de Welch para dois grupos independentes, bilateral, como o t.test do R: cada "
+        "grupo com a sua variância, e os graus de liberdade de Welch-Satterthwaite, "
+        "fracionários.",
         "t de Student para dois grupos independentes, bilateral, como o t.test do R com "
         "var.equal = TRUE: a variância dos dois grupos combinada, com n₁ + n₂ − 2 graus "
         "de liberdade.",
@@ -2488,6 +2504,11 @@ def _regras() -> dict[str, Any]:
             f"{CONFIANCA:.0%} da média; entre dois grupos, var.equal = TRUE, t com "
             f"n₁ + n₂ − 2 graus de liberdade e IC {CONFIANCA:.0%} da diferença das médias"
         ),
+        "t_de_welch": (
+            "t.test do R, o padrão dele (var.equal = FALSE): bilateral, cada grupo com a "
+            "sua variância, graus de liberdade de Welch-Satterthwaite e IC "
+            f"{CONFIANCA:.0%} da diferença das médias"
+        ),
         "normalidade": (
             "Shapiro-Wilk, pela mesma função da análise de normalidade — sobre os valores "
             "preenchidos na uma amostra, e dentro de cada grupo entre grupos"
@@ -2497,7 +2518,11 @@ def _regras() -> dict[str, Any]:
             "variáveis, na ordem do dicionário; a diferença é o primeiro menos o segundo"
         ),
         "alfa": ALFA,
-        "minimo": {"t_uma_amostra": MINIMO_T, "t_de_student": MINIMO_STUDENT},
+        "minimo": {
+            "t_uma_amostra": MINIMO_T,
+            "t_de_welch": f"{MINIMO_T} em cada grupo",
+            "t_de_student": MINIMO_STUDENT,
+        },
         "faltantes": "por variável na uma amostra; por comparação entre grupos",
         "hipotese": "bilateral",
         "comparacoes_multiplas": "nenhuma correção",
