@@ -20,7 +20,8 @@ e independentes dele:
 O banco de referência é o `bancos.para_comparar()`: sessenta casos e uma variável
 para cada caminho da regra. Entre grupos, o `bancos.para_comparar_grupos()`, com o
 `t.test(y ~ sexo, var.equal = TRUE)` e o `shapiro.test` de cada grupo rodados no R
-sobre ele — em `STUDENT_DO_R` —, e o `t.test(y ~ sexo)`, o de Welch, em `WELCH_DO_R`.
+sobre ele — em `STUDENT_DO_R` —, o `t.test(y ~ sexo)`, o de Welch, em `WELCH_DO_R`, e
+o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R`.
 """
 
 from __future__ import annotations
@@ -40,9 +41,14 @@ from conftest import (
     linhas_do_historico,
 )
 from flatcap.comparacao import (
+    ANOVA,
+    ANOVA_DE_WELCH,
     ARQUIVO_DOIS_GRUPOS,
+    ARQUIVO_K_GRUPOS,
     ARQUIVO_TABELA,
     DOIS_GRUPOS,
+    K_GRUPOS,
+    KRUSKAL_WALLIS,
     MANN_WHITNEY,
     REGRA,
     T_DE_WELCH,
@@ -124,7 +130,8 @@ ESCOLARIDADE = Linha(
     "escolaridade", "Escolaridade", CATEGORICA, ("Fundamental", "Médio", "Superior")
 )
 UNICO = Linha("unico", "Único", CATEGORICA, ("Sim", "Não"))
-DICIONARIO_DOS_GRUPOS = (IMC, RENDA, PAS, SEXO, ESCOLARIDADE, UNICO)
+NOTA = Linha("nota", "Nota", NUMERICA)
+DICIONARIO_DOS_GRUPOS = (IMC, RENDA, PAS, NOTA, SEXO, ESCOLARIDADE, UNICO)
 
 # `t.test(y ~ sexo, var.equal = TRUE)` e `shapiro.test` de cada grupo no R 4.3.3,
 # sobre os casos com as duas respostas de `bancos.para_comparar_grupos()`:
@@ -159,6 +166,24 @@ WELCH_DO_R = [
      (-3699.0679276236488, 726.62816571888789)),
     ("pas", -1.6472381629313293, 32.296650638913157, 0.10920625091215552,
      (-11.26050969312937, 1.1890811217007851)),
+]
+
+
+# `oneway.test(y ~ escolaridade, var.equal = TRUE)` e `shapiro.test` de cada grupo no
+# R 4.3.3, sobre os casos com as duas respostas de `bancos.para_comparar_grupos()`:
+#
+#     (variável, F, gl, p, ((n, média, DP, W, p do Shapiro-Wilk) de cada escolaridade))
+ANOVA_DO_R = [
+    ("nota", 6.387986103328477, (2, 57), 0.0031391736550230066, (
+        (20, 6, 1.0052493799000692, 0.99781599578856017, 0.99999999881473456),
+        (20, 7, 1.4853672237779061, 0.99757496054163186, 0.9999999957732697),
+        (20, 8, 2.4851135735986416, 0.99834812318513499, 0.9999999999677488),
+    )),
+    ("imc", 0.11624423716069375, (2, 56), 0.89047201374920881, (
+        (20, 25.954999999999998, 3.766119739829954, 0.99669095554062048, 0.99999985724646479),
+        (19, 26.331578947368421, 3.6157145646283388, 0.99168933343034105, 0.99957916454533602),
+        (20, 26.515000000000001, 3.8354681317244292, 0.97605184600851136, 0.87368281207131027),
+    )),
 ]
 
 
@@ -200,6 +225,14 @@ def _dois(a: list, b: list) -> tuple[pd.DataFrame, tuple[Linha, ...]]:
     """Um banco de dois grupos escritos à mão: `y` numérica, `g` com `A` e `B`."""
     quadro = pd.DataFrame({"y": [*a, *b], "g": ["A"] * len(a) + ["B"] * len(b)})
     return quadro, (Linha("y", "Y", NUMERICA), Linha("g", "G", CATEGORICA, ("A", "B")))
+
+
+def _tres(a: list, b: list, c: list) -> tuple[pd.DataFrame, tuple[Linha, ...]]:
+    """Três grupos escritos à mão: `y` numérica, `g` com `A`, `B` e `C`."""
+    quadro = pd.DataFrame(
+        {"y": [*a, *b, *c], "g": ["A"] * len(a) + ["B"] * len(b) + ["C"] * len(c)}
+    )
+    return quadro, (Linha("y", "Y", NUMERICA), Linha("g", "G", CATEGORICA, ("A", "B", "C")))
 
 
 # ── O R ─────────────────────────────────────────────────────────────────────
@@ -1033,19 +1066,29 @@ class TestGruposNoBanco:
         assert [(g.rotulo, g.n) for g in comparada.grupos] == [("Básico", 40), ("Superior", 20)]
         assert comparada.testada
 
-    def test_tres_grupos_recusa_e_ensina_a_agrupar(self):
-        with pytest.raises(ItemInvalidoError) as erro:
-            _grupos((("imc", "escolaridade"),))
-        mensagem = str(erro.value)
-        assert "`escolaridade` tem 3 grupos" in mensagem
-        assert "(Fundamental, Médio, Superior)" in mensagem
-        assert "três ou mais grupos ainda não está no FlatCap" in mensagem
-        assert "`1=Sim|2=Sim`" in mensagem
+    def test_o_numero_de_grupos_e_o_do_banco_e_nao_o_do_dicionario(self):
+        """Uma categórica sem `categorias_ordem` preenchida: o banco é que diz que são três."""
+        sem_ordem = Linha("escolaridade", "Escolaridade", CATEGORICA)
+        linhas = (IMC, RENDA, PAS, NOTA, SEXO, sem_ordem, UNICO)
+        comparada = _grupos((("nota", "escolaridade", "anova"),), linhas=linhas).variaveis[0]
+        assert comparada.delineamento == K_GRUPOS
+        assert [g.rotulo for g in comparada.grupos] == ["Fundamental", "Médio", "Superior"]
+
+    def test_tres_grupos_vao_para_a_tabela_dos_k_grupos(self):
+        comparacao = _grupos((("imc", "escolaridade"), ("imc", "sexo")))
+        assert [v.delineamento for v in comparacao.variaveis] == [K_GRUPOS, DOIS_GRUPOS]
+        assert [t.nome for t in comparacao.tabelas] == [ARQUIVO_DOIS_GRUPOS, ARQUIVO_K_GRUPOS]
 
     def test_os_problemas_do_banco_saem_todos_de_uma_vez(self):
+        """O método de dois grupos numa variável de três: só o banco sabe quantos são."""
         with pytest.raises(ItemInvalidoError) as erro:
-            _grupos((("imc", "escolaridade"), ("imc", "sexo"), ("pas", "escolaridade")))
-        assert "2 item(ns) que este banco não deixa comparar" in str(erro.value)
+            _grupos(
+                (("imc", "escolaridade", "student"), ("imc", "sexo"), ("pas", "escolaridade", "t"))
+            )
+        mensagem = str(erro.value)
+        assert "2 item(ns) que este banco não deixa comparar" in mensagem
+        assert "[imc, escolaridade, student] — `student` não se aplica a 3 grupos" in mensagem
+        assert "o t de Student compara dois grupos; escreva `anova`" in mensagem
 
 
 # ── Entre dois grupos: quando não há teste ──────────────────────────────────
@@ -1258,11 +1301,19 @@ class TestFichaEntreGrupos:
     def test_o_mann_whitney_ainda_nao_existe(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, mann-whitney]\n")
         assert "`mann-whitney` entre grupos é o Mann-Whitney, que ainda não está" in mensagem
-        assert "`t`, `student` ou `welch`" in mensagem
+        assert "`t`, `student`, `welch` ou `anova`" in mensagem
 
-    def test_a_anova_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, ANOVA]\n")
-        assert "a ANOVA ainda não está no FlatCap" in mensagem
+    def test_o_kruskal_wallis_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, escolaridade, Kruskal-Wallis]\n")
+        assert "entre grupos é o Kruskal-Wallis, que ainda não está no FlatCap" in mensagem
+
+    def test_o_friedman_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, friedman]\n")
+        assert "o Friedman ainda não está no FlatCap" in mensagem
+
+    def test_a_anova_entre_grupos(self, projeto_vazio):
+        itens = _itens(projeto_vazio, "  - [imc, escolaridade, ANOVA]\n")
+        assert itens == (Pedido("imc", metodo="anova", grupos="escolaridade"),)
 
     def test_o_wilcoxon_nao_se_aplica_a_grupos(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, wilcoxon]\n")
@@ -1286,6 +1337,195 @@ class TestFichaEntreGrupos:
     def test_a_lista_vazia_depois_dos_dois_pontos(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - sexo: []\n")
         assert "com pelo menos um nome" in mensagem
+
+
+# ── Entre três grupos ou mais ───────────────────────────────────────────────
+
+
+class TestKGruposDoR:
+    @pytest.mark.parametrize(
+        ("variavel", "f", "gl", "p", "grupos"), ANOVA_DO_R, ids=[v for v, *_ in ANOVA_DO_R]
+    )
+    def test_o_oneway_test_e_o_shapiro_test_de_cada_grupo(self, variavel, f, gl, p, grupos):
+        comparada = _grupos(((variavel, "escolaridade", "anova"),)).variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == ANOVA
+        assert resultado.estatistica == pytest.approx(f, rel=1e-12)
+        assert resultado.gl == gl
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert [g.rotulo for g in comparada.grupos] == ["Fundamental", "Médio", "Superior"]
+        for grupo, (n, media, dp, w, p_shapiro) in zip(comparada.grupos, grupos, strict=True):
+            assert grupo.n == n
+            assert grupo.resumo["media"] == pytest.approx(media, rel=1e-12)
+            assert grupo.resumo["desvio"] == pytest.approx(dp, rel=1e-12)
+            assert grupo.normal.w == pytest.approx(w, rel=1e-6)
+            assert grupo.normal.p == pytest.approx(p_shapiro, rel=1e-4)
+
+    def test_o_grupo_constante_nao_barra_a_anova(self):
+        """`oneway.test` com um grupo de valores iguais: F = 10,5, 2 e 6 gl, p = 0,01097."""
+        quadro, linhas = _tres([5.0, 5.0, 5.0], [4.0, 6.0, 7.0], [8.0, 9.0, 11.0])
+        resultado = _grupos((("y", "g", "anova"),), quadro, linhas).variaveis[0].resultado
+        assert resultado.estatistica == pytest.approx(10.5, rel=1e-12)
+        assert resultado.p == pytest.approx(0.010973936899862832, rel=1e-10)
+
+
+class TestKGruposRegra:
+    def test_a_normal_em_todos_escolhe_a_anova_de_welch_que_ainda_nao_existe(self):
+        comparada = _grupos((("nota", "escolaridade"),)).variaveis[0]
+        assert comparada.delineamento == K_GRUPOS
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", ANOVA_DE_WELCH)
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk não rejeita a normal em nenhum dos 3 grupos (Fundamental: "
+            "p = 1,000; Médio: p = 1,000; Superior: p = 1,000)"
+        )
+        assert comparada.celula_do_teste == (
+            "não testado: ANOVA de Welch ainda não está no FlatCap"
+        )
+
+    def test_a_linha_sem_a_de_welch_ensina_a_escrever_anova(self):
+        avisos = _grupos((("nota", "escolaridade"),)).avisos
+        assert any(
+            "a regra escolheria ANOVA de Welch, que ainda não está no FlatCap" in aviso
+            and "A ANOVA, que supõe a mesma variância nos grupos, roda com o método" in aviso
+            and "`[nota, escolaridade, anova]`" in aviso
+            for aviso in avisos
+        )
+
+    def test_a_normal_rejeitada_escolhe_o_kruskal_wallis(self):
+        comparacao = _grupos((("renda", "escolaridade"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.da_regra == KRUSKAL_WALLIS
+        assert comparada.celula_do_teste == "não testado: normal rejeitada"
+        assert any(
+            "Se a ANOVA vale aqui" in aviso and "`[renda, escolaridade, anova]`" in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_a_anova_com_desvios_muito_diferentes_avisa(self):
+        avisos = _grupos((("nota", "escolaridade", "anova"),)).avisos
+        assert any(
+            "`nota` por `escolaridade`: a ANOVA supõe a mesma variância nos grupos, e o "
+            "desvio padrão de Superior (2,49) é 2,5 vezes o de Fundamental (1,01). A ANOVA "
+            "de Welch, que ainda não está no FlatCap, não supõe." in aviso
+            for aviso in avisos
+        )
+
+    def test_a_anova_escrita_contra_a_regra(self):
+        comparacao = _grupos((("nota", "escolaridade", "anova"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert any("ANOVA escrita na ficha, contra a regra" in a for a in comparacao.avisos)
+        assert "ANOVA escrita na ficha (F = 6,39; 2 e 57 gl), contra a regra — ela " in (
+            comparada.justificativa
+        )
+
+    def test_o_metodo_de_dois_grupos_em_tres(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos((("imc", "escolaridade", "t"),))
+        assert "`t` não se aplica a 3 grupos" in str(erro.value)
+        assert "o t compara dois grupos; escreva `anova`" in str(erro.value)
+
+    def test_a_anova_em_dois_grupos(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos((("imc", "sexo", "anova"),))
+        mensagem = str(erro.value)
+        assert "`anova` não se aplica a 2 grupos" in mensagem
+        assert "o F da ANOVA é o t de Student ao quadrado; escreva `student`" in mensagem
+
+    def test_o_welch_em_tres_grupos_ainda_nao_existe(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos((("imc", "escolaridade", "welch"),))
+        assert "a ANOVA de Welch ainda não está no FlatCap" in str(erro.value)
+
+    def test_o_registro_da_regra_entre_tres_grupos_ou_mais(self):
+        assert REGRA[K_GRUPOS] == (ANOVA_DE_WELCH, KRUSKAL_WALLIS)
+        assert metodo_escrito("anova", K_GRUPOS) == ANOVA
+        assert metodo_escrito("anova", DOIS_GRUPOS) == ""
+        assert metodo_escrito("welch", K_GRUPOS) == ""
+
+
+class TestKGruposSemTeste:
+    def test_um_valor_num_grupo_nao_da_a_anova(self):
+        """O `not enough observations` do `oneway.test`, que o `aov` aceitaria."""
+        quadro, linhas = _tres([30.0], [24.1, 27.3, 22.8], [26.5, 29.9, 31.2])
+        comparada = _grupos((("y", "g", "anova"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: A tem 1 valor — a ANOVA precisa de pelo menos 2 em cada grupo"
+        )
+        assert "ANOVA escrita na ficha, que não pôde ser calculada" in comparada.justificativa
+
+    def test_grupos_que_nao_variam_por_dentro(self):
+        """O R devolveria F infinito e p zero; aqui a linha sai sem teste."""
+        quadro, linhas = _tres([5.0, 5.0], [6.0, 6.0], [7.0, 7.0, 7.0])
+        comparada = _grupos((("y", "g", "anova"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: os valores não variam dentro dos grupos"
+
+    def test_um_grupo_so_na_tabela_que_o_dicionario_promete(self):
+        """
+        O dicionário declara três escolaridades, e o banco só tem uma: a linha sai sem
+        teste, na tabela dos k grupos.
+        """
+        quadro = bancos.para_comparar_grupos().assign(escolaridade="Médio")
+        comparacao = _grupos((("imc", "escolaridade"),), quadro)
+        assert comparacao.variaveis[0].delineamento == K_GRUPOS
+        assert comparacao.variaveis[0].celula_do_teste == "não testado: um grupo só"
+        assert [t.nome for t in comparacao.tabelas] == [ARQUIVO_K_GRUPOS]
+
+
+class TestKGruposTabela:
+    def test_as_seis_colunas(self):
+        tabela = _grupos((("imc", "escolaridade"),)).tabela_de(K_GRUPOS)
+        assert tabela.colunas == ("variável", "grupo", "n", "média (DP)", "teste", "p-valor")
+        assert (tabela.nome, tabela.especie, tabela.titulo) == (
+            ARQUIVO_K_GRUPOS,
+            K_GRUPOS,
+            "Comparação entre três grupos ou mais",
+        )
+
+    def test_o_bloco_de_uma_comparacao(self):
+        _, _, _, p, grupos = ANOVA_DO_R[0]
+
+        def media_dp(grupo):
+            return f"{_como_a_descritiva(grupo[1])} ({_como_a_descritiva(grupo[2])})"
+
+        assert _grupos((("nota", "escolaridade", "anova"),)).tabela_de(K_GRUPOS).linhas == (
+            ("Nota", "Escolaridade", "60", "", "ANOVA", valor_p(p)),
+            ("", "Fundamental", "20", media_dp(grupos[0]), "", ""),
+            ("", "Médio", "20", media_dp(grupos[1]), "", ""),
+            ("", "Superior", "20", media_dp(grupos[2]), "", ""),
+        )
+
+    def test_as_notas_dizem_como_o_r_faz_e_o_que_falta(self):
+        texto = _grupos((("nota", "escolaridade"),)).tabela_de(K_GRUPOS).texto()
+        assert "oneway.test do R com var.equal = TRUE" in texto
+        assert "Os dois ainda não estão no FlatCap" in texto
+        assert "o pós-teste — ainda não está no FlatCap" in texto
+        assert (
+            "Nota por Escolaridade: n = 60 (20 em Fundamental, 20 em Médio e 20 em "
+            "Superior); o Shapiro-Wilk não rejeita a normal em nenhum dos 3 grupos"
+        ) in texto
+
+    def test_as_tres_tabelas_na_ordem(self):
+        comparacao = _grupos((("nota", "escolaridade"), ("imc", 25), ("imc", "sexo")))
+        assert [t.nome for t in comparacao.tabelas] == [
+            ARQUIVO_TABELA,
+            ARQUIVO_DOIS_GRUPOS,
+            ARQUIVO_K_GRUPOS,
+        ]
+        (item,) = montar_manifesto(comparacao, DICIONARIO_DOS_GRUPOS).itens
+        assert [a.arquivo for a in item.artefatos] == [
+            ARQUIVO_TABELA,
+            ARQUIVO_DOIS_GRUPOS,
+            ARQUIVO_K_GRUPOS,
+        ]
+        assert set(item.detalhes) >= {UMA_AMOSTRA, DOIS_GRUPOS, K_GRUPOS}
+
+    def test_os_detalhes_da_anova(self):
+        comparacao = _grupos((("nota", "escolaridade", "anova"),))
+        (nota,) = montar_manifesto(comparacao, DICIONARIO_DOS_GRUPOS).itens[0].detalhes[K_GRUPOS]
+        assert nota["estatistica"] == {"nome": "F", "valor": 6.387986, "gl": [2.0, 57.0]}
+        assert (nota["estimativa"]["valor"], nota["ic_95"]) == (None, None)
+        assert [g["n"] for g in nota["por_grupo"]] == [20, 20, 20]
 
 
 # ── Entre dois grupos: o manifesto ──────────────────────────────────────────
@@ -1321,7 +1561,7 @@ class TestManifestoEntreGrupos:
     def test_a_variavel_de_grupo_nao_esta_fora(self):
         manifesto = montar_manifesto(_grupos((("imc", "sexo"),)), DICIONARIO_DOS_GRUPOS)
         assert {f["variavel"] for f in manifesto.fora} == {
-            "renda", "pas", "escolaridade", "unico"
+            "renda", "pas", "nota", "escolaridade", "unico"
         }
 
     def test_as_regras_de_dois_grupos(self):
@@ -1334,6 +1574,7 @@ class TestManifestoEntreGrupos:
             "t_uma_amostra": 2,
             "t_de_welch": "2 em cada grupo",
             "t_de_student": 3,
+            "anova": "2 em cada grupo",
         }
 
 
