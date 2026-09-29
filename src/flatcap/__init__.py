@@ -17,7 +17,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
-    comparacao.py  compara a média de numéricas com uma referência (t de uma amostra)
+    comparacao.py  compara médias: contra uma referência, entre grupos e entre medidas
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -250,6 +250,123 @@ tabela da comparação é, letra por letra, a do `resumo_<variável>.csv`.
 
 É a sexta análise, e o `relatorio.py` continua sem mudar uma linha. Ela entra na
 `ORDEM_PADRAO_DAS_ANALISES` no fim, depois da correlação.
+
+## 1.8.0 — dois grupos, e o t de Student
+
+**A comparação entre os dois grupos de uma categórica.** `[imc, sexo]` na lista
+`comparacao:`, ou `sexo: [imc, idade]` para várias de uma vez. Os grupos saem do
+banco, e não do dicionário: os rótulos com resposta entre os casos que responderam
+as duas variáveis, pelas mesmas `serie_de_texto` e `rotulo_de` da associação, na
+ordem do dicionário — que decide o sinal da diferença. Três ou mais grupos ainda não
+estão no FlatCap, e o item é recusado com a frase que diz isso.
+
+**A regra é a mesma, grupo a grupo.** O Shapiro-Wilk em cada grupo; a normal se
+sustenta quando se sustenta em todos. O paramétrico da regra é o **t de Welch** — o
+padrão do `t.test` do R, que não supõe variâncias iguais e dispensa o Levene —, e
+ele ainda não está no FlatCap: sem método escrito, a linha sai sem teste, e o aviso
+ensina a escrever `student`. **O t de Student** roda quando está escrito no item, é o
+`t.test(var.equal = TRUE)` do R pelo `scipy`, e sai com o aviso de quanto o maior
+desvio padrão passa do menor quando passa de duas vezes.
+
+**Uma tabela por delineamento, na mesma pasta.** `uma_amostra.csv`, como antes, e
+`dois_grupos.csv`, com um bloco por item: a linha da comparação — n, diferença das
+médias com o IC 95%, teste e p — e uma linha por grupo, com n, média e desvio. O
+manifesto ganha um artefato por tabela, e o documento, as duas tabelas na mesma
+seção. O `relatorio.py` não mudou.
+
+**`associacao.na_ordem_do_dicionario` ficou pública**, com o apelido privado: os
+grupos da comparação saem na mesma ordem das categorias da associação.
+
+## 1.9.0 — o t de Welch
+
+**O paramétrico da regra entre dois grupos passa a rodar.** `[imc, sexo]` sem método
+dá o t de Welch quando o Shapiro-Wilk não rejeita a normal em nenhum dos grupos: o
+`t.test(x, y)` do R, o padrão dele, pelo `scipy` — cada grupo com a sua variância, os
+graus de liberdade de Welch-Satterthwaite, fracionários, e o IC 95% da diferença. As
+linhas que saíam sem teste por falta dele viram linhas de Welch; as que saem sem
+teste agora são as da normal rejeitada, onde a regra escolhe o Mann-Whitney.
+
+**`t` entre grupos é o de Welch**, como o `t.test` sem argumento; `welch` também, e
+`welsh` é lido como ele. O de Student continua escrito, `student`, com o aviso das
+variâncias — que agora diz que o de Welch não as supõe, sem o "ainda não está".
+
+**A barreira do R para ele**: dois valores em cada grupo, porque cada grupo entra com a
+sua variância, e a de um valor só não existe — o `not enough 'x' observations`. Um
+grupo que não varia não barra: o t existe, com os gl do outro grupo, e o aviso de
+«perda de precisão» que o `scipy` emite nesse caso é calado, porque ali a conta está
+certa.
+
+## 1.10.0 — três grupos ou mais, e a ANOVA
+
+**A comparação entre três grupos ou mais.** O mesmo item, `[imc, escolaridade]`: o
+banco diz quantos grupos há, e com três ou mais a comparação vai para a tabela
+`k_grupos.csv` — o bloco da comparação e uma linha por grupo, sem a coluna da
+diferença, que com k grupos não é uma só. A recusa dos três grupos, da 1.8.0, saiu.
+
+**A regra escolhe a ANOVA de Welch**, o padrão do `oneway.test` do R, pela razão do t
+de Welch — e ela ainda não está no FlatCap: sem método escrito, a linha sai sem teste,
+e o aviso ensina a escrever `anova`. **A ANOVA clássica** roda quando está escrita no
+item: o `oneway.test(var.equal = TRUE)`, escrito no `hipoteses.py` — quatro linhas —
+porque o `f_oneway` do `scipy` dá o F e o p do R, mas não os graus de liberdade, e eles
+vão para a nota. O aviso das variâncias vale para ela como para o t de Student.
+
+**A barreira do R é a do `oneway.test`**: dois valores em cada grupo — o `aov`
+aceitaria um. E uma que o R não tem: grupos que não variam por dentro, onde ele
+devolve F infinito e p zero, saem sem teste.
+
+**O método do número errado de grupos recusa e ensina a troca**: `student` numa
+variável de três grupos pede `anova`; `anova` numa de dois pede `student` — com dois
+grupos, o F é o t ao quadrado. Só o banco sabe quantos grupos há, e por isso essa
+recusa vem depois de abri-lo, junto das outras do mesmo tipo.
+
+**A ANOVA diz se as médias diferem, e não quais.** O pós-teste — Tukey depois da
+clássica, Games-Howell depois da de Welch — fica para depois, e a nota da tabela diz
+isso.
+
+## 1.11.0 — a ANOVA de Welch
+
+**O paramétrico da regra entre três grupos ou mais passa a rodar.** `[imc,
+escolaridade]` sem método dá a ANOVA de Welch quando o Shapiro-Wilk não rejeita a
+normal em nenhum dos grupos: o `oneway.test(y ~ g)` do R, o padrão dele — cada grupo
+pesado pelo inverso da variância da média, e os graus de liberdade do denominador de
+Welch, fracionários. Escrita no `hipoteses.py`, como a clássica, pela mesma razão: o
+`f_oneway(equal_var=False)` dá o F e o p do R, e não os gl.
+
+**`welch` escrito é o de Welch do número de grupos que o banco trouxer**: o t com dois,
+a ANOVA com três ou mais. E o `t` escrito numa variável de três grupos passa a ensinar
+`welch`, que agora existe.
+
+**A barreira que o R não tem**: um grupo que não varia. O peso dele é n/0, e o R
+devolve `NaN`; aqui a linha sai sem teste, com o nome do grupo. A clássica, que usa a
+variância combinada dos outros, roda sobre os mesmos dados.
+
+## 1.12.0 — as medidas repetidas
+
+**A mesma medida, três vezes ou mais, nos mesmos casos.** O item tem a marca
+`repetidas:` — `- repetidas: [pas_0, pas_1, pas_2]` —, e o método, quando vier, numa
+chave ao lado, `metodo: anova`, porque a lista das medidas não tem um terceiro lugar.
+Duas numéricas soltas seriam um pareado, ou um `[idade, imc]` escrito por engano; a
+marca diz que são a mesma medida. Com duas medidas a recusa diz que a pergunta é a do
+t pareado, que ainda não está no FlatCap e vai usar esta mesma forma.
+
+**A ANOVA de medidas repetidas, sempre com a correção de Greenhouse-Geisser**, pela
+razão do Welch: a correção custa pouco quando a esfericidade vale, protege quando não
+vale, e o Mauchly sai da frente. É o `anova.mlm` do R com `test = "Spherical"` — o F do
+`aov` com `Error(caso / medida)`, e o p da coluna `G-G Pr` —, transcrito no
+`hipoteses.py`, porque o `scipy` não tem; o ε e o F conferem com a conta em frações
+melhor do que o próprio `anova.mlm`, que erra na décima casa. O `Resultado` ganha o
+campo `epsilon`, e a frase da escolha o traz: `F = 37,04; 1,84 e 67,96 gl; ε = 0,918`.
+
+**A regra olha cada medida**: o Shapiro-Wilk em cada uma, sobre os casos completos; a
+normal rejeitada em alguma leva ao Friedman, que ainda não está no FlatCap.
+
+**Os faltantes são por item, e inteiros**: entra quem tem todas as medidas. A média de
+cada medida na tabela é a desses casos — e difere da do `resumo` da descritiva quando
+alguma medida tem faltante, o que a nota diz.
+
+**A tabela `repetidas.csv`**: uma linha por medida, com o teste e o p na primeira. E
+uma barreira que o R não tem: medidas que não variam dentro dos casos — cada caso
+mudando o mesmo tanto —, em que o R devolve um F de 10²⁹ feito de arredondamento.
 """
 
-__version__ = "1.7.0"
+__version__ = "1.12.0"

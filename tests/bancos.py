@@ -445,6 +445,140 @@ def para_comparar() -> pd.DataFrame:
     )
 
 
+def para_comparar_grupos() -> pd.DataFrame:
+    """
+    Sessenta casos para a comparação entre grupos, com cada coluna num caminho da regra.
+
+    `sexo` é o código `1`/`2`, alternando linha a linha, com **duas células vazias** no
+    segundo grupo: 30 casos no primeiro e 28 no segundo. Entre os grupos de `sexo`:
+
+    * `imc` — normal nos dois grupos, com a média do segundo 2,4 acima e o desvio 4
+      contra 3, e **uma célula vazia** no primeiro: o Shapiro-Wilk não rejeita em
+      nenhum, e a regra escolhe o **t de Welch**; com n de 29 e 28 e desvios
+      diferentes, o de Student e o de Welch dão números diferentes;
+    * `renda` — a exponencial de escores normais, assimétrica nos dois: o Shapiro-Wilk
+      rejeita, e a regra escolhe o **Mann-Whitney**;
+    * `pas` — normal nos dois, com o desvio do segundo **três vezes** o do primeiro: o
+      aviso das variâncias quando o t de Student é escrito no item;
+
+    e mais duas categóricas para os caminhos que não comparam dois grupos:
+    `escolaridade`, com **três** categorias, e `unico`, com `Sim` em todas as linhas —
+    **um grupo só**. Entre os grupos de `escolaridade`, `nota` é normal em cada um, com
+    as médias 6, 7 e 8 e os desvios 1, 1,5 e 2,5: a ANOVA rejeita a igualdade das
+    médias, e a de Welch dá outros graus de liberdade que a clássica.
+
+    Nada é sorteado: dentro de cada grupo, os escores são os quantis da normal em
+    posições igualmente espaçadas, na ordem da permutação fixa `(7 j) mod 30`, como no
+    `para_comparar`. Os números são conferidos contra o R sobre estes mesmos valores.
+    """
+    from statistics import NormalDist
+
+    n = 60
+    metade = n // 2
+    normal = NormalDist()
+    escores = [normal.inv_cdf((j + 0.5) / metade) for j in range(metade)]
+
+    def z(i: int) -> float:
+        return escores[(7 * (i // 2)) % metade]
+
+    def segundo(i: int) -> bool:
+        return i % 2 == 1
+
+    sexo: list[float | None] = [2 if segundo(i) else 1 for i in range(n)]
+    for posicao in (3, 7):
+        sexo[posicao] = None
+    imc: list[float | None] = [
+        round((27.4 + 4.0 * z(i)) if segundo(i) else (25.0 + 3.0 * z(i)), 1) for i in range(n)
+    ]
+    imc[10] = None
+    renda = [
+        round(2.718281828459045 ** ((8.3 if segundo(i) else 8.0) + 0.8 * z(i)), 2)
+        for i in range(n)
+    ]
+    pas = [
+        float(round((125 + 15 * z(i)) if segundo(i) else (120 + 5 * z(i)))) for i in range(n)
+    ]
+
+    # Dentro de cada escolaridade — a linha `i` é da categoria `i mod 3` —, os escores
+    # de vinte posições na ordem `(7 j) mod 20`.
+    terco = n // 3
+    escores_20 = [normal.inv_cdf((j + 0.5) / terco) for j in range(terco)]
+    media_e_desvio = ((6.0, 1.0), (7.0, 1.5), (8.0, 2.5))
+    nota = [
+        round(
+            media_e_desvio[i % 3][0]
+            + media_e_desvio[i % 3][1] * escores_20[(7 * (i // 3)) % terco],
+            1,
+        )
+        for i in range(n)
+    ]
+    return pd.DataFrame(
+        {
+            "imc": imc,
+            "renda": renda,
+            "pas": pas,
+            "nota": nota,
+            "sexo": sexo,
+            "escolaridade": _repetir(["Fundamental", "Médio", "Superior"], n),
+            "unico": ["Sim"] * n,
+        }
+    )
+
+
+def para_comparar_repetidas() -> pd.DataFrame:
+    """
+    Quarenta casos medidos três vezes, para a comparação entre medidas repetidas.
+
+    * `pas_0`, `pas_1`, `pas_2` — a PAS de cada caso em torno de um nível próprio, que
+      cai três e seis pontos nas medidas seguintes, com um ruído de cada medida: normal
+      nas três, e a regra escolhe a **ANOVA de medidas repetidas**. `pas_1` tem uma
+      célula vazia, e `pas_2` outra, em casos diferentes: **38 casos completos**;
+    * `dor_0`, `dor_1`, `dor_2` — uma escala de 0 a 4 com muitos zeros: o Shapiro-Wilk
+      rejeita, a regra escolhe o **Friedman**, que ainda não existe, e o aviso de
+      variável discreta;
+    * `peso_0`, `peso_1`, `peso_2` — cada caso ganha exatamente um quilo por medida:
+      **as medidas não variam dentro dos casos**, e o F seria uma divisão por zero;
+    * `sexo` — código `1`/`2`, para as recusas de tipo.
+
+    Nada é sorteado: os escores são os quantis da normal em quarenta posições, em
+    permutações fixas — `(7 i)`, `(11 i)`, `(13 i)` e `(17 i) mod 40`.
+    """
+    from statistics import NormalDist
+
+    n = 40
+    normal = NormalDist()
+    escores = [normal.inv_cdf((j + 0.5) / n) for j in range(n)]
+
+    def z(passo: int, i: int) -> float:
+        return escores[(passo * i) % n]
+
+    nivel = [130 + 12 * z(7, i) for i in range(n)]
+    pas_0: list[float | None] = [float(round(nivel[i] + 3 * z(11, i))) for i in range(n)]
+    pas_1: list[float | None] = [float(round(nivel[i] - 3 + 3 * z(13, i))) for i in range(n)]
+    pas_2: list[float | None] = [float(round(nivel[i] - 6 + 4 * z(17, i))) for i in range(n)]
+    pas_1[5] = None
+    pas_2[12] = None
+
+    def escala(deslocamento: float, passo: int) -> list[int]:
+        return [min(4, max(0, round(deslocamento + 1.3 * z(passo, i)))) for i in range(n)]
+
+    peso_0 = [round(70 + 9 * z(7, i), 1) for i in range(n)]
+    return pd.DataFrame(
+        {
+            "pas_0": pas_0,
+            "pas_1": pas_1,
+            "pas_2": pas_2,
+            "dor_0": escala(0.6, 11),
+            "dor_1": escala(0.3, 13),
+            "dor_2": escala(0.0, 17),
+            "peso_0": peso_0,
+            "peso_1": [round(valor + 1, 1) for valor in peso_0],
+            "peso_2": [round(valor + 2, 1) for valor in peso_0],
+            "sexo": _repetir([1, 2], n),
+        }
+    )
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

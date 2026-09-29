@@ -368,7 +368,11 @@ class TestFluxoCompleto:
             root = tmp_path / "FlatCapRoot"
             assert flatcap("novo", "40", "--sim", env=env).returncode == 0
             raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
-            acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, 25]\n  - [idade, 40, t]\n")
+            acrescentar_a_ficha(
+                raiz,
+                "comparacao:\n  - [imc, 25]\n  - [idade, 40, t]\n  - [imc, sexo, student]\n"
+                "  - [idade, escolaridade, anova]\n",
+            )
             for comando in (
                 ("perfil", "40", "--sim"),
                 ("descritiva", "40", "--sim"),
@@ -397,6 +401,87 @@ class TestFluxoCompleto:
         do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
         assert do_docx == do_csv
 
+        # Entre grupos: a segunda tabela da mesma seção, com o bloco da comparação e
+        # uma linha por grupo — as células vazias inclusive.
+        csv = raiz / "3. Análises" / "comparacao" / "dois_grupos.csv"
+        grupos_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert grupos_csv[0] == [
+            "variável", "grupo", "n", "média (DP)", "diferença (IC 95%)", "teste", "p-valor",
+        ]
+        assert [linha[1] for linha in grupos_csv[1:]] == ["sexo", "Feminino", "Masculino"]
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == grupos_csv[0]
+        )
+        assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == grupos_csv
+
+        csv = raiz / "3. Análises" / "comparacao" / "k_grupos.csv"
+        k_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert k_csv[0] == ["variável", "grupo", "n", "média (DP)", "teste", "p-valor"]
+        assert [linha[4] for linha in k_csv[1:]] == ["ANOVA", "", "", ""]
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == k_csv[0]
+        )
+        assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == k_csv
+
+
+    def test_as_medidas_repetidas_do_docx_e_as_do_csv(self, tmp_path):
+        """
+        As medidas repetidas pela mesma régua, com um banco que as tem: a tabela no
+        documento é, célula por célula, a do `repetidas.csv` — as células vazias das
+        linhas de baixo inclusive.
+        """
+        from docx import Document
+
+        anexo = bancos.csv_do_r(tmp_path / "banco.csv", bancos.para_comparar_repetidas())
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo.read_bytes())}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            acrescentar_a_ficha(
+                raiz,
+                "comparacao:\n  - repetidas: [pas_0, pas_1, pas_2]\n"
+                "  - repetidas: [peso_0, peso_1, peso_2]\n",
+            )
+            for comando in (
+                ("perfil", "40", "--sim"),
+                ("descritiva", "40", "--sim"),
+                ("comparacao", "40", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        csv = raiz / "3. Análises" / "comparacao" / "repetidas.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_csv[0] == ["medida", "n", "média (DP)", "teste", "p-valor"]
+        assert [linha[3] for linha in do_csv[1:]] == [
+            "ANOVA de medidas repetidas", "", "",
+            "não testado: as medidas não variam dentro dos casos", "", "",
+        ]
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == do_csv[0]
+        )
+        assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == do_csv
+
 
 class TestSemRede:
     """
@@ -424,7 +509,7 @@ class TestSemRede:
             "cruzamento:\n  - [sexo, escolaridade]\n"
             "associacao:\n  - [sexo, escolaridade]\n"
             "correlacao:\n  - [idade, imc]\n"
-            "comparacao:\n  - [imc, 25]\n",
+            "comparacao:\n  - [imc, 25]\n  - [imc, sexo, student]\n",
         )
         return env, raiz
 
