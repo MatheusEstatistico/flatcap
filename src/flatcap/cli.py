@@ -2565,9 +2565,11 @@ def comparacao(
     amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R. Entre os
     dois grupos de uma variável categórica, o t de Welch — o padrão do t.test — quando
     o Shapiro-Wilk não rejeita a normal em nenhum dos grupos; o t de Student roda
-    quando está escrito no item. Onde a regra escolhe um teste que ainda não existe, a
-    linha sai sem teste, com o motivo. Sai uma tabela por delineamento em
-    `3. Análises/comparacao/`, com um `manifesto.json`.
+    quando está escrito no item. Entre três grupos ou mais, a regra escolhe a ANOVA de
+    Welch, que ainda não está no FlatCap; a ANOVA clássica roda quando está escrita no
+    item. Onde a regra escolhe um teste que ainda não existe, a linha sai sem teste,
+    com o motivo. Sai uma tabela por delineamento em `3. Análises/comparacao/`, com um
+    `manifesto.json`.
 
     Os itens se escrevem na ficha — a variável e a referência, com ponto decimal, ou a
     variável e a de grupo:
