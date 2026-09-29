@@ -751,6 +751,17 @@ class TestComparacao:
         assert "→ t de Welch (t =" in saida
         assert "t de Welch com 12 valores em Feminino e 12 valores em Masculino" in saida
 
+    def test_tres_grupos_com_a_anova_escrita(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "comparacao:\n  - [idade, escolaridade, anova]\n")
+        resultado = rodar("comparacao", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Comparação entre três grupos ou mais" in saida
+        assert "ANOVA escrita na ficha (F =" in saida
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        assert (pasta / "k_grupos.csv").is_file()
+
     def test_entre_grupos_com_sim_escreve_as_duas_tabelas(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
         acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, 25]\n  - [imc, sexo, student]\n")
@@ -759,12 +770,12 @@ class TestComparacao:
         assert (pasta / "uma_amostra.csv").is_file()
         assert (pasta / "dois_grupos.csv").is_file()
 
-    def test_tres_grupos_sai_com_um(self, rodar, projeto_com_rodada):
+    def test_o_metodo_de_dois_grupos_em_tres_sai_com_um(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
-        acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, escolaridade]\n")
+        acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, escolaridade, student]\n")
         resultado = rodar("comparacao", RECORD_ID)
         assert resultado.exit_code == 1
-        assert "tem 3 grupos" in _sem_moldura(resultado)
+        assert "`student` não se aplica a 3 grupos" in _sem_moldura(resultado)
 
 
 class TestRelatorio:
