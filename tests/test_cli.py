@@ -762,6 +762,13 @@ class TestComparacao:
         pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
         assert (pasta / "k_grupos.csv").is_file()
 
+    def test_tres_grupos_pela_regra_vao_para_a_anova_de_welch(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "comparacao:\n  - [idade, escolaridade]\n")
+        saida = _saida(rodar("comparacao", RECORD_ID))
+        assert "não rejeita a normal em nenhum dos 3 grupos" in saida
+        assert "→ ANOVA de Welch (F =" in saida
+
     def test_entre_grupos_com_sim_escreve_as_duas_tabelas(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
         acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, 25]\n  - [imc, sexo, student]\n")
