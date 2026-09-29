@@ -2558,7 +2558,7 @@ def comparacao(
     ),
 ) -> None:
     """
-    Compara a média de variáveis numéricas com um valor de referência ou entre grupos.
+    Compara médias: contra um valor de referência, entre grupos ou entre medidas.
 
     Para cada item da lista `comparacao:` do projeto.yaml, o teste que a regra dos
     pressupostos escolhe. Contra um valor de referência, o t de Student para uma
@@ -2566,19 +2566,23 @@ def comparacao(
     dois grupos de uma variável categórica, o t de Welch — o padrão do t.test — quando
     o Shapiro-Wilk não rejeita a normal em nenhum dos grupos; o t de Student roda
     quando está escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão
-    do oneway.test —, e a clássica quando está escrita no item. Onde a regra escolhe um
+    do oneway.test —, e a clássica quando está escrita no item. Nas medidas repetidas —
+    a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA de medidas
+    repetidas, sempre com a correção de Greenhouse-Geisser. Onde a regra escolhe um
     teste que ainda não existe, a linha sai sem teste, com o motivo. Sai uma tabela por
     delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
 
-    Os itens se escrevem na ficha — a variável e a referência, com ponto decimal, ou a
-    variável e a de grupo:
+    Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
+    variável e a de grupo; ou as medidas repetidas, com a marca:
 
         comparacao:
           - \\[imc, 25]
           - \\[pas, 120, t]
           - \\[imc, sexo]
+          - repetidas: \\[pas_0, pas_1, pas_2]
 
-    O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra.
+    O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra. Nas
+    medidas repetidas, o método vem na chave `metodo:`, na linha de baixo.
 
     Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
