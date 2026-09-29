@@ -17,8 +17,8 @@ tem a sua tabela, na mesma pasta:
                  Masculino   56  27,22 (4,70)
 
     k_grupos.csv
-    variável     grupo          n  média (DP)    teste     p-valor
-    PAS (mmHg)   Escolaridade 114                ANOVA       0,012
+    variável     grupo          n  média (DP)    teste            p-valor
+    PAS (mmHg)   Escolaridade 114                ANOVA de Welch     0,011
                  Fundamental   34  128,1 (15,2)
                  Médio         52  131,0 (16,9)
                  Superior      28  138,4 (16,1)
@@ -94,10 +94,8 @@ grupos diferem.
 
 **Entre três grupos ou mais, pela mesma razão, a ANOVA de Welch** — o padrão do
 `oneway.test` do R —, e a clássica, de Fisher, quando está escrita no item:
-`[imc, escolaridade, anova]`. **Nesta versão a de Welch ainda não tem aritmética**:
-sem `anova` escrito, a linha sai sem teste, com o motivo — e o aviso diz como
-escrevê-lo. A ANOVA diz se as médias diferem, e não quais: o pós-teste ainda não está
-no FlatCap.
+`[imc, escolaridade, anova]`, com o mesmo aviso das variâncias do t de Student. A
+ANOVA diz se as médias diferem, e não quais: o pós-teste ainda não está no FlatCap.
 
 **A normalidade é a função, e não a rodada.** O teste é o `normalidade.shapiro`, o
 mesmo que a correlação chama, com as mesmas barreiras e os mesmos avisos — e não o
@@ -188,6 +186,7 @@ from .ficha import Ficha, bloco, escrever_atomico
 from .ficha import ler as ler_ficha
 from .hipoteses import (
     ANOVA,
+    ANOVA_DE_WELCH,
     CONFIANCA,
     MINIMO_STUDENT,
     MINIMO_T,
@@ -195,6 +194,7 @@ from .hipoteses import (
     T_DE_WELCH,
     Resultado,
     anova_de_um_fator,
+    anova_de_welch,
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_nos_grupos,
@@ -259,7 +259,6 @@ ARQUIVOS: dict[str, str] = {
 WILCOXON = "Wilcoxon"
 MANN_WHITNEY = "Mann-Whitney"
 KRUSKAL_WALLIS = "Kruskal-Wallis"
-ANOVA_DE_WELCH = "ANOVA de Welch"
 
 # A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
 # quando não. Entre grupos o paramétrico é o de Welch — o padrão do `t.test` e do
@@ -277,6 +276,7 @@ _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
     (UMA_AMOSTRA, T_DE_STUDENT): t_uma_amostra,
     (DOIS_GRUPOS, T_DE_WELCH): t_de_welch,
     (DOIS_GRUPOS, T_DE_STUDENT): t_de_student,
+    (K_GRUPOS, ANOVA_DE_WELCH): anova_de_welch,
     (K_GRUPOS, ANOVA): anova_de_um_fator,
 }
 
@@ -1399,7 +1399,9 @@ def _impedimento_do_teste(
 
     A ANOVA pede dois valores em cada grupo, como o `oneway.test` — que recusa o grupo
     de um valor, embora o `aov` o aceite. E grupos que não variam por dentro a barram
-    aqui, e não no R: lá o F sai infinito, e o p, zero.
+    aqui, e não no R: lá o F sai infinito, e o p, zero. Na de Welch basta **um** grupo
+    que não varia — o peso dele é n/0, e o R devolve `NaN`; a clássica, com a variância
+    combinada dos outros, roda.
     """
     if metodo == T_DE_WELCH:
         primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
@@ -1411,6 +1413,23 @@ def _impedimento_do_teste(
             )
         if sem_variacao_em_duas(primeiro, segundo, variancias_iguais=False):
             return _sem_variacao_nos_grupos(amostras)
+    if metodo == ANOVA_DE_WELCH:
+        pequenos = [grupo for grupo in grupos if grupo.n < MINIMO_T]
+        if pequenos:
+            return (
+                f"{pequenos[0].rotulo} tem {pequenos[0].n} valor — a ANOVA de Welch precisa "
+                f"de pelo menos {MINIMO_T} em cada grupo"
+            )
+        constantes = [
+            grupo
+            for grupo, amostra in zip(grupos, amostras, strict=True)
+            if sem_variacao(amostra.to_numpy())
+        ]
+        if constantes:
+            return (
+                f"{constantes[0].rotulo} não varia — a ANOVA de Welch divide pela variância "
+                "de cada grupo"
+            )
     if metodo == ANOVA:
         pequenos = [grupo for grupo in grupos if grupo.n < MINIMO_T]
         if pequenos:
@@ -1893,6 +1912,9 @@ def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Ta
         "uma comparação por bloco: a primeira linha traz a variável de grupo, o n dos "
         "casos que responderam as duas variáveis, o teste e o p; as seguintes, cada "
         "grupo, na ordem do dicionário.",
+        "ANOVA de Welch, como o oneway.test do R — o padrão dele: cada grupo pesado pelo "
+        "inverso da variância da sua média, e o F com k − 1 e os graus de liberdade de "
+        "Welch no denominador, fracionários.",
         "ANOVA de um fator, como o oneway.test do R com var.equal = TRUE — o aov, quando "
         "cada grupo tem dois valores ou mais: a variância dentro dos grupos combinada, e "
         "o F com k − 1 e N − k graus de liberdade.",
@@ -2649,6 +2671,10 @@ def _regras() -> dict[str, Any]:
             "oneway.test do R com var.equal = TRUE: a variância dentro dos grupos "
             "combinada, F com k − 1 e N − k graus de liberdade; sem pós-teste"
         ),
+        "anova_de_welch": (
+            "oneway.test do R, o padrão dele (var.equal = FALSE): cada grupo pesado pelo "
+            "inverso da variância da média, F com k − 1 e os gl de Welch; sem pós-teste"
+        ),
         "normalidade": (
             "Shapiro-Wilk, pela mesma função da análise de normalidade — sobre os valores "
             "preenchidos na uma amostra, e dentro de cada grupo entre grupos"
@@ -2663,6 +2689,7 @@ def _regras() -> dict[str, Any]:
             "t_de_welch": f"{MINIMO_T} em cada grupo",
             "t_de_student": MINIMO_STUDENT,
             "anova": f"{MINIMO_T} em cada grupo",
+            "anova_de_welch": f"{MINIMO_T} em cada grupo",
         },
         "faltantes": "por variável na uma amostra; por comparação entre grupos",
         "hipotese": "bilateral",
