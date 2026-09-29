@@ -55,7 +55,8 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
    com correção de continuidade nos outros casos; o `scipy` decide o exato por outro
    critério e não corrige;
 3. **nem isso basta** → transcrever a aritmética do R, como o AS 89 do Spearman e o
-   algoritmo de rede do Fisher.
+   algoritmo de rede do Fisher — e a ANOVA de medidas repetidas, que o `scipy` não
+   tem: ver `anova_de_medidas_repetidas`.
 
 ## O que ele recusa
 
@@ -65,7 +66,8 @@ valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo 
 R para ele: um valor em cada grupo e três no total (`not enough observations`); no de
 Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
 a sua variância, e a de um valor só não existe; na ANOVA — as duas —, dois em cada grupo
-também, que é o `not enough observations` do `oneway.test`. Quem
+também, que é o `not enough observations` do `oneway.test`; nas medidas repetidas, dois
+casos com todas as medidas. Quem
 chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
 de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
 ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
@@ -107,6 +109,7 @@ T_DE_STUDENT = "t de Student"
 T_DE_WELCH = "t de Welch"
 ANOVA = "ANOVA"
 ANOVA_DE_WELCH = "ANOVA de Welch"
+ANOVA_DE_MEDIDAS_REPETIDAS = "ANOVA de medidas repetidas"
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,10 @@ class Resultado:
     `estimativa` é o que o teste estima — a média, a diferença de médias, a
     pseudomediana —, com o nome em `nome_da_estimativa`; `ic` é o intervalo dela,
     como o `conf.int` do R; `referencia` é o `mu` da hipótese nula.
+
+    `epsilon` é o ε de Greenhouse-Geisser das medidas repetidas — o quanto a correção
+    encolheu os graus de liberdade, que em `gl` já saem corrigidos. É o único campo que
+    não está no `htest`: o R o dá no `anova.mlm`, que não é um.
     """
 
     metodo: str
@@ -136,6 +143,7 @@ class Resultado:
     nome_da_estimativa: str = ""
     ic: tuple[float, float] | None = None
     referencia: float | None = None
+    epsilon: float | None = None
 
 
 # O t de Student
@@ -390,6 +398,136 @@ def anova_de_welch(grupos: Sequence[Sequence[float]]) -> Resultado:
     )
 
 
+def anova_de_medidas_repetidas(medidas: Sequence[Sequence[float]]) -> Resultado:
+    """
+    A ANOVA de um fator de medidas repetidas — as mesmas pessoas medidas k vezes —,
+    **sempre com a correção de Greenhouse-Geisser**: o `anova(lm(Y ~ 1), X = ~1,
+    test = "Spherical")` do R, a coluna `G-G Pr`. É o F do `aov(y ~ tempo +
+    Error(id / tempo))`, com os graus de liberdade multiplicados pelo ε.
+
+        SS_medidas = n Σ (x̄ⱼ − x̄)²                      gl = k − 1
+        SS_erro    = Σ (xᵢⱼ − x̄ᵢ − x̄ⱼ + x̄)²             gl = (n − 1)(k − 1)
+        F          = [SS_medidas / (k − 1)] / [SS_erro / (n − 1)(k − 1)]
+        ε          = (tr D)² / [(k − 1) tr D²],  D = a covariância das medidas centrada
+                     nas linhas e nas colunas
+        p          = cauda da F com ε (k − 1) e ε (n − 1)(k − 1) graus de liberdade
+
+    **Greenhouse-Geisser sempre, e sem o Mauchly antes**, pela razão do Welch: a
+    correção custa pouco quando a esfericidade vale, protege quando não vale, e tira um
+    teste preliminar da frente do teste que interessa. Com a esfericidade perfeita, ε
+    é 1 e o p é o da ANOVA sem correção.
+
+    **Transcrita, e não importada**: o `scipy` não tem ANOVA de medidas repetidas — é
+    o terceiro degrau da régua do topo. Do `scipy` vem só a cauda da F.
+
+    `medidas` são as k colunas, cada uma com os mesmos n casos, na mesma ordem: quem
+    chama tira antes os casos com alguma medida faltando, como o `lm` do R faz.
+
+    Raises:
+        ValueError: menos de duas medidas, medidas de tamanhos diferentes, menos de dois
+            casos, medidas que não variam dentro dos casos, ou valor ausente ou
+            infinito.
+    """
+    import numpy as np
+    from scipy import stats
+
+    matriz = _matriz_das_medidas(medidas)
+    if sem_variacao_entre_medidas(matriz):
+        raise ValueError(
+            "as medidas não variam dentro dos casos: o F é uma divisão por zero"
+        )
+
+    n, k = matriz.shape
+    geral = float(matriz.mean())
+    por_medida = matriz.mean(axis=0)
+    por_caso = matriz.mean(axis=1)
+    ss_medidas = n * float(((por_medida - geral) ** 2).sum())
+    residuo = matriz - por_caso[:, None] - por_medida[None, :] + geral
+    ss_erro = float((residuo**2).sum())
+    gl_medidas, gl_erro = k - 1, (n - 1) * (k - 1)
+    estatistica = (ss_medidas / gl_medidas) / (ss_erro / gl_erro)
+
+    covariancia = np.cov(matriz, rowvar=False, ddof=1)
+    centrada = (
+        covariancia
+        - covariancia.mean(axis=0)[None, :]
+        - covariancia.mean(axis=1)[:, None]
+        + covariancia.mean()
+    )
+    epsilon = float(np.trace(centrada)) ** 2 / (
+        (k - 1) * float(np.trace(centrada @ centrada))
+    )
+    gl = (epsilon * gl_medidas, epsilon * gl_erro)
+    return Resultado(
+        metodo=ANOVA_DE_MEDIDAS_REPETIDAS,
+        estatistica=estatistica,
+        nome_da_estatistica="F",
+        p=min(1.0, float(stats.f.sf(estatistica, *gl))),
+        gl=gl,
+        calculo_do_p=(
+            "F com a correção de Greenhouse-Geisser: ε (k − 1) e ε (n − 1)(k − 1) graus "
+            "de liberdade"
+        ),
+        epsilon=epsilon,
+    )
+
+
+def sem_variacao_entre_medidas(medidas: Any) -> bool:
+    """
+    As medidas não variam dentro dos casos: cada caso muda o mesmo tanto de uma medida
+    para outra, ou não muda nada.
+
+    Aí a variação que sobra depois de tirar a média de cada caso e a de cada medida é
+    zero, e o F é uma divisão por zero. O R não barra: devolve um F de 10²³ feito de
+    ruído de arredondamento, ou um F de 72 para medidas idênticas — conferido. O
+    critério é o do `t.test`, levado para cá: o desvio padrão residual abaixo de dez
+    épsilons vezes a maior média em valor absoluto.
+
+    Recebe as colunas, ou a matriz n × k já montada.
+    """
+    matriz = _matriz_das_medidas(medidas, conferir=False)
+    n, k = matriz.shape
+    if n < MINIMO_T or k < 2:
+        return False
+    geral = float(matriz.mean())
+    por_medida = matriz.mean(axis=0)
+    residuo = matriz - matriz.mean(axis=1)[:, None] - por_medida[None, :] + geral
+    desvio = math.sqrt(float((residuo**2).sum()) / ((n - 1) * (k - 1)))
+    maior = float(abs(por_medida).max())
+    return desvio == 0 or desvio < 10 * sys.float_info.epsilon * maior
+
+
+def _matriz_das_medidas(medidas: Any, conferir: bool = True) -> Any:
+    """
+    As medidas como matriz n × k — os casos nas linhas, as medidas nas colunas —, com
+    as barreiras: duas medidas ou mais, todas do mesmo tamanho, e dois casos ou mais.
+    """
+    import numpy as np
+
+    if isinstance(medidas, np.ndarray) and medidas.ndim == 2:
+        vetores = [_vetor(medidas[:, j]) for j in range(medidas.shape[1])]
+    else:
+        vetores = [_vetor(medida) for medida in medidas]
+    if len(vetores) < 2:
+        raise ValueError(
+            f"a ANOVA de medidas repetidas precisa de pelo menos 2 medidas, e vieram "
+            f"{len(vetores)}"
+        )
+    tamanhos = {int(vetor.shape[0]) for vetor in vetores}
+    if len(tamanhos) != 1:
+        raise ValueError(
+            "as medidas precisam ter os mesmos casos, na mesma ordem, e vieram tamanhos "
+            + ", ".join(str(int(vetor.shape[0])) for vetor in vetores)
+        )
+    n = tamanhos.pop()
+    if conferir and n < MINIMO_T:
+        raise ValueError(
+            f"a ANOVA de medidas repetidas precisa de pelo menos {MINIMO_T} casos com "
+            f"todas as medidas, e vieram {n}"
+        )
+    return np.column_stack(vetores)
+
+
 def sem_variacao_nos_grupos(
     grupos: Sequence[Sequence[float]], variancias_iguais: bool = True
 ) -> bool:
@@ -539,14 +677,17 @@ __all__ = [
     "MINIMO_STUDENT",
     "MINIMO_T",
     "ANOVA",
+    "ANOVA_DE_MEDIDAS_REPETIDAS",
     "ANOVA_DE_WELCH",
     "T_DE_STUDENT",
     "T_DE_WELCH",
     "Resultado",
+    "anova_de_medidas_repetidas",
     "anova_de_um_fator",
     "anova_de_welch",
     "sem_variacao",
     "sem_variacao_em_duas",
+    "sem_variacao_entre_medidas",
     "sem_variacao_nos_grupos",
     "t_de_student",
     "t_de_welch",
