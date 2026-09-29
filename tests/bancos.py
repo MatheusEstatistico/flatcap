@@ -463,7 +463,9 @@ def para_comparar_grupos() -> pd.DataFrame:
 
     e mais duas categóricas para os caminhos que não comparam dois grupos:
     `escolaridade`, com **três** categorias, e `unico`, com `Sim` em todas as linhas —
-    **um grupo só**.
+    **um grupo só**. Entre os grupos de `escolaridade`, `nota` é normal em cada um, com
+    as médias 6, 7 e 8 e os desvios 1, 1,5 e 2,5: a ANOVA rejeita a igualdade das
+    médias, e a de Welch dá outros graus de liberdade que a clássica.
 
     Nada é sorteado: dentro de cada grupo, os escores são os quantis da normal em
     posições igualmente espaçadas, na ordem da permutação fixa `(7 j) mod 30`, como no
@@ -496,11 +498,26 @@ def para_comparar_grupos() -> pd.DataFrame:
     pas = [
         float(round((125 + 15 * z(i)) if segundo(i) else (120 + 5 * z(i)))) for i in range(n)
     ]
+
+    # Dentro de cada escolaridade — a linha `i` é da categoria `i mod 3` —, os escores
+    # de vinte posições na ordem `(7 j) mod 20`.
+    terco = n // 3
+    escores_20 = [normal.inv_cdf((j + 0.5) / terco) for j in range(terco)]
+    media_e_desvio = ((6.0, 1.0), (7.0, 1.5), (8.0, 2.5))
+    nota = [
+        round(
+            media_e_desvio[i % 3][0]
+            + media_e_desvio[i % 3][1] * escores_20[(7 * (i // 3)) % terco],
+            1,
+        )
+        for i in range(n)
+    ]
     return pd.DataFrame(
         {
             "imc": imc,
             "renda": renda,
             "pas": pas,
+            "nota": nota,
             "sexo": sexo,
             "escolaridade": _repetir(["Fundamental", "Médio", "Superior"], n),
             "unico": ["Sim"] * n,
