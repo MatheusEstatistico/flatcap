@@ -17,7 +17,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
-    comparacao.py  compara médias: contra uma referência, e entre dois grupos
+    comparacao.py  compara médias: contra uma referência, e entre grupos
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -295,6 +295,33 @@ sua variância, e a de um valor só não existe — o `not enough 'x' observatio
 grupo que não varia não barra: o t existe, com os gl do outro grupo, e o aviso de
 «perda de precisão» que o `scipy` emite nesse caso é calado, porque ali a conta está
 certa.
+
+## 1.10.0 — três grupos ou mais, e a ANOVA
+
+**A comparação entre três grupos ou mais.** O mesmo item, `[imc, escolaridade]`: o
+banco diz quantos grupos há, e com três ou mais a comparação vai para a tabela
+`k_grupos.csv` — o bloco da comparação e uma linha por grupo, sem a coluna da
+diferença, que com k grupos não é uma só. A recusa dos três grupos, da 1.8.0, saiu.
+
+**A regra escolhe a ANOVA de Welch**, o padrão do `oneway.test` do R, pela razão do t
+de Welch — e ela ainda não está no FlatCap: sem método escrito, a linha sai sem teste,
+e o aviso ensina a escrever `anova`. **A ANOVA clássica** roda quando está escrita no
+item: o `oneway.test(var.equal = TRUE)`, escrito no `hipoteses.py` — quatro linhas —
+porque o `f_oneway` do `scipy` dá o F e o p do R, mas não os graus de liberdade, e eles
+vão para a nota. O aviso das variâncias vale para ela como para o t de Student.
+
+**A barreira do R é a do `oneway.test`**: dois valores em cada grupo — o `aov`
+aceitaria um. E uma que o R não tem: grupos que não variam por dentro, onde ele
+devolve F infinito e p zero, saem sem teste.
+
+**O método do número errado de grupos recusa e ensina a troca**: `student` numa
+variável de três grupos pede `anova`; `anova` numa de dois pede `student` — com dois
+grupos, o F é o t ao quadrado. Só o banco sabe quantos grupos há, e por isso essa
+recusa vem depois de abri-lo, junto das outras do mesmo tipo.
+
+**A ANOVA diz se as médias diferem, e não quais.** O pós-teste — Tukey depois da
+clássica, Games-Howell depois da de Welch — fica para depois, e a nota da tabela diz
+isso.
 """
 
-__version__ = "1.9.0"
+__version__ = "1.10.0"
