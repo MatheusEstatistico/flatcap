@@ -4,10 +4,10 @@ Os testes do `hipoteses.py` — a aritmética, sem projeto, banco nem ficha.
 **Nenhum número daqui é conferido contra o próprio módulo.** As referências são três,
 e independentes dele:
 
-* o **R 4.3.3**: `t.test(x, mu = mu)` e `t.test(x, y, var.equal = TRUE)` rodados
-  sobre os mesmos números, com o resultado copiado para `REFERENCIAS_DO_R` e
-  `REFERENCIAS_DO_R_STUDENT` — o t, os graus de liberdade, o p, os dois limites do
-  intervalo e a estimativa;
+* o **R 4.3.3**: `t.test(x, mu = mu)`, `t.test(x, y, var.equal = TRUE)` e
+  `t.test(x, y)` rodados sobre os mesmos números, com o resultado copiado para
+  `REFERENCIAS_DO_R`, `REFERENCIAS_DO_R_STUDENT` e `REFERENCIAS_DO_R_WELCH` — o t, os
+  graus de liberdade, o p, os dois limites do intervalo e a estimativa;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
   `sleep` do R. O t pareado que a documentação imprime — t = 4,0621, 9 gl,
   p = 0,002833 — é o t de uma amostra sobre as diferenças, que é a razão de o motor
@@ -31,10 +31,12 @@ from flatcap.hipoteses import (
     MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
+    T_DE_WELCH,
     Resultado,
     sem_variacao,
     sem_variacao_em_duas,
     t_de_student,
+    t_de_welch,
     t_uma_amostra,
 )
 
@@ -138,6 +140,23 @@ REFERENCIAS_DO_R_STUDENT = [
 ]
 
 
+# `t.test(x, y)` no R 4.3.3 — o de Welch, o padrão —, sobre os mesmos pares; o
+# `um_so` fica de fora, porque o R recusa (`not enough 'x' observations`):
+#
+#     (caso, t, gl, p, limite inferior, limite superior, diferença das médias)
+REFERENCIAS_DO_R_WELCH = [
+    ("grupos", -2.9378999464179807, 19.933726537810411, 0.0081540304894174315,
+     -5.908637029243204, -1.0013629707567926, -3.4549999999999983),
+    ("sleep", -1.8608134674868531, 17.776473516178498, 0.079394140187358173,
+     -3.3654832307117104, 0.20548323071171018, -1.5800000000000001),
+    ("mesma_media", 0, 2.8823529411764697, 1, -2.4877337982053822, 2.4877337982053822, 0),
+    ("um_constante", -0.75592894601845484, 2, 0.5285954792089681,
+     -4.4612497002634264, 3.1279163669300925, -0.66666666666666696),
+    ("desiguais", -5.7835953376020939, 7.4108290451050332, 0.00054793544032704473,
+     -25.698692720456485, -10.901307279543509, -18.299999999999997),
+]
+
+
 # ── O R ─────────────────────────────────────────────────────────────────────
 
 
@@ -214,6 +233,43 @@ class TestStudentDoR:
         assert volta.ic == pytest.approx((-ida.ic[1], -ida.ic[0]), rel=1e-14)
 
 
+class TestWelchDoR:
+    @pytest.mark.parametrize(
+        ("caso", "t", "gl", "p", "baixo", "alto", "diferenca"),
+        REFERENCIAS_DO_R_WELCH,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_WELCH],
+    )
+    def test_o_t_test_do_r(self, caso, t, gl, p, baixo, alto, diferenca):
+        x, y = DUAS_AMOSTRAS[caso]
+        resultado = t_de_welch(x, y)
+        assert resultado.estatistica == pytest.approx(t, rel=1e-12, abs=1e-12)
+        assert resultado.gl == pytest.approx((gl,), rel=1e-12)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert resultado.ic == pytest.approx((baixo, alto), rel=1e-12)
+        assert resultado.estimativa == pytest.approx(diferenca, rel=1e-12, abs=1e-12)
+
+    def test_o_exemplo_da_documentacao(self):
+        """
+        `t.test(extra ~ group, data = sleep)`, o exemplo que a documentação imprime:
+        t = −1,8608, 17,776 gl, p = 0,07939.
+        """
+        resultado = t_de_welch(SONO_1, SONO_2)
+        assert round(resultado.estatistica, 4) == -1.8608
+        assert round(resultado.gl[0], 3) == 17.776
+        assert round(resultado.p, 5) == 0.07939
+
+    def test_com_as_variancias_iguais_os_gl_do_welch_sao_os_do_student(self):
+        """
+        Mesmo n e mesma variância nos dois grupos: a fórmula de Welch-Satterthwaite dá
+        n₁ + n₂ − 2, e os dois testes coincidem.
+        """
+        x = [1.0, 2.0, 3.0, 4.0, 5.0]
+        y = [2.0, 3.0, 4.0, 5.0, 6.0]
+        welch, student = t_de_welch(x, y), t_de_student(x, y)
+        assert welch.gl == pytest.approx(student.gl, rel=1e-12)
+        assert welch.p == pytest.approx(student.p, rel=1e-12)
+
+
 # ── As fórmulas, escritas de novo ───────────────────────────────────────────
 
 
@@ -238,6 +294,26 @@ class TestFormula:
     def test_a_referencia_na_media_da_t_zero_e_p_um(self):
         resultado = t_uma_amostra(_dados("no_centro"), 3)
         assert (resultado.estatistica, resultado.p) == (0.0, 1.0)
+
+    @pytest.mark.parametrize("caso", ["grupos", "sleep", "desiguais"])
+    def test_o_de_welch_pela_formula(self, caso):
+        """As variâncias separadas e os gl de Welch-Satterthwaite, com o `statistics`."""
+        x, y = DUAS_AMOSTRAS[caso]
+        a = statistics.variance(x) / len(x)
+        b = statistics.variance(y) / len(y)
+        erro = math.sqrt(a + b)
+        gl = (a + b) ** 2 / (a**2 / (len(x) - 1) + b**2 / (len(y) - 1))
+        diferenca = statistics.fmean(x) - statistics.fmean(y)
+        t = diferenca / erro
+        quantil = stats.t.ppf((1 + CONFIANCA) / 2, gl)
+
+        resultado = t_de_welch(x, y)
+        assert resultado.estatistica == pytest.approx(t, rel=1e-10)
+        assert resultado.gl == pytest.approx((gl,), rel=1e-10)
+        assert resultado.p == pytest.approx(2 * stats.t.sf(abs(t), gl), rel=1e-9)
+        assert resultado.ic == pytest.approx(
+            (diferenca - quantil * erro, diferenca + quantil * erro), rel=1e-12
+        )
 
     @pytest.mark.parametrize("caso", ["grupos", "sleep", "um_so", "desiguais"])
     def test_o_de_student_pela_formula(self, caso):
@@ -325,6 +401,34 @@ class TestRecusas:
         assert sem_variacao_em_duas([5.0, 5.0, 5.0], [6.0, 6.0, 6.0, 6.0])
         assert sem_variacao_em_duas([5.0, 5.0], [6.0, 6.0], variancias_iguais=False)
 
+    def test_o_welch_com_um_valor_num_grupo_como_o_r(self):
+        """O `not enough 'x' observations` do R — que o de Student aceitaria."""
+        x, y = DUAS_AMOSTRAS["um_so"]
+        with pytest.raises(ValueError, match="pelo menos 2 valores em cada grupo"):
+            t_de_welch(x, y)
+        with pytest.raises(ValueError, match="pelo menos 2 valores em cada grupo"):
+            t_de_welch(y, x)
+        assert t_de_student(x, y).gl == (11.0,)
+
+    def test_o_criterio_de_constante_e_o_erro_padrao_do_proprio_teste(self):
+        """
+        Um grupo de dois valores que diferem por 1e-8 em torno de um milhão, contra mil
+        valores iguais. No de Student a variância combinada dilui o grupo pequeno, o
+        erro-padrão cai abaixo do critério e o R recusa; no de Welch cada grupo entra com
+        a sua, e o R calcula: t = 1, 1 gl, p = 0,5 — conferido nos dois.
+        """
+        x, y = [1e6, 1e6 + 1e-8], [1e6] * 1000
+        assert sem_variacao_em_duas(x, y, variancias_iguais=True)
+        assert not sem_variacao_em_duas(x, y, variancias_iguais=False)
+        with pytest.raises(ValueError, match="não variam"):
+            t_de_student(x, y)
+        resultado = t_de_welch(x, y)
+        assert (resultado.gl[0], resultado.p) == pytest.approx((1.0, 0.5), rel=1e-9)
+
+    def test_o_welch_de_dois_grupos_que_nao_variam(self):
+        with pytest.raises(ValueError, match="não variam"):
+            t_de_welch([5.0, 5.0, 5.0], [6.0, 6.0, 6.0, 6.0])
+
     def test_um_grupo_que_nao_varia_nao_basta(self):
         """
         A variância combinada é a do outro grupo, e o t existe — o `um_constante` das
@@ -373,6 +477,13 @@ class TestContrato:
         assert t_uma_amostra([24.0, 27.0], 25).gl == (1.0,)
         assert MINIMO_STUDENT == 3
         assert t_de_student([24.0], [27.0, 28.0]).gl == (1.0,)
+
+    def test_o_de_welch_estima_a_diferenca(self):
+        resultado = t_de_welch(*DUAS_AMOSTRAS["grupos"])
+        assert resultado.metodo == T_DE_WELCH == "t de Welch"
+        assert resultado.nome_da_estimativa == "diferença de médias"
+        assert resultado.referencia == 0.0
+        assert "Welch-Satterthwaite" in resultado.calculo_do_p
 
     def test_o_de_student_estima_a_diferenca(self):
         resultado = t_de_student(*DUAS_AMOSTRAS["grupos"])
