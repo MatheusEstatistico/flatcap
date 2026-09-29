@@ -21,7 +21,8 @@ O banco de referência é o `bancos.para_comparar()`: sessenta casos e uma vari�
 para cada caminho da regra. Entre grupos, o `bancos.para_comparar_grupos()`, com o
 `t.test(y ~ sexo, var.equal = TRUE)` e o `shapiro.test` de cada grupo rodados no R
 sobre ele — em `STUDENT_DO_R` —, o `t.test(y ~ sexo)`, o de Welch, em `WELCH_DO_R`, e
-o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R`.
+o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R` e o
+`oneway.test(y ~ escolaridade)`, o de Welch, em `ANOVA_DE_WELCH_DO_R`.
 """
 
 from __future__ import annotations
@@ -184,6 +185,15 @@ ANOVA_DO_R = [
         (19, 26.331578947368421, 3.6157145646283388, 0.99168933343034105, 0.99957916454533602),
         (20, 26.515000000000001, 3.8354681317244292, 0.97605184600851136, 0.87368281207131027),
     )),
+]
+
+
+# `oneway.test(y ~ escolaridade)` — a ANOVA de Welch, o padrão do R:
+#
+#     (variável, F, gl, p)
+ANOVA_DE_WELCH_DO_R = [
+    ("nota", 7.1088234461909936, (2, 34.461935431552092), 0.0026015438081409816),
+    ("imc", 0.11146986509410804, (2, 37.324143867146049), 0.89481500877396836),
 ]
 
 
@@ -1361,6 +1371,20 @@ class TestKGruposDoR:
             assert grupo.normal.w == pytest.approx(w, rel=1e-6)
             assert grupo.normal.p == pytest.approx(p_shapiro, rel=1e-4)
 
+    @pytest.mark.parametrize(
+        ("variavel", "f", "gl", "p"),
+        ANOVA_DE_WELCH_DO_R,
+        ids=[v for v, *_ in ANOVA_DE_WELCH_DO_R],
+    )
+    def test_a_anova_de_welch_do_r(self, variavel, f, gl, p):
+        """Sem método escrito: a normal se sustenta nos três grupos, e a regra a escolhe."""
+        comparada = _grupos(((variavel, "escolaridade"),)).variaveis[0]
+        resultado = comparada.resultado
+        assert (resultado.metodo, comparada.escolha.pela_ficha) == (ANOVA_DE_WELCH, False)
+        assert resultado.estatistica == pytest.approx(f, rel=1e-12)
+        assert resultado.gl == pytest.approx(gl, rel=1e-12)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+
     def test_o_grupo_constante_nao_barra_a_anova(self):
         """`oneway.test` com um grupo de valores iguais: F = 10,5, 2 e 6 gl, p = 0,01097."""
         quadro, linhas = _tres([5.0, 5.0, 5.0], [4.0, 6.0, 7.0], [8.0, 9.0, 11.0])
@@ -1370,24 +1394,22 @@ class TestKGruposDoR:
 
 
 class TestKGruposRegra:
-    def test_a_normal_em_todos_escolhe_a_anova_de_welch_que_ainda_nao_existe(self):
+    def test_a_normal_em_todos_vai_para_a_anova_de_welch(self):
         comparada = _grupos((("nota", "escolaridade"),)).variaveis[0]
         assert comparada.delineamento == K_GRUPOS
-        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", ANOVA_DE_WELCH)
+        assert comparada.metodo == ANOVA_DE_WELCH
         assert comparada.escolha.motivo == (
             "o Shapiro-Wilk não rejeita a normal em nenhum dos 3 grupos (Fundamental: "
             "p = 1,000; Médio: p = 1,000; Superior: p = 1,000)"
         )
-        assert comparada.celula_do_teste == (
-            "não testado: ANOVA de Welch ainda não está no FlatCap"
-        )
+        assert comparada.celula_do_teste == ANOVA_DE_WELCH
+        assert comparada.justificativa.endswith("→ ANOVA de Welch (F = 7,11; 2 e 34,46 gl).")
 
-    def test_a_linha_sem_a_de_welch_ensina_a_escrever_anova(self):
-        avisos = _grupos((("nota", "escolaridade"),)).avisos
+    def test_a_de_welch_pela_regra_com_um_grupo_pequeno_avisa(self):
+        """O IMC tem dezenove valores no Médio: abaixo de vinte, o aviso."""
+        avisos = _grupos((("imc", "escolaridade"),)).avisos
         assert any(
-            "a regra escolheria ANOVA de Welch, que ainda não está no FlatCap" in aviso
-            and "A ANOVA, que supõe a mesma variância nos grupos, roda com o método" in aviso
-            and "`[nota, escolaridade, anova]`" in aviso
+            "`imc` por `escolaridade`: ANOVA de Welch com 19 valores em Médio" in aviso
             for aviso in avisos
         )
 
@@ -1397,7 +1419,8 @@ class TestKGruposRegra:
         assert comparada.escolha.da_regra == KRUSKAL_WALLIS
         assert comparada.celula_do_teste == "não testado: normal rejeitada"
         assert any(
-            "Se a ANOVA vale aqui" in aviso and "`[renda, escolaridade, anova]`" in aviso
+            "Se a ANOVA de Welch vale aqui" in aviso
+            and "`[renda, escolaridade, welch]`" in aviso
             for aviso in comparacao.avisos
         )
 
@@ -1406,7 +1429,7 @@ class TestKGruposRegra:
         assert any(
             "`nota` por `escolaridade`: a ANOVA supõe a mesma variância nos grupos, e o "
             "desvio padrão de Superior (2,49) é 2,5 vezes o de Fundamental (1,01). A ANOVA "
-            "de Welch, que ainda não está no FlatCap, não supõe." in aviso
+            "de Welch não supõe." in aviso
             for aviso in avisos
         )
 
@@ -1423,7 +1446,7 @@ class TestKGruposRegra:
         with pytest.raises(ItemInvalidoError) as erro:
             _grupos((("imc", "escolaridade", "t"),))
         assert "`t` não se aplica a 3 grupos" in str(erro.value)
-        assert "o t compara dois grupos; escreva `anova`" in str(erro.value)
+        assert "o t compara dois grupos; escreva `welch`" in str(erro.value)
 
     def test_a_anova_em_dois_grupos(self):
         with pytest.raises(ItemInvalidoError) as erro:
@@ -1432,19 +1455,69 @@ class TestKGruposRegra:
         assert "`anova` não se aplica a 2 grupos" in mensagem
         assert "o F da ANOVA é o t de Student ao quadrado; escreva `student`" in mensagem
 
-    def test_o_welch_em_tres_grupos_ainda_nao_existe(self):
+    def test_o_parametrico_que_falta_no_registro(self, monkeypatch):
+        """
+        O caminho de quando o paramétrico da regra ainda não tem aritmética — o de todo
+        teste novo que entra na regra antes do cálculo. Tirada a ANOVA de Welch do
+        registro, a linha sai sem teste, com o motivo, e o aviso ensina a clássica.
+        """
+        import flatcap.comparacao as modulo
+
+        calculo = {k: v for k, v in modulo._CALCULO.items() if k != (K_GRUPOS, ANOVA_DE_WELCH)}
+        monkeypatch.setattr(modulo, "_CALCULO", calculo)
+        comparacao = _grupos((("nota", "escolaridade"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: ANOVA de Welch ainda não está no FlatCap"
+        )
+        assert any(
+            "A ANOVA, que supõe a mesma variância nos grupos, roda com o método escrito no "
+            "item: `[nota, escolaridade, anova]`" in aviso
+            for aviso in comparacao.avisos
+        )
+        assert "Os dois ainda não estão no FlatCap" in comparacao.tabela_de(K_GRUPOS).texto()
+
+    def test_a_troca_que_falta_no_registro_cai_na_que_existe(self, monkeypatch):
+        """Sem a ANOVA de Welch, o `t` numa variável de três grupos ensina a `anova`."""
+        import flatcap.comparacao as modulo
+
+        calculo = {k: v for k, v in modulo._CALCULO.items() if k != (K_GRUPOS, ANOVA_DE_WELCH)}
+        monkeypatch.setattr(modulo, "_CALCULO", calculo)
         with pytest.raises(ItemInvalidoError) as erro:
-            _grupos((("imc", "escolaridade", "welch"),))
-        assert "a ANOVA de Welch ainda não está no FlatCap" in str(erro.value)
+            _grupos((("imc", "escolaridade", "t"),))
+        assert "o t compara dois grupos; escreva `anova`" in str(erro.value)
+
+    def test_welch_e_o_t_com_dois_grupos_e_a_anova_com_tres(self):
+        """O mesmo nome, e o teste que o número de grupos do banco pede."""
+        comparacao = _grupos((("imc", "sexo", "welch"), ("imc", "escolaridade", "welch")))
+        assert [v.metodo for v in comparacao.variaveis] == [T_DE_WELCH, ANOVA_DE_WELCH]
+        assert all(not v.escolha.contra_a_regra for v in comparacao.variaveis)
 
     def test_o_registro_da_regra_entre_tres_grupos_ou_mais(self):
         assert REGRA[K_GRUPOS] == (ANOVA_DE_WELCH, KRUSKAL_WALLIS)
         assert metodo_escrito("anova", K_GRUPOS) == ANOVA
         assert metodo_escrito("anova", DOIS_GRUPOS) == ""
-        assert metodo_escrito("welch", K_GRUPOS) == ""
+        assert metodo_escrito("welch", K_GRUPOS) == ANOVA_DE_WELCH
+        assert metodo_escrito("ANOVA de Welch", K_GRUPOS) == ANOVA_DE_WELCH
 
 
 class TestKGruposSemTeste:
+    def test_um_valor_num_grupo_nao_da_a_de_welch(self):
+        quadro, linhas = _tres([30.0], [24.1, 27.3, 22.8], [26.5, 29.9, 31.2])
+        comparada = _grupos((("y", "g", "welch"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: A tem 1 valor — a ANOVA de Welch precisa de pelo menos 2 em cada "
+            "grupo"
+        )
+
+    def test_um_grupo_que_nao_varia_nao_da_a_de_welch(self):
+        """O R devolve `NaN`: o peso do grupo constante é n/0. A clássica roda."""
+        quadro, linhas = _tres([5.0, 5.0, 5.0], [4.0, 6.0, 7.0], [8.0, 9.0, 11.0])
+        comparacao = _grupos((("y", "g", "welch"),), quadro, linhas)
+        assert comparacao.variaveis[0].celula_do_teste == (
+            "não testado: A não varia — a ANOVA de Welch divide pela variância de cada grupo"
+        )
+
     def test_um_valor_num_grupo_nao_da_a_anova(self):
         """O `not enough observations` do `oneway.test`, que o `aov` aceitaria."""
         quadro, linhas = _tres([30.0], [24.1, 27.3, 22.8], [26.5, 29.9, 31.2])
@@ -1498,7 +1571,8 @@ class TestKGruposTabela:
     def test_as_notas_dizem_como_o_r_faz_e_o_que_falta(self):
         texto = _grupos((("nota", "escolaridade"),)).tabela_de(K_GRUPOS).texto()
         assert "oneway.test do R com var.equal = TRUE" in texto
-        assert "Os dois ainda não estão no FlatCap" in texto
+        assert "os graus de liberdade de Welch no denominador" in texto
+        assert "O Kruskal-Wallis ainda não está no FlatCap" in texto
         assert "o pós-teste — ainda não está no FlatCap" in texto
         assert (
             "Nota por Escolaridade: n = 60 (20 em Fundamental, 20 em Médio e 20 em "
@@ -1575,6 +1649,7 @@ class TestManifestoEntreGrupos:
             "t_de_welch": "2 em cada grupo",
             "t_de_student": 3,
             "anova": "2 em cada grupo",
+            "anova_de_welch": "2 em cada grupo",
         }
 
 
