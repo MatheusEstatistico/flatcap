@@ -2563,11 +2563,11 @@ def comparacao(
     Para cada item da lista `comparacao:` do projeto.yaml, o teste que a regra dos
     pressupostos escolhe. Contra um valor de referência, o t de Student para uma
     amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R. Entre os
-    dois grupos de uma variável categórica, o t de Welch quando o Shapiro-Wilk não
-    rejeita a normal em nenhum dos grupos — e ele ainda não está no FlatCap: o t de
-    Student roda quando está escrito no item. Onde a regra escolhe um teste que ainda
-    não existe, a linha sai sem teste, com o motivo. Sai uma tabela por delineamento
-    em `3. Análises/comparacao/`, com um `manifesto.json`.
+    dois grupos de uma variável categórica, o t de Welch — o padrão do t.test — quando
+    o Shapiro-Wilk não rejeita a normal em nenhum dos grupos; o t de Student roda
+    quando está escrito no item. Onde a regra escolhe um teste que ainda não existe, a
+    linha sai sem teste, com o motivo. Sai uma tabela por delineamento em
+    `3. Análises/comparacao/`, com um `manifesto.json`.
 
     Os itens se escrevem na ficha — a variável e a referência, com ponto decimal, ou a
     variável e a de grupo:
@@ -2575,7 +2575,7 @@ def comparacao(
         comparacao:
           - \\[imc, 25]
           - \\[pas, 120, t]
-          - \\[imc, sexo, student]
+          - \\[imc, sexo]
 
     O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra.
 
