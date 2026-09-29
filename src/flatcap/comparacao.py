@@ -16,6 +16,13 @@ tem a sua tabela, na mesma pasta:
                  Feminino    60  25,70 (4,41)
                  Masculino   56  27,22 (4,70)
 
+    k_grupos.csv
+    variável     grupo          n  média (DP)    teste     p-valor
+    PAS (mmHg)   Escolaridade 114                ANOVA       0,012
+                 Fundamental   34  128,1 (15,2)
+                 Médio         52  131,0 (16,9)
+                 Superior      28  138,4 (16,1)
+
     * não testado: normal rejeitada — a regra escolhe o Wilcoxon, que ainda não está no
       FlatCap, e a linha sai com o motivo no lugar do teste.
 
@@ -51,15 +58,15 @@ A forma do item e os tipos das variáveis dizem qual comparação é:
 
     [imc, 25]                  numérica, e um número       uma amostra
     [imc, sexo]                numérica, categórica        dois grupos
+    [imc, escolaridade]        numérica, categórica        três grupos ou mais
     [pas_antes, pas_depois]    numérica, numérica          pareado (depois)
 
 **O número de grupos sai do banco, e não do dicionário.** Os grupos são os rótulos
 com resposta entre os casos que responderam as duas variáveis — pelas mesmas
 `serie_de_texto` e `rotulo_de` do cruzamento e da associação: dois códigos com o
 mesmo rótulo (`1=Sim|2=Sim`) são um grupo só, e uma categoria declarada que ninguém
-marcou não é grupo. Um grupo só dá linha sem teste; três ou mais ainda não estão no
-FlatCap, e o item é recusado com a frase que diz isso — agrupar categorias no
-dicionário é o caminho para ficar com dois.
+marcou não é grupo. Dois grupos são a tabela dos dois grupos; três ou mais, a dos k
+grupos. Um grupo só dá linha sem teste, na tabela que o dicionário promete.
 
 **Os faltantes são por comparação**: entra quem respondeu as duas variáveis. É o
 `na.omit` da fórmula do R.
@@ -73,8 +80,8 @@ Três passos, como na correlação:
    que o t supõe, e não a da coluna inteira. Não rejeitou em nenhum → o paramétrico;
 2. **rejeitou em algum, ou não pôde ser verificado em algum** (menos de três valores,
    ou um grupo que não varia) → o que dispensa a normal: o Wilcoxon na uma amostra, o
-   Mann-Whitney entre dois grupos. Nenhum dos dois está no FlatCap ainda, e a linha
-   sai **sem teste**, com o motivo na coluna `teste`;
+   Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou mais. Nenhum deles
+   está no FlatCap ainda, e a linha sai **sem teste**, com o motivo na coluna `teste`;
 3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, com um
    aviso e a frase nas notas do `.csv`.
 
@@ -84,6 +91,13 @@ não são (Delacre, Lakens e Leys, 2017) — e dispensa o teste de Levene, que s
 teste preliminar a mais antes do teste que interessa. O de Student roda quando está
 escrito no item, `[imc, sexo, student]`, e o aviso diz quanto os desvios padrão dos
 grupos diferem.
+
+**Entre três grupos ou mais, pela mesma razão, a ANOVA de Welch** — o padrão do
+`oneway.test` do R —, e a clássica, de Fisher, quando está escrita no item:
+`[imc, escolaridade, anova]`. **Nesta versão a de Welch ainda não tem aritmética**:
+sem `anova` escrito, a linha sai sem teste, com o motivo — e o aviso diz como
+escrevê-lo. A ANOVA diz se as médias diferem, e não quais: o pós-teste ainda não está
+no FlatCap.
 
 **A normalidade é a função, e não a rodada.** O teste é o `normalidade.shapiro`, o
 mesmo que a correlação chama, com as mesmas barreiras e os mesmos avisos — e não o
@@ -173,14 +187,17 @@ from .dicionario import ARQUIVO_DICIONARIO, CATEGORICA, IGNORAR, NUMERICA, Linha
 from .ficha import Ficha, bloco, escrever_atomico
 from .ficha import ler as ler_ficha
 from .hipoteses import (
+    ANOVA,
     CONFIANCA,
     MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
     T_DE_WELCH,
     Resultado,
+    anova_de_um_fator,
     sem_variacao,
     sem_variacao_em_duas,
+    sem_variacao_nos_grupos,
     t_de_student,
     t_de_welch,
     t_uma_amostra,
@@ -219,18 +236,21 @@ from .projeto import (
 # linha por grupo e a diferença.
 UMA_AMOSTRA = "uma_amostra"
 DOIS_GRUPOS = "dois_grupos"
-DELINEAMENTOS = (UMA_AMOSTRA, DOIS_GRUPOS)
+K_GRUPOS = "k_grupos"
+DELINEAMENTOS = (UMA_AMOSTRA, DOIS_GRUPOS, K_GRUPOS)
 
 # A forma do item entre grupos, antes de o banco dizer quantos são. A `Pergunta` sai
 # da ficha com ela, e a `VariavelComparada` sai do banco com o delineamento de fato.
 GRUPOS = "grupos"
-_DOS_GRUPOS = (DOIS_GRUPOS,)
+_DOS_GRUPOS = (DOIS_GRUPOS, K_GRUPOS)
 
 ARQUIVO_TABELA = "uma_amostra.csv"
 ARQUIVO_DOIS_GRUPOS = "dois_grupos.csv"
+ARQUIVO_K_GRUPOS = "k_grupos.csv"
 ARQUIVOS: dict[str, str] = {
     UMA_AMOSTRA: ARQUIVO_TABELA,
     DOIS_GRUPOS: ARQUIVO_DOIS_GRUPOS,
+    K_GRUPOS: ARQUIVO_K_GRUPOS,
 }
 
 # Os testes que a regra conhece pelo nome e o FlatCap ainda não calcula. Os que têm
@@ -238,41 +258,60 @@ ARQUIVOS: dict[str, str] = {
 # os escolhe, e a linha sai sem teste, com o motivo.
 WILCOXON = "Wilcoxon"
 MANN_WHITNEY = "Mann-Whitney"
+KRUSKAL_WALLIS = "Kruskal-Wallis"
+ANOVA_DE_WELCH = "ANOVA de Welch"
 
 # A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
-# quando não. Entre dois grupos o paramétrico é o de Welch, o padrão do `t.test` do R.
+# quando não. Entre grupos o paramétrico é o de Welch — o padrão do `t.test` e do
+# `oneway.test` do R.
 REGRA: dict[str, tuple[str, str]] = {
     UMA_AMOSTRA: (T_DE_STUDENT, WILCOXON),
     DOIS_GRUPOS: (T_DE_WELCH, MANN_WHITNEY),
+    K_GRUPOS: (ANOVA_DE_WELCH, KRUSKAL_WALLIS),
 }
 
 # O que já tem aritmética. Um teste da `REGRA` que não está aqui é escolhido pela
-# regra e sai sem teste, com o motivo. O t de Student entre dois grupos está aqui sem
-# estar na regra: ele roda quando o item o pede.
+# regra e sai sem teste, com o motivo. O t de Student e a ANOVA clássica estão aqui
+# sem estar na regra: eles rodam quando o item os pede.
 _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
     (UMA_AMOSTRA, T_DE_STUDENT): t_uma_amostra,
     (DOIS_GRUPOS, T_DE_WELCH): t_de_welch,
     (DOIS_GRUPOS, T_DE_STUDENT): t_de_student,
+    (K_GRUPOS, ANOVA): anova_de_um_fator,
 }
 
 # Como cada método se escreve no item — o terceiro nome —, e o teste que ele quer
 # dizer em cada delineamento. Sem acento, minúsculo e sem hífen, que é como `_chave`
 # deixa o que se digitou. `t` é o t que o R roda sem argumento: o de uma amostra, e o
-# de Welch entre dois grupos — o `var.equal = FALSE` padrão do `t.test`.
+# de Welch entre dois grupos — o `var.equal = FALSE` padrão do `t.test`. `welch` é o
+# de Welch do número de grupos que o banco trouxer: o t com dois, a ANOVA com mais.
 METODOS: dict[str, dict[str, str]] = {
     "t": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_WELCH},
     "student": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_STUDENT},
-    "welch": {DOIS_GRUPOS: T_DE_WELCH},
+    "welch": {DOIS_GRUPOS: T_DE_WELCH, K_GRUPOS: ANOVA_DE_WELCH},
+    "anova": {K_GRUPOS: ANOVA},
     "wilcoxon": {UMA_AMOSTRA: WILCOXON},
     "mannwhitney": {DOIS_GRUPOS: MANN_WHITNEY},
+    "kruskal": {K_GRUPOS: KRUSKAL_WALLIS},
 }
 
 # Os nomes que a regra ainda não conhece em delineamento nenhum desta versão. Escritos
 # na ficha, recusam com a frase certa, em vez de "não é um método".
 PREVISTOS: dict[str, str] = {
-    "anova": "ANOVA",
-    "kruskal": "Kruskal-Wallis",
     "friedman": "Friedman",
+}
+
+# O método de um número de grupos escrito para outro: o que se escreve no lugar dele,
+# e por quê. O banco é que diz quantos grupos há, e a recusa ensina a troca.
+_EQUIVALENTES: dict[tuple[str, str], tuple[str, str]] = {
+    ("student", K_GRUPOS): ("anova", "o t de Student compara dois grupos"),
+    ("t", K_GRUPOS): ("welch", "o t compara dois grupos"),
+    ("anova", DOIS_GRUPOS): (
+        "student",
+        "com dois grupos, o F da ANOVA é o t de Student ao quadrado",
+    ),
+    ("mannwhitney", K_GRUPOS): ("kruskal", "o Mann-Whitney compara dois grupos"),
+    ("kruskal", DOIS_GRUPOS): ("mannwhitney", "com dois grupos, o teste é o Mann-Whitney"),
 }
 
 # Outras grafias do mesmo método. `welsh` é a troca mais comum de letra no nome do
@@ -283,6 +322,8 @@ _SINONIMOS: dict[str, str] = {
     "twelch": "welch",
     "tdestudent": "student",
     "tstudent": "student",
+    "anovadewelch": "welch",
+    "welchanova": "welch",
     "mannwhitneyu": "mannwhitney",
     "kruskalwallis": "kruskal",
 }
@@ -290,7 +331,9 @@ _SINONIMOS: dict[str, str] = {
 # Os testes que supõem a mesma variância nos grupos. Quando um deles roda, o aviso diz
 # quanto o maior desvio padrão passa do menor — acima de duas vezes, a regra de bolso
 # que os livros dão para a igualdade de variâncias ainda valer.
-_VARIANCIAS_IGUAIS: frozenset[tuple[str, str]] = frozenset({(DOIS_GRUPOS, T_DE_STUDENT)})
+_VARIANCIAS_IGUAIS: frozenset[tuple[str, str]] = frozenset(
+    {(DOIS_GRUPOS, T_DE_STUDENT), (K_GRUPOS, ANOVA)}
+)
 RAZAO_DE_DESVIOS = 2.0
 
 # O intervalo sai com casas fixas: ele não existe na descritiva, e uma célula com
@@ -590,13 +633,15 @@ class VariavelComparada:
                 f"{cabeca}{n}; {escolha.motivo} → {escolha.da_regra}"
                 f"{faltou}: a linha sai sem teste."
             )
+        escrito = _concorda(escolha.metodo, "escrito")
         if self.resultado is None:
             origem = (
-                f"{escolha.metodo} escrito na ficha"
+                f"{escolha.metodo} {escrito} na ficha"
                 if escolha.pela_ficha
                 else f"{escolha.motivo} → {escolha.metodo}"
             )
-            return f"{cabeca}{n}; {origem}, que não pôde ser calculado: {self.motivo}."
+            calculado = _concorda(escolha.metodo, "calculado")
+            return f"{cabeca}{n}; {origem}, que não pôde ser {calculado}: {self.motivo}."
         estatistica = _estatistica_em_texto(self.resultado)
         if not escolha.pela_ficha:
             return (
@@ -605,12 +650,12 @@ class VariavelComparada:
             )
         if escolha.contra_a_regra:
             return (
-                f"{cabeca}{n}; {escolha.metodo} escrito na ficha "
+                f"{cabeca}{n}; {escolha.metodo} {escrito} na ficha "
                 f"({estatistica}), contra a regra — ela escolheria {escolha.da_regra}"
                 f"{faltou}: {escolha.motivo}."
             )
         return (
-            f"{cabeca}{n}; {escolha.metodo} escrito na ficha "
+            f"{cabeca}{n}; {escolha.metodo} {escrito} na ficha "
             f"({estatistica}), o mesmo que a regra escolheria: {escolha.motivo}."
         )
 
@@ -1170,7 +1215,8 @@ def _avisos_da_linha(
 
 def _aviso_contra_a_regra(nome: str, escolha: Escolha, faltou: str) -> str:
     return (
-        f"{nome}: {escolha.metodo} escrito na ficha, contra a regra — ela escolheria "
+        f"{nome}: {escolha.metodo} {_concorda(escolha.metodo, 'escrito')} na ficha, contra "
+        "a regra — ela escolheria "
         f"{escolha.da_regra}{faltou}: {escolha.motivo}. Fica o que está na ficha, e a "
         "frase vai para as notas do .csv."
     )
@@ -1227,18 +1273,10 @@ def _comparar_grupos(
     ordem = na_ordem_do_dicionario(set(rotulos), de_grupo)
     quantos = len(ordem)
 
-    delineamento = _delineamento_dos_grupos(quantos)
-    if not delineamento:
-        return None, (
-            f"`{de_grupo.variavel}` tem {quantos} grupos entre os casos com as duas "
-            f"respostas ({', '.join(ordem)}) — a comparação de três ou mais grupos ainda "
-            "não está no FlatCap; nesta versão, a comparação é entre dois. Agrupar "
-            f"categorias no {ARQUIVO_DICIONARIO} — dois códigos com o mesmo rótulo, "
-            "`1=Sim|2=Sim` — deixa a variável com dois grupos"
-        )
+    delineamento = _delineamento_dos_grupos(quantos, de_grupo)
 
     metodo = ""
-    if pergunta.metodo:
+    if pergunta.metodo and quantos >= 2:
         metodo = _teste_da_chave(pergunta.metodo, delineamento)
         problema = _problema_do_metodo(pergunta.metodo, metodo, delineamento, de_grupo, quantos)
         if problema:
@@ -1305,26 +1343,31 @@ def _comparar_grupos(
         ), ""
 
     calcular = _CALCULO[(delineamento, escolha.metodo)]
+    vetores = [amostra.to_numpy() for amostra in amostras]
+    resultado = calcular(vetores) if delineamento == K_GRUPOS else calcular(*vetores)
     return VariavelComparada(
         **base,
         grupos=grupos,
         escolha=escolha,
-        resultado=calcular(*(amostra.to_numpy() for amostra in amostras)),
+        resultado=resultado,
         avisos=tuple(avisos),
     ), ""
 
 
-def _delineamento_dos_grupos(quantos: int) -> str:
+def _delineamento_dos_grupos(quantos: int, de_grupo: Linha) -> str:
     """
-    O delineamento pelo número de grupos com resposta, ou vazio quando esta versão
-    não compara tantos.
+    O delineamento pelo número de grupos com resposta: dois, ou três ou mais.
 
-    Nenhum grupo e um grupo só ficam no de dois: é a tabela em que a linha sem teste
-    sai, com o motivo — a pergunta foi feita entre dois grupos, e o banco não os tem.
+    Com nenhum grupo ou um só, não há teste, e a linha sai na tabela que o dicionário
+    promete — a dos k grupos quando ele declara três rótulos ou mais, e a dos dois nos
+    outros casos: a pergunta foi feita sobre aqueles grupos, e o banco não os tem.
     """
-    if quantos <= 2:
+    if quantos == 2:
         return DOIS_GRUPOS
-    return ""
+    if quantos >= 3:
+        return K_GRUPOS
+    declarados = {de_grupo.rotulo_de(codigo) for codigo in de_grupo.categorias_ordem}
+    return K_GRUPOS if len(declarados) >= 3 else DOIS_GRUPOS
 
 
 def _impedimento_dos_grupos(validos: int, quantos: int, distintos: int) -> str:
@@ -1353,6 +1396,10 @@ def _impedimento_do_teste(
     grupo entra com a sua variância, e a de um valor só não existe. Os dois recusam,
     como o R, dois grupos que não variam por dentro — mesmo com médias diferentes, o t
     seria uma divisão por zero.
+
+    A ANOVA pede dois valores em cada grupo, como o `oneway.test` — que recusa o grupo
+    de um valor, embora o `aov` o aceite. E grupos que não variam por dentro a barram
+    aqui, e não no R: lá o F sai infinito, e o p, zero.
     """
     if metodo == T_DE_WELCH:
         primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
@@ -1363,6 +1410,16 @@ def _impedimento_do_teste(
                 f"pelo menos {MINIMO_T} em cada grupo"
             )
         if sem_variacao_em_duas(primeiro, segundo, variancias_iguais=False):
+            return _sem_variacao_nos_grupos(amostras)
+    if metodo == ANOVA:
+        pequenos = [grupo for grupo in grupos if grupo.n < MINIMO_T]
+        if pequenos:
+            return (
+                f"{pequenos[0].rotulo} tem {pequenos[0].n} valor — a ANOVA precisa de pelo "
+                f"menos {MINIMO_T} em cada grupo"
+            )
+        vetores = [amostra.to_numpy() for amostra in amostras]
+        if sem_variacao_nos_grupos(vetores, variancias_iguais=True):
             return _sem_variacao_nos_grupos(amostras)
     if metodo == T_DE_STUDENT:
         primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
@@ -1427,8 +1484,9 @@ def _avisos_dos_grupos(
     """
     Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
-    * **a linha sem teste** diz qual método escrever no item: o da regra quando ele
-      existe, senão o que existe — nesta versão, o `student`;
+    * **a linha sem teste** diz qual método escrever no item: o paramétrico da regra
+      quando ele existe, senão o que existe — a `anova` clássica, onde a de Welch
+      ainda falta;
     * **a ficha contra a regra**, como na uma amostra;
     * **o paramétrico pela regra com um grupo pequeno** — o Shapiro-Wilk de cada
       grupo é que quase não rejeita abaixo de `MINIMO_CONFIAVEL`;
@@ -1448,15 +1506,16 @@ def _avisos_dos_grupos(
         if escolha.da_regra == REGRA[delineamento][0]:
             avisos.append(
                 f"{nome}: {escolha.motivo} — a regra escolheria {escolha.da_regra}{faltou}, "
-                f"e a linha saiu sem teste. O {teste}, que supõe a mesma variância nos "
-                f"grupos, roda com o método escrito no item: `{escrito}`."
+                f"e a linha saiu sem teste. {_com_artigo(teste, maiuscula=True)}, que supõe "
+                f"a mesma variância nos grupos, roda com o método escrito no item: "
+                f"`{escrito}`."
             )
         else:
             avisos.append(
                 f"{nome}: {escolha.motivo} — a regra escolheria {escolha.da_regra}{faltou}, "
-                f"e a linha saiu sem teste. Se o {teste} vale aqui — n grande em cada "
-                f"grupo e assimetria pequena, por exemplo —, escreva o método no item: "
-                f"`{escrito}`."
+                f"e a linha saiu sem teste. Se {_com_artigo(teste)} vale aqui — n grande "
+                f"em cada grupo e assimetria pequena, por exemplo —, escreva o método no "
+                f"item: `{escrito}`."
             )
     if escolha.contra_a_regra:
         avisos.append(_aviso_contra_a_regra(nome, escolha, faltou))
@@ -1505,18 +1564,16 @@ def _aviso_de_variancias(
     falta = "" if _disponivel(delineamento, parametrico) else (
         ", que ainda não está no FlatCap,"
     )
+    suposto = f"{nome}: {_com_artigo(metodo)} supõe a mesma variância nos grupos"
+    outro = f"{_com_artigo(parametrico, maiuscula=True)}{falta} não supõe."
     if menor[1] == 0:
-        return (
-            f"{nome}: o {metodo} supõe a mesma variância nos grupos, e {menor[0]} não "
-            f"varia. O {parametrico}{falta} não supõe."
-        )
+        return f"{suposto}, e {menor[0]} não varia. {outro}"
     razao = maior[1] / menor[1]
     if razao < RAZAO_DE_DESVIOS:
         return ""
     return (
-        f"{nome}: o {metodo} supõe a mesma variância nos grupos, e o desvio padrão de "
-        f"{maior[0]} ({numero(maior[1])}) é {numero(razao, 1)} vezes o de {menor[0]} "
-        f"({numero(menor[1])}). O {parametrico}{falta} não supõe."
+        f"{suposto}, e o desvio padrão de {maior[0]} ({numero(maior[1])}) é "
+        f"{numero(razao, 1)} vezes o de {menor[0]} ({numero(menor[1])}). {outro}"
     )
 
 
@@ -1547,12 +1604,17 @@ def _problema_do_metodo(
     grupos há — e um método de dois grupos numa variável de três é recusado aqui.
     """
     if not teste:
+        troca, porque = _EQUIVALENTES.get((chave, delineamento), ("", ""))
+        da_troca = _teste_da_chave(troca, delineamento) if troca else ""
+        if not da_troca or not _disponivel(delineamento, da_troca):
+            troca = _metodo_sugerido(delineamento)[0]
+        dica = f" — {porque}; escreva `{troca}`" if porque else f" — escreva `{troca}`"
         return (
             f"`{chave}` não se aplica a {quantos} grupos, e `{de_grupo.variavel}` tem "
-            f"{quantos} entre os casos com as duas respostas"
+            f"{quantos} entre os casos com as duas respostas{dica}"
         )
     if not _disponivel(delineamento, teste):
-        return f"o {teste} ainda não está no FlatCap"
+        return f"{_com_artigo(teste)} ainda não está no FlatCap"
     return ""
 
 
@@ -1640,7 +1702,11 @@ def _tabelas(variaveis: tuple[VariavelComparada, ...], total: int) -> tuple[Tabe
     Uma tabela por delineamento que apareceu na ficha, na ordem de `DELINEAMENTOS`, e
     os itens de cada uma na ordem da ficha.
     """
-    montar = {UMA_AMOSTRA: _tabela_uma_amostra, DOIS_GRUPOS: _tabela_dois_grupos}
+    montar = {
+        UMA_AMOSTRA: _tabela_uma_amostra,
+        DOIS_GRUPOS: _tabela_dois_grupos,
+        K_GRUPOS: _tabela_k_grupos,
+    }
     tabelas: list[Tabela] = []
     for delineamento in DELINEAMENTOS:
         itens = tuple(v for v in variaveis if v.delineamento == delineamento)
@@ -1655,7 +1721,8 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
 
     Na uma amostra, uma linha. Entre grupos, um bloco: a linha da comparação — o
     rótulo da variável, o da variável de grupo, o n dos casos com as duas respostas, a
-    diferença, o teste e o p — e uma linha por grupo, com o n, a média e o desvio.
+    diferença (entre dois grupos), o teste e o p — e uma linha por grupo, com o n, a
+    média e o desvio.
 
     Pública porque o terminal desenha as mesmas linhas, item por item, com os
     destaques dele: as células saem daqui, e de mais lugar nenhum.
@@ -1672,6 +1739,21 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
                 _referencia_em_texto(variavel.referencia or 0.0),
                 variavel.celula_do_teste,
                 p,
+            ),
+        )
+    if variavel.delineamento == K_GRUPOS:
+        return (
+            (
+                variavel.rotulo,
+                variavel.rotulo_de_grupo,
+                str(variavel.validos),
+                "",
+                variavel.celula_do_teste,
+                p,
+            ),
+            *(
+                ("", grupo.rotulo, str(grupo.n), _media_e_desvio(grupo.resumo), "", "")
+                for grupo in variavel.grupos
             ),
         )
     cabeca = (
@@ -1797,15 +1879,59 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
     )
 
 
+def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
+    """
+    Um bloco por item, como a dos dois grupos, sem a coluna da diferença: com três
+    grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`,
+    `média (DP)`, `teste` e `p-valor` —; o F e os graus de liberdade vão para as
+    notas, com o resto do que decidiu cada teste.
+    """
+    corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
+    menor_p = numero(MENOR_P, 3)
+    parametrico, sem_normal = REGRA[K_GRUPOS]
+    notas = (
+        "uma comparação por bloco: a primeira linha traz a variável de grupo, o n dos "
+        "casos que responderam as duas variáveis, o teste e o p; as seguintes, cada "
+        "grupo, na ordem do dicionário.",
+        "ANOVA de um fator, como o oneway.test do R com var.equal = TRUE — o aov, quando "
+        "cada grupo tem dois valores ou mais: a variância dentro dos grupos combinada, e "
+        "o F com k − 1 e N − k graus de liberdade.",
+        f"teste escolhido pela regra dos pressupostos: {_com_artigo(parametrico)} — o "
+        "padrão do oneway.test do R, que não supõe variâncias iguais — quando o "
+        f"Shapiro-Wilk não rejeita a normal (p ≥ {numero(ALFA)}) em nenhum dos grupos; "
+        "quando rejeita em algum, ou quando a normalidade não pode ser verificada em "
+        f"algum, o {sem_normal}. {_ainda_nao(K_GRUPOS)} A ANOVA clássica roda quando está "
+        "escrita no item, e o método escrito na ficha tem precedência sobre a regra.",
+        "a ANOVA diz se as médias diferem, e não quais: a comparação dois a dois — o "
+        "pós-teste — ainda não está no FlatCap.",
+        "média e desvio padrão de cada grupo calculados como no resumo da descritiva; n: "
+        f"casos com as duas respostas, de {total} linhas do banco — os faltantes são por "
+        "comparação.",
+        f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
+        "cada comparação é um teste; não há correção para comparações múltiplas.",
+    ) + tuple(variavel.justificativa for variavel in variaveis)
+
+    return Tabela(
+        nome=ARQUIVO_K_GRUPOS,
+        especie=K_GRUPOS,
+        variavel="",
+        titulo="Comparação entre três grupos ou mais",
+        colunas=("variável", "grupo", "n", "média (DP)", "teste", "p-valor"),
+        linhas=corpo,
+        notas=notas,
+    )
+
+
 def _ainda_nao(delineamento: str) -> str:
     """A frase das notas sobre os testes da regra que ainda não têm aritmética."""
     faltam = [teste for teste in REGRA[delineamento] if not _disponivel(delineamento, teste)]
     if not faltam:
         return ""
     if len(faltam) == 1:
+        pronome = "a" if faltam[0].startswith("ANOVA") else "o"
         return (
-            f"O {faltam[0]} ainda não está no FlatCap, e onde a regra o escolhe a linha "
-            "sai sem teste."
+            f"{_com_artigo(faltam[0], maiuscula=True)} ainda não está no FlatCap, e onde a "
+            f"regra {pronome} escolhe a linha sai sem teste."
         )
     return "Os dois ainda não estão no FlatCap, e a linha sai sem teste."
 
@@ -2484,6 +2610,10 @@ def _regras() -> dict[str, Any]:
                 "a média de uma numérica entre os dois grupos de uma categórica, "
                 "contados no banco"
             ),
+            K_GRUPOS: (
+                "a média de uma numérica entre os três grupos ou mais de uma categórica, "
+                "contados no banco"
+            ),
         },
         "escolha_do_teste": {
             UMA_AMOSTRA: (
@@ -2498,6 +2628,12 @@ def _regras() -> dict[str, Any]:
                 f"{_ainda_nao(DOIS_GRUPOS)} O t de Student roda quando está escrito no "
                 "item; o método escrito na ficha tem precedência."
             ),
+            K_GRUPOS: (
+                f"{REGRA[K_GRUPOS][0]} se o Shapiro-Wilk não rejeita a normal (p ≥ "
+                f"{ALFA:g}) em nenhum dos grupos; senão {REGRA[K_GRUPOS][1]}. "
+                f"{_ainda_nao(K_GRUPOS)} A ANOVA clássica roda quando está escrita no "
+                "item; o método escrito na ficha tem precedência."
+            ),
         },
         "t_de_student": (
             "t.test do R: bilateral; na uma amostra, t com n − 1 graus de liberdade e IC "
@@ -2508,6 +2644,10 @@ def _regras() -> dict[str, Any]:
             "t.test do R, o padrão dele (var.equal = FALSE): bilateral, cada grupo com a "
             "sua variância, graus de liberdade de Welch-Satterthwaite e IC "
             f"{CONFIANCA:.0%} da diferença das médias"
+        ),
+        "anova": (
+            "oneway.test do R com var.equal = TRUE: a variância dentro dos grupos "
+            "combinada, F com k − 1 e N − k graus de liberdade; sem pós-teste"
         ),
         "normalidade": (
             "Shapiro-Wilk, pela mesma função da análise de normalidade — sobre os valores "
@@ -2522,6 +2662,7 @@ def _regras() -> dict[str, Any]:
             "t_uma_amostra": MINIMO_T,
             "t_de_welch": f"{MINIMO_T} em cada grupo",
             "t_de_student": MINIMO_STUDENT,
+            "anova": f"{MINIMO_T} em cada grupo",
         },
         "faltantes": "por variável na uma amostra; por comparação entre grupos",
         "hipotese": "bilateral",
@@ -2681,8 +2822,15 @@ def _chave(texto: str) -> str:
     return _SINONIMOS.get(limpo, limpo)
 
 
-def _com_artigo(teste: str) -> str:
-    return ("a " if teste.startswith("ANOVA") else "o ") + teste
+def _concorda(teste: str, participio: str) -> str:
+    """`t de Welch escrito`, `ANOVA escrita`: o participio no gênero do teste."""
+    return participio[:-1] + "a" if teste.startswith("ANOVA") else participio
+
+
+def _com_artigo(teste: str, maiuscula: bool = False) -> str:
+    """`o t de Welch`, `a ANOVA` — e, no começo da frase, `O t de Welch`, `A ANOVA`."""
+    artigo = "a" if teste.startswith("ANOVA") else "o"
+    return f"{artigo.upper() if maiuscula else artigo} {teste}"
 
 
 def _em_frase(itens: Iterable[str]) -> str:
@@ -2818,8 +2966,11 @@ def _integridade(confere: bool | None) -> str:
 
 
 __all__ = [
+    "ANOVA",
+    "ANOVA_DE_WELCH",
     "ARQUIVOS",
     "ARQUIVO_DOIS_GRUPOS",
+    "ARQUIVO_K_GRUPOS",
     "ARQUIVO_TABELA",
     "CASAS_IC",
     "CASAS_REFERENCIA",
@@ -2827,6 +2978,8 @@ __all__ = [
     "DOIS_GRUPOS",
     "EXEMPLO_DA_FICHA",
     "GRUPOS",
+    "KRUSKAL_WALLIS",
+    "K_GRUPOS",
     "MANN_WHITNEY",
     "METODOS",
     "PREVISTOS",
