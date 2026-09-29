@@ -694,6 +694,7 @@ class TestComparacao:
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
         assert "- [imc, sexo]" in saida
+        assert "- repetidas: [pas_0, pas_1, pas_2]" in saida
 
     def test_a_virgula_decimal_sai_com_um_e_ensina_o_numero(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -768,6 +769,27 @@ class TestComparacao:
         saida = _saida(rodar("comparacao", RECORD_ID))
         assert "não rejeita a normal em nenhum dos 3 grupos" in saida
         assert "→ ANOVA de Welch (F =" in saida
+
+    def test_medidas_repetidas(self, rodar, projeto_com_rodada):
+        """
+        A tabela das repetidas na simulação, com o ε na frase da escolha, e o `.csv`
+        dela com `--sim`.
+        """
+        raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
+        acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1, pas_2]\n")
+        saida = _saida(rodar("comparacao", RECORD_ID))
+        assert "Comparação entre medidas repetidas" in saida
+        assert "não rejeita a normal em nenhuma das 3 medidas" in saida
+        assert "→ ANOVA de medidas repetidas (F = 37,04; 1,84 e 67,96 gl; ε = 0,918)" in saida
+        assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
+        assert (raiz / PASTA_ANALISES / PASTA_COMPARACAO / "repetidas.csv").is_file()
+
+    def test_duas_medidas_sai_com_um(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
+        acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1]\n")
+        resultado = rodar("comparacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        assert "a comparação é o t pareado" in _sem_moldura(resultado)
 
     def test_entre_grupos_com_sim_escreve_as_duas_tabelas(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
