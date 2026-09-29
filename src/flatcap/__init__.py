@@ -322,6 +322,23 @@ recusa vem depois de abri-lo, junto das outras do mesmo tipo.
 **A ANOVA diz se as médias diferem, e não quais.** O pós-teste — Tukey depois da
 clássica, Games-Howell depois da de Welch — fica para depois, e a nota da tabela diz
 isso.
+
+## 1.11.0 — a ANOVA de Welch
+
+**O paramétrico da regra entre três grupos ou mais passa a rodar.** `[imc,
+escolaridade]` sem método dá a ANOVA de Welch quando o Shapiro-Wilk não rejeita a
+normal em nenhum dos grupos: o `oneway.test(y ~ g)` do R, o padrão dele — cada grupo
+pesado pelo inverso da variância da média, e os graus de liberdade do denominador de
+Welch, fracionários. Escrita no `hipoteses.py`, como a clássica, pela mesma razão: o
+`f_oneway(equal_var=False)` dá o F e o p do R, e não os gl.
+
+**`welch` escrito é o de Welch do número de grupos que o banco trouxer**: o t com dois,
+a ANOVA com três ou mais. E o `t` escrito numa variável de três grupos passa a ensinar
+`welch`, que agora existe.
+
+**A barreira que o R não tem**: um grupo que não varia. O peso dele é n/0, e o R
+devolve `NaN`; aqui a linha sai sem teste, com o nome do grupo. A clássica, que usa a
+variância combinada dos outros, roda sobre os mesmos dados.
 """
 
-__version__ = "1.10.0"
+__version__ = "1.11.0"
