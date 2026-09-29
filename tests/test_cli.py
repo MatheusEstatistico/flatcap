@@ -693,7 +693,7 @@ class TestComparacao:
         saida = _saida(runner.invoke(app, ["comparacao", "--help"]))
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
-        assert "- [imc, sexo, student]" in saida
+        assert "- [imc, sexo]" in saida
 
     def test_a_virgula_decimal_sai_com_um_e_ensina_o_numero(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -730,13 +730,14 @@ class TestComparacao:
         saida = _saida(rodar("comparacao", RECORD_ID, "--sim"))
         assert PASTA_ANTIGAS in saida
 
-    def test_entre_grupos_a_simulacao_mostra_a_tabela_e_ensina_o_metodo(
+    def test_entre_grupos_a_simulacao_mostra_a_tabela_e_a_escolha(
         self, rodar, projeto_com_rodada
     ):
         """
-        Sem o t de Welch, a linha entre grupos sai sem teste — e o aviso diz como
-        escrever o de Student. A tabela dos grupos sai com o título, o bloco da
-        comparação e uma linha por grupo.
+        A regra escolhe o t de Welch entre os dois sexos, e a simulação mostra por quê
+        — e avisa que doze valores por grupo é pouco para o Shapiro-Wilk rejeitar. A
+        tabela dos grupos sai com o título, o bloco da comparação e uma linha por
+        grupo.
         """
         raiz = projeto_com_rodada()
         acrescentar_a_ficha(raiz, "comparacao:\n  - [imc, 25]\n  - [imc, sexo]\n")
@@ -746,8 +747,9 @@ class TestComparacao:
         assert "Comparação entre dois grupos" in saida
         assert "Feminino" in saida and "Masculino" in saida
         assert "dois_grupos.csv" in saida and "uma_amostra.csv" in saida
-        assert "a regra escolheria t de Welch, que ainda não está no FlatCap" in saida
-        assert "`[imc, sexo, student]`" in saida
+        assert "não rejeita a normal em nenhum dos dois grupos" in saida
+        assert "→ t de Welch (t =" in saida
+        assert "t de Welch com 12 valores em Feminino e 12 valores em Masculino" in saida
 
     def test_entre_grupos_com_sim_escreve_as_duas_tabelas(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
