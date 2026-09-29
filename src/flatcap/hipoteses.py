@@ -61,7 +61,9 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not enough
 'x' observations`), valores que não variam (`data are essentially constant`), e
 valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do
-R para ele: um valor em cada grupo e três no total (`not enough observations`). Quem
+R para ele: um valor em cada grupo e três no total (`not enough observations`); no de
+Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
+a sua variância, e a de um valor só não existe. Quem
 chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
 de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
 ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
@@ -99,6 +101,7 @@ MINIMO_STUDENT = 3
 # O nome de cada teste, como ele vai para a coluna `teste` da tabela. É o `method`
 # do `htest`, em português.
 T_DE_STUDENT = "t de Student"
+T_DE_WELCH = "t de Welch"
 
 
 @dataclass(frozen=True)
@@ -231,6 +234,52 @@ def t_de_student(x: Sequence[float], y: Sequence[float]) -> Resultado:
     )
 
 
+def t_de_welch(x: Sequence[float], y: Sequence[float]) -> Resultado:
+    """
+    O `t.test(x, y)` do R — o padrão dele, `var.equal = FALSE`: cada grupo com a sua
+    variância, bilateral, os graus de liberdade de Welch-Satterthwaite, fracionários, e
+    o intervalo de 95% da diferença das médias, `média(x) − média(y)`.
+
+        t  = (x̄ − ȳ) / √(s₁²/n₁ + s₂²/n₂)
+        gl = (s₁²/n₁ + s₂²/n₂)² / [(s₁²/n₁)² / (n₁ − 1) + (s₂²/n₂)² / (n₂ − 1)]
+
+    Pelo `scipy`, `ttest_ind(equal_var=False)`, que dá os gl fracionários, o p e o
+    intervalo do R — o primeiro degrau da régua. Um grupo que não varia entra com
+    variância zero, e o t existe, com os gl do outro grupo: o R calcula, e aqui também.
+
+    Raises:
+        ValueError: menos de dois valores em algum grupo, valores que não variam, ou
+            valor ausente ou infinito.
+    """
+    from scipy import stats
+
+    primeiro, segundo = _vetor(x), _vetor(y)
+    n1, n2 = primeiro.shape[0], segundo.shape[0]
+    if n1 < MINIMO_T or n2 < MINIMO_T:
+        raise ValueError(
+            f"o t de Welch precisa de pelo menos {MINIMO_T} valores em cada grupo, e vieram "
+            f"{n1} e {n2}"
+        )
+    if sem_variacao_em_duas(primeiro, segundo, variancias_iguais=False):
+        raise ValueError("os valores não variam dentro dos grupos: o t é uma divisão por zero")
+
+    with _sem_o_aviso_de_precisao():
+        resultado = stats.ttest_ind(primeiro, segundo, equal_var=False)
+        intervalo = resultado.confidence_interval(confidence_level=CONFIANCA)
+    return Resultado(
+        metodo=T_DE_WELCH,
+        estatistica=float(resultado.statistic),
+        nome_da_estatistica="t",
+        p=min(1.0, float(resultado.pvalue)),
+        gl=(float(resultado.df),),
+        calculo_do_p="t de Welch, com os graus de liberdade de Welch-Satterthwaite",
+        estimativa=float(primeiro.mean() - segundo.mean()),
+        nome_da_estimativa="diferença de médias",
+        ic=(float(intervalo.low), float(intervalo.high)),
+        referencia=0.0,
+    )
+
+
 def sem_variacao(x: Sequence[float]) -> bool:
     """
     Os valores não variam — o `data are essentially constant` do `t.test`.
@@ -330,9 +379,11 @@ __all__ = [
     "MINIMO_STUDENT",
     "MINIMO_T",
     "T_DE_STUDENT",
+    "T_DE_WELCH",
     "Resultado",
     "sem_variacao",
     "sem_variacao_em_duas",
     "t_de_student",
+    "t_de_welch",
     "t_uma_amostra",
 ]
