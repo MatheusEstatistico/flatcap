@@ -64,8 +64,8 @@ Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not e
 valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do
 R para ele: um valor em cada grupo e três no total (`not enough observations`); no de
 Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
-a sua variância, e a de um valor só não existe; na ANOVA, dois em cada grupo também,
-que é o `not enough observations` do `oneway.test`. Quem
+a sua variância, e a de um valor só não existe; na ANOVA — as duas —, dois em cada grupo
+também, que é o `not enough observations` do `oneway.test`. Quem
 chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
 de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
 ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
@@ -106,6 +106,7 @@ MINIMO_STUDENT = 3
 T_DE_STUDENT = "t de Student"
 T_DE_WELCH = "t de Welch"
 ANOVA = "ANOVA"
+ANOVA_DE_WELCH = "ANOVA de Welch"
 
 
 @dataclass(frozen=True)
@@ -338,6 +339,57 @@ def anova_de_um_fator(grupos: Sequence[Sequence[float]]) -> Resultado:
     )
 
 
+def anova_de_welch(grupos: Sequence[Sequence[float]]) -> Resultado:
+    """
+    O `oneway.test(y ~ g)` do R — o padrão dele, `var.equal = FALSE`: cada grupo pesado
+    pelo inverso da variância da sua média, e os graus de liberdade do denominador pela
+    aproximação de Welch (1951), fracionários.
+
+        wᵢ = nᵢ / sᵢ²            x̃ = Σ wᵢ x̄ᵢ / Σ wᵢ
+        λ  = Σ [(1 − wᵢ / Σw)² / (nᵢ − 1)] / (k² − 1)
+        F  = [Σ wᵢ (x̄ᵢ − x̃)² / (k − 1)] / [1 + 2 (k − 2) λ]
+        gl = k − 1  e  1 / (3 λ)
+
+    Escrita pela mesma razão da clássica: o `f_oneway(equal_var=False)` do `scipy` dá o
+    F e o p do R, e não os graus de liberdade — que aqui, além de irem para a nota, são
+    fracionários e ninguém os adivinha. Com dois grupos, o F é o t de Welch ao quadrado,
+    com os mesmos gl.
+
+    Raises:
+        ValueError: menos de dois grupos, menos de dois valores em algum grupo, um grupo
+            que não varia — onde o R devolve `NaN` —, ou valor ausente ou infinito.
+    """
+    from scipy import stats
+
+    vetores = _grupos_da_anova(grupos)
+    if sem_variacao_nos_grupos(vetores, variancias_iguais=False):
+        raise ValueError(
+            "um grupo não varia: o peso dele na ANOVA de Welch é n/0, e o R devolve NaN"
+        )
+
+    k = len(vetores)
+    tamanhos = [int(vetor.shape[0]) for vetor in vetores]
+    medias = [float(vetor.mean()) for vetor in vetores]
+    pesos = [n / float(vetor.var(ddof=1)) for n, vetor in zip(tamanhos, vetores, strict=True)]
+    soma = sum(pesos)
+    lambda_ = sum(
+        (1 - peso / soma) ** 2 / (n - 1) for peso, n in zip(pesos, tamanhos, strict=True)
+    ) / (k**2 - 1)
+    ponderada = sum(peso * media for peso, media in zip(pesos, medias, strict=True)) / soma
+    estatistica = sum(
+        peso * (media - ponderada) ** 2 for peso, media in zip(pesos, medias, strict=True)
+    ) / ((k - 1) * (1 + 2 * (k - 2) * lambda_))
+    gl = (float(k - 1), 1 / (3 * lambda_))
+    return Resultado(
+        metodo=ANOVA_DE_WELCH,
+        estatistica=estatistica,
+        nome_da_estatistica="F",
+        p=min(1.0, float(stats.f.sf(estatistica, *gl))),
+        gl=gl,
+        calculo_do_p="F de Welch, com os graus de liberdade do denominador de Welch",
+    )
+
+
 def sem_variacao_nos_grupos(
     grupos: Sequence[Sequence[float]], variancias_iguais: bool = True
 ) -> bool:
@@ -487,10 +539,12 @@ __all__ = [
     "MINIMO_STUDENT",
     "MINIMO_T",
     "ANOVA",
+    "ANOVA_DE_WELCH",
     "T_DE_STUDENT",
     "T_DE_WELCH",
     "Resultado",
     "anova_de_um_fator",
+    "anova_de_welch",
     "sem_variacao",
     "sem_variacao_em_duas",
     "sem_variacao_nos_grupos",
