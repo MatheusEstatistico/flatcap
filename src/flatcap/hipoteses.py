@@ -47,7 +47,8 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 1. **o `scipy` faz o que o R faz** → importar. É o caso do t: `ttest_1samp`,
    `ttest_ind` e o `confidence_interval()` deles dão o t, os graus de liberdade, o p e
    o intervalo do `t.test`, conferidos até a décima quarta casa — no de duas amostras,
-   inclusive com um grupo de um valor só;
+   inclusive com um grupo de um valor só. O `f_oneway` dá o F e o p do `oneway.test`,
+   mas não os graus de liberdade, e a ANOVA desce um degrau: ver `anova_de_um_fator`;
 2. **o `scipy` calcula igual e escolhe diferente** → escrever a escolha do R e
    importar a conta. É o caso do Wilcoxon e do Mann-Whitney, que vêm depois: o R usa
    o p exato só com menos de 50 casos, sem empate e sem zero, e a aproximação normal
@@ -63,7 +64,8 @@ Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not e
 valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do
 R para ele: um valor em cada grupo e três no total (`not enough observations`); no de
 Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
-a sua variância, e a de um valor só não existe. Quem
+a sua variância, e a de um valor só não existe; na ANOVA, dois em cada grupo também,
+que é o `not enough observations` do `oneway.test`. Quem
 chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
 de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
 ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
@@ -87,6 +89,7 @@ import warnings
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
+from typing import Any
 
 # O nível do intervalo. O mesmo 95% da correlação e do `conf.level` padrão do R.
 CONFIANCA = 0.95
@@ -102,6 +105,7 @@ MINIMO_STUDENT = 3
 # do `htest`, em português.
 T_DE_STUDENT = "t de Student"
 T_DE_WELCH = "t de Welch"
+ANOVA = "ANOVA"
 
 
 @dataclass(frozen=True)
@@ -280,6 +284,110 @@ def t_de_welch(x: Sequence[float], y: Sequence[float]) -> Resultado:
     )
 
 
+# A ANOVA
+
+
+def anova_de_um_fator(grupos: Sequence[Sequence[float]]) -> Resultado:
+    """
+    O `oneway.test(y ~ g, var.equal = TRUE)` do R — a ANOVA de um fator, a clássica: a
+    variância dentro dos grupos combinada, e o F com k − 1 e N − k graus de liberdade.
+
+        F = [Σ nᵢ (x̄ᵢ − x̄)² / (k − 1)] / [Σ (nᵢ − 1) sᵢ² / (N − k)]
+
+    É o `aov` também, sempre que cada grupo tem dois valores ou mais — o `oneway.test`
+    recusa grupo de um valor, e o `aov` não; a régua aqui é o primeiro, que é o mesmo
+    da ANOVA de Welch.
+
+    **Escrita, e não importada.** O `f_oneway` do `scipy` dá o F e o p do R, mas não
+    devolve os graus de liberdade, e eles vão para a nota da tabela. Com a fórmula do
+    `oneway.test` escrita aqui — são quatro linhas —, os gl impressos são os mesmos que
+    deram o p, e não uma segunda conta ao lado da do `scipy`; o `f_oneway` fica nos
+    testes, como conferência. Do `scipy` vem só a cauda da F.
+
+    Raises:
+        ValueError: menos de dois grupos, menos de dois valores em algum grupo, valores
+            que não variam dentro dos grupos, ou valor ausente ou infinito.
+    """
+    from scipy import stats
+
+    vetores = _grupos_da_anova(grupos)
+    if sem_variacao_nos_grupos(vetores, variancias_iguais=True):
+        raise ValueError(
+            "os valores não variam dentro dos grupos: o F é uma divisão por zero"
+        )
+
+    k = len(vetores)
+    tamanhos = [int(vetor.shape[0]) for vetor in vetores]
+    total = sum(tamanhos)
+    geral = sum(float(vetor.sum()) for vetor in vetores) / total
+    entre = sum(
+        n * (float(vetor.mean()) - geral) ** 2 for n, vetor in zip(tamanhos, vetores, strict=True)
+    ) / (k - 1)
+    dentro = sum(
+        (n - 1) * float(vetor.var(ddof=1)) for n, vetor in zip(tamanhos, vetores, strict=True)
+    ) / (total - k)
+    estatistica = entre / dentro
+    gl = (float(k - 1), float(total - k))
+    return Resultado(
+        metodo=ANOVA,
+        estatistica=estatistica,
+        nome_da_estatistica="F",
+        p=min(1.0, float(stats.f.sf(estatistica, *gl))),
+        gl=gl,
+        calculo_do_p="F com k − 1 e N − k graus de liberdade",
+    )
+
+
+def sem_variacao_nos_grupos(
+    grupos: Sequence[Sequence[float]], variancias_iguais: bool = True
+) -> bool:
+    """
+    Os valores não variam dentro dos grupos, para a ANOVA.
+
+    O `oneway.test` do R não tem critério nenhum: com a variância dentro dos grupos
+    zero, ele devolve F infinito, e p zero, e a tabela sairia com um `< 0,001` que é
+    uma divisão por zero. O critério aqui é o do `t.test`, levado para a ANOVA: o
+    desvio padrão combinado abaixo de dez épsilons vezes a maior média em valor
+    absoluto — zero, ou só o último bit.
+
+    Com `variancias_iguais=False` — a ANOVA de Welch —, basta **um** grupo que não
+    varia: o Welch pesa cada grupo por n/s², e o peso de um grupo constante é
+    infinito; o R devolve `NaN`.
+    """
+    vetores = [_vetor(grupo) for grupo in grupos]
+    if not variancias_iguais:
+        return any(vetor.shape[0] >= MINIMO_T and sem_variacao(vetor) for vetor in vetores)
+    total = sum(int(vetor.shape[0]) for vetor in vetores)
+    if len(vetores) < 2 or total <= len(vetores):
+        return False
+    dentro = sum(
+        (int(vetor.shape[0]) - 1) * float(vetor.var(ddof=1))
+        for vetor in vetores
+        if vetor.shape[0] > 1
+    ) / (total - len(vetores))
+    maior = max(abs(float(vetor.mean())) for vetor in vetores if vetor.shape[0])
+    desvio = math.sqrt(dentro)
+    return desvio == 0 or desvio < 10 * sys.float_info.epsilon * maior
+
+
+def _grupos_da_anova(grupos: Sequence[Sequence[float]]) -> list[Any]:
+    """
+    Os grupos como vetores, com as duas barreiras do `oneway.test`: dois grupos ou mais
+    (`not enough groups`), e dois valores ou mais em cada um (`not enough
+    observations`).
+    """
+    vetores = [_vetor(grupo) for grupo in grupos]
+    if len(vetores) < 2:
+        raise ValueError(f"a ANOVA precisa de pelo menos 2 grupos, e vieram {len(vetores)}")
+    tamanhos = [int(vetor.shape[0]) for vetor in vetores]
+    if min(tamanhos) < MINIMO_T:
+        raise ValueError(
+            f"a ANOVA precisa de pelo menos {MINIMO_T} valores em cada grupo, e vieram "
+            + ", ".join(str(n) for n in tamanhos)
+        )
+    return vetores
+
+
 def sem_variacao(x: Sequence[float]) -> bool:
     """
     Os valores não variam — o `data are essentially constant` do `t.test`.
@@ -378,11 +486,14 @@ __all__ = [
     "CONFIANCA",
     "MINIMO_STUDENT",
     "MINIMO_T",
+    "ANOVA",
     "T_DE_STUDENT",
     "T_DE_WELCH",
     "Resultado",
+    "anova_de_um_fator",
     "sem_variacao",
     "sem_variacao_em_duas",
+    "sem_variacao_nos_grupos",
     "t_de_student",
     "t_de_welch",
     "t_uma_amostra",
