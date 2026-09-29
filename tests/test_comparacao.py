@@ -20,7 +20,7 @@ e independentes dele:
 O banco de referência é o `bancos.para_comparar()`: sessenta casos e uma variável
 para cada caminho da regra. Entre grupos, o `bancos.para_comparar_grupos()`, com o
 `t.test(y ~ sexo, var.equal = TRUE)` e o `shapiro.test` de cada grupo rodados no R
-sobre ele — em `STUDENT_DO_R`.
+sobre ele — em `STUDENT_DO_R` —, e o `t.test(y ~ sexo)`, o de Welch, em `WELCH_DO_R`.
 """
 
 from __future__ import annotations
@@ -146,6 +146,19 @@ STUDENT_DO_R = [
      (-10.988211946722654, 0.91678337529406928), -5.0357142857142918,
      (30, 120, 5.0172117548598099, 0.99680258517098719, 0.99999886442708763),
      (28, 125.03571428571429, 15.433206485816951, 0.99656497471796757, 0.99999845897126383)),
+]
+
+
+# `t.test(y ~ sexo)` — o de Welch, o padrão do R — sobre os mesmos casos:
+#
+#     (variável, t, gl, p, IC 95% da diferença)
+WELCH_DO_R = [
+    ("imc", -2.4488369544641682, 49.555531555674087, 0.01791411670863783,
+     (-4.2254609788177149, -0.41690355320198996)),
+    ("renda", -1.3498028089754837, 48.84623085210292, 0.18330168372893915,
+     (-3699.0679276236488, 726.62816571888789)),
+    ("pas", -1.6472381629313293, 32.296650638913157, 0.10920625091215552,
+     (-11.26050969312937, 1.1890811217007851)),
 ]
 
 
@@ -762,6 +775,25 @@ class TestGruposDoR:
             assert grupo.normal.w == pytest.approx(w, rel=1e-6)
             assert grupo.normal.p == pytest.approx(p_shapiro, rel=1e-4)
 
+    @pytest.mark.parametrize(
+        ("variavel", "t", "gl", "p", "ic"), WELCH_DO_R, ids=[v for v, *_ in WELCH_DO_R]
+    )
+    def test_o_t_de_welch_do_r(self, variavel, t, gl, p, ic):
+        """
+        `t` escrito entre grupos é o de Welch, como o `t.test` sem argumento: os gl
+        fracionários, o p e o intervalo do R — e a diferença, que é a mesma do de
+        Student, porque as médias são as mesmas.
+        """
+        comparada = _grupos(((variavel, "sexo", "t"),)).variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == T_DE_WELCH
+        assert resultado.estatistica == pytest.approx(t, rel=1e-12)
+        assert resultado.gl == pytest.approx((gl,), rel=1e-12)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert resultado.ic == pytest.approx(ic, rel=1e-12)
+        de_student = next(r for r in STUDENT_DO_R if r[0] == variavel)
+        assert resultado.estimativa == pytest.approx(de_student[5], rel=1e-12)
+
     def test_o_um_valor_num_grupo_do_r(self):
         """
         `t.test(30, y, var.equal = TRUE)`: o R aceita um grupo de um valor no de
@@ -781,22 +813,24 @@ class TestGruposDoR:
 
 
 class TestRegraEntreGrupos:
-    def test_a_normal_nos_dois_grupos_escolhe_o_welch_que_ainda_nao_existe(self):
+    def test_a_normal_nos_dois_grupos_vai_para_o_welch(self):
         comparada = _grupos((("imc", "sexo"),)).variaveis[0]
-        assert comparada.resultado is None
-        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", T_DE_WELCH)
+        assert comparada.metodo == T_DE_WELCH
+        assert (comparada.escolha.da_regra, comparada.escolha.pela_ficha) == (T_DE_WELCH, False)
         assert comparada.escolha.motivo == (
             "o Shapiro-Wilk não rejeita a normal em nenhum dos dois grupos "
             "(Feminino: p = 1,000; Masculino: p = 1,000)"
         )
-        assert comparada.celula_do_teste == "não testado: t de Welch ainda não está no FlatCap"
+        assert comparada.celula_do_teste == T_DE_WELCH
+        assert comparada.resultado.p == pytest.approx(WELCH_DO_R[0][3], rel=1e-10)
 
-    def test_a_linha_sem_o_welch_ensina_a_escrever_student(self):
-        avisos = _grupos((("imc", "sexo"),)).avisos
+    def test_a_linha_sem_teste_ensina_a_escrever_t(self):
+        """Com o Mann-Whitney fora, o aviso ensina o t — que entre grupos é o de Welch."""
+        avisos = _grupos((("renda", "sexo"),)).avisos
         assert any(
-            "a regra escolheria t de Welch, que ainda não está no FlatCap" in aviso
-            and "supõe a mesma variância nos grupos" in aviso
-            and "`[imc, sexo, student]`" in aviso
+            "a regra escolheria Mann-Whitney, que ainda não está no FlatCap" in aviso
+            and "Se o t de Welch vale aqui" in aviso
+            and "`[renda, sexo, t]`" in aviso
             for aviso in avisos
         )
 
@@ -868,15 +902,25 @@ class TestRegraEntreGrupos:
         """
         comparada = _grupos((("imc", "sexo", "student"),)).variaveis[0]
         assert comparada.escolha.contra_a_regra
-        assert "ela escolheria t de Welch, que ainda não está no FlatCap" in (
+        assert "contra a regra — ela escolheria t de Welch: o Shapiro-Wilk" in (
+            comparada.justificativa
+        )
+
+    def test_o_t_escrito_igual_ao_da_regra(self):
+        comparada = _grupos((("imc", "sexo", "t"),)).variaveis[0]
+        assert comparada.escolha.pela_ficha and not comparada.escolha.contra_a_regra
+        assert "t de Welch escrito na ficha (t = -2,45; 49,56 gl), o mesmo que a regra" in (
             comparada.justificativa
         )
 
     def test_o_metodo_quer_dizer_um_teste_em_cada_delineamento(self):
         assert metodo_escrito("student", DOIS_GRUPOS) == "t de Student"
         assert metodo_escrito("t", UMA_AMOSTRA) == "t de Student"
-        assert metodo_escrito("t", DOIS_GRUPOS) == ""  # o de Welch, que ainda não existe
-        assert metodo_escrito("welsh", DOIS_GRUPOS) == ""
+        assert metodo_escrito("t", DOIS_GRUPOS) == T_DE_WELCH
+        assert metodo_escrito("Welch", DOIS_GRUPOS) == T_DE_WELCH
+        assert metodo_escrito("welsh", DOIS_GRUPOS) == T_DE_WELCH
+        assert metodo_escrito("t de Welch", DOIS_GRUPOS) == T_DE_WELCH
+        assert metodo_escrito("welch", UMA_AMOSTRA) == ""
         assert metodo_escrito("T de Student", DOIS_GRUPOS) == "t de Student"
 
     def test_o_registro_da_regra_entre_dois_grupos(self):
@@ -895,9 +939,33 @@ class TestAvisosEntreGrupos:
         avisos = _grupos((("pas", "sexo", "student"),)).avisos
         assert any(
             "o desvio padrão de Masculino (15,43) é 3,1 vezes o de Feminino (5,02)" in aviso
-            and "O t de Welch, que ainda não está no FlatCap, não supõe" in aviso
+            and "O t de Welch não supõe" in aviso
             for aviso in avisos
         )
+
+    def test_o_welch_pela_regra_com_grupos_pequenos_avisa(self):
+        """
+        Oito e nove valores: o Shapiro-Wilk não rejeita em nenhum, e a regra escolhe o de
+        Welch por falta de evidência contra a normal — não por evidência a favor.
+        """
+        quadro, linhas = _dois(
+            [24.1, 26.8, 25.5, 23.9, 27.2, 25.0, 26.1, 24.7],
+            [28.3, 30.1, 26.9, 31.4, 29.2, 27.8, 30.6, 28.9, 29.5],
+        )
+        comparacao = _grupos((("y", "g"),), quadro, linhas)
+        assert comparacao.variaveis[0].metodo == T_DE_WELCH
+        assert comparacao.variaveis[0].resultado.p == pytest.approx(
+            2.7059244891768163e-05, rel=1e-9
+        )
+        assert any(
+            "`y` por `g`: t de Welch com 8 valores em A e 9 valores em B" in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_o_welch_nao_fala_de_variancias(self):
+        """O aviso das variâncias é do de Student: o de Welch não as supõe iguais."""
+        avisos = _grupos((("pas", "sexo", "welch"),)).avisos
+        assert not any("vezes o de" in aviso for aviso in avisos)
 
     def test_o_student_com_desvios_parecidos_nao_avisa(self):
         avisos = _grupos((("imc", "sexo", "student"),)).avisos
@@ -919,7 +987,12 @@ class TestAvisosEntreGrupos:
         assert (
             "IMC (kg/m²) por Sexo: n = 57 (29 em Feminino e 28 em Masculino); o Shapiro-Wilk "
             "não rejeita a normal em nenhum dos dois grupos (Feminino: p = 1,000; Masculino: "
-            "p = 1,000) → t de Welch, que ainda não está no FlatCap: a linha sai sem teste."
+            "p = 1,000) → t de Welch (t = -2,45; 49,56 gl)."
+        ) in texto
+        assert (
+            "Renda por Sexo: n = 58 (30 em Feminino e 28 em Masculino); o Shapiro-Wilk "
+            "rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001) → Mann-Whitney, "
+            "que ainda não está no FlatCap: a linha sai sem teste."
         ) in texto
 
 
@@ -1012,8 +1085,35 @@ class TestSemTesteEntreGrupos:
     def test_dois_grupos_que_nao_variam_por_dentro(self):
         """As médias diferem, e o R recusa assim mesmo: o t seria uma divisão por zero."""
         quadro, linhas = _dois([5.0, 5.0, 5.0], [6.0, 6.0, 6.0])
-        comparada = _grupos((("y", "g", "student"),), quadro, linhas).variaveis[0]
-        assert comparada.celula_do_teste == "não testado: os valores não variam dentro dos grupos"
+        for metodo in ("student", "welch"):
+            comparada = _grupos((("y", "g", metodo),), quadro, linhas).variaveis[0]
+            assert comparada.celula_do_teste == (
+                "não testado: os valores não variam dentro dos grupos"
+            )
+
+    def test_um_valor_num_grupo_nao_da_o_welch(self):
+        """O `not enough 'x' observations` do R: o de Welch pede dois em cada grupo."""
+        quadro, linhas = _dois([30.0], [26.5, 29.9, 31.2, 24.8, 33.0])
+        comparada = _grupos((("y", "g", "welch"),), quadro, linhas).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: A tem 1 valor — o t de Welch precisa de pelo menos 2 em cada grupo"
+        )
+        assert any("A linha saiu sem teste" in aviso for aviso in comparada.avisos)
+
+    def test_o_welch_com_um_grupo_que_nao_varia(self):
+        """
+        `t.test(c(5, 5, 5), c(4, 6, 7))`: o R calcula, com os gl do outro grupo — t =
+        −0,756, 2 gl, p = 0,5286. A variância zero é de verdade, e o `scipy` avisa à
+        toa; o aviso não chega ao terminal.
+        """
+        import warnings
+
+        quadro, linhas = _dois([5.0, 5.0, 5.0], [4.0, 6.0, 7.0])
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            resultado = _grupos((("y", "g", "welch"),), quadro, linhas).variaveis[0].resultado
+        assert resultado.gl == pytest.approx((2.0,), rel=1e-12)
+        assert resultado.p == pytest.approx(0.5285954792089681, rel=1e-10)
 
 
 # ── Entre dois grupos: a tabela ─────────────────────────────────────────────
@@ -1072,8 +1172,9 @@ class TestTabelaDoisGrupos:
     def test_as_notas_dizem_como_o_r_faz_e_o_que_falta(self):
         texto = _grupos((("imc", "sexo"),)).tabela_de(DOIS_GRUPOS).texto()
         assert "var.equal = TRUE" in texto
+        assert "graus de liberdade de Welch-Satterthwaite" in texto
         assert "a média do primeiro grupo menos a do segundo" in texto
-        assert "Os dois ainda não estão no FlatCap" in texto
+        assert "O Mann-Whitney ainda não está no FlatCap" in texto
         assert "os faltantes são por comparação" in texto
 
     def test_uma_tabela_por_delineamento_na_ordem(self):
@@ -1150,11 +1251,14 @@ class TestFichaEntreGrupos:
             Pedido("imc", grupos="pas_0"),
         )
 
-    def test_t_entre_grupos_e_o_welch_que_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, t]\n  - [pas, sexo, welsh]\n")
-        assert "`t` entre grupos é o t de Welch, que ainda não está no FlatCap" in mensagem
-        assert "`welsh` entre grupos é o t de Welch" in mensagem
-        assert "o método que se escreve é `student`" in mensagem
+    def test_t_e_welch_entre_grupos(self, projeto_vazio):
+        itens = _itens(projeto_vazio, "  - [imc, sexo, t]\n  - [pas, sexo, welsh]\n")
+        assert [(i.variavel, i.metodo) for i in itens] == [("imc", "t"), ("pas", "welch")]
+
+    def test_o_mann_whitney_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, mann-whitney]\n")
+        assert "`mann-whitney` entre grupos é o Mann-Whitney, que ainda não está" in mensagem
+        assert "`t`, `student` ou `welch`" in mensagem
 
     def test_a_anova_ainda_nao_existe(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, ANOVA]\n")
@@ -1223,8 +1327,14 @@ class TestManifestoEntreGrupos:
     def test_as_regras_de_dois_grupos(self):
         regras = montar_manifesto(_grupos((("imc", "sexo"),)), DICIONARIO_DOS_GRUPOS).regras
         assert "t de Welch" in regras["escolha_do_teste"][DOIS_GRUPOS]
+        assert "O Mann-Whitney ainda não está" in regras["escolha_do_teste"][DOIS_GRUPOS]
         assert "var.equal = TRUE" in regras["t_de_student"]
-        assert regras["minimo"] == {"t_uma_amostra": 2, "t_de_student": 3}
+        assert "Welch-Satterthwaite" in regras["t_de_welch"]
+        assert regras["minimo"] == {
+            "t_uma_amostra": 2,
+            "t_de_welch": "2 em cada grupo",
+            "t_de_student": 3,
+        }
 
 
 # ── No disco ────────────────────────────────────────────────────────────────
