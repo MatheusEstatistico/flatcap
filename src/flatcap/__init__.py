@@ -276,6 +276,25 @@ seção. O `relatorio.py` não mudou.
 
 **`associacao.na_ordem_do_dicionario` ficou pública**, com o apelido privado: os
 grupos da comparação saem na mesma ordem das categorias da associação.
+
+## 1.9.0 — o t de Welch
+
+**O paramétrico da regra entre dois grupos passa a rodar.** `[imc, sexo]` sem método
+dá o t de Welch quando o Shapiro-Wilk não rejeita a normal em nenhum dos grupos: o
+`t.test(x, y)` do R, o padrão dele, pelo `scipy` — cada grupo com a sua variância, os
+graus de liberdade de Welch-Satterthwaite, fracionários, e o IC 95% da diferença. As
+linhas que saíam sem teste por falta dele viram linhas de Welch; as que saem sem
+teste agora são as da normal rejeitada, onde a regra escolhe o Mann-Whitney.
+
+**`t` entre grupos é o de Welch**, como o `t.test` sem argumento; `welch` também, e
+`welsh` é lido como ele. O de Student continua escrito, `student`, com o aviso das
+variâncias — que agora diz que o de Welch não as supõe, sem o "ainda não está".
+
+**A barreira do R para ele**: dois valores em cada grupo, porque cada grupo entra com a
+sua variância, e a de um valor só não existe — o `not enough 'x' observations`. Um
+grupo que não varia não barra: o t existe, com os gl do outro grupo, e o aviso de
+«perda de precisão» que o `scipy` emite nesse caso é calado, porque ali a conta está
+certa.
 """
 
-__version__ = "1.8.0"
+__version__ = "1.9.0"
