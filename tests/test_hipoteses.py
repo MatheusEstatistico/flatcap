@@ -5,9 +5,10 @@ Os testes do `hipoteses.py` — a aritmética, sem projeto, banco nem ficha.
 e independentes dele:
 
 * o **R 4.3.3**: `t.test(x, mu = mu)`, `t.test(x, y, var.equal = TRUE)`,
-  `t.test(x, y)` e `oneway.test(y ~ g, var.equal = TRUE)` rodados sobre os mesmos
-  números, com o resultado copiado para `REFERENCIAS_DO_R`, `REFERENCIAS_DO_R_STUDENT`,
-  `REFERENCIAS_DO_R_WELCH` e `REFERENCIAS_DO_R_ANOVA` — a estatística, os graus de
+  `t.test(x, y)`, `oneway.test(y ~ g, var.equal = TRUE)` e `oneway.test(y ~ g)` rodados
+  sobre os mesmos números, com o resultado copiado para `REFERENCIAS_DO_R`,
+  `REFERENCIAS_DO_R_STUDENT`, `REFERENCIAS_DO_R_WELCH`, `REFERENCIAS_DO_R_ANOVA` e
+  `REFERENCIAS_DO_R_ANOVA_DE_WELCH` — a estatística, os graus de
   liberdade, o p, os dois limites do intervalo e a estimativa, quando há. O
   `PlantGrowth` e o `InsectSprays` são os bancos dos exemplos da documentação do R;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
@@ -30,6 +31,7 @@ from scipy import stats
 import flatcap.hipoteses as hipoteses
 from flatcap.hipoteses import (
     ANOVA,
+    ANOVA_DE_WELCH,
     CONFIANCA,
     MINIMO_STUDENT,
     MINIMO_T,
@@ -37,6 +39,7 @@ from flatcap.hipoteses import (
     T_DE_WELCH,
     Resultado,
     anova_de_um_fator,
+    anova_de_welch,
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_nos_grupos,
@@ -198,6 +201,17 @@ REFERENCIAS_DO_R_ANOVA = [
     ("medias_iguais", 0, 2, 6, 1),
 ]
 
+# `oneway.test(y ~ g)` no R 4.3.3 — a ANOVA de Welch, o padrão —, sobre os mesmos
+# grupos; o `um_constante` fica de fora, porque o R devolve `NaN`:
+#
+#     (caso, F, gl do numerador, gl do denominador, p)
+REFERENCIAS_DO_R_ANOVA_DE_WELCH = [
+    ("plantas", 5.1809724081131892, 2, 17.128418616644129, 0.017392821490170001),
+    ("insetos", 36.065443893577253, 5, 30.04256050876738, 7.9993794556733478e-12),
+    ("tres", 8.7738753291135048, 2, 17.341354929364982, 0.002330898076787043),
+    ("medias_iguais", 0, 2, 3.2941176470588234, 1),
+]
+
 
 # ── O R ─────────────────────────────────────────────────────────────────────
 
@@ -347,6 +361,41 @@ class TestAnovaDoR:
             warnings.simplefilter("ignore")
             esperado = stats.f_oneway(*VARIOS_GRUPOS[caso])
         resultado = anova_de_um_fator(VARIOS_GRUPOS[caso])
+        assert resultado.estatistica == pytest.approx(float(esperado.statistic), rel=1e-12)
+        assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
+
+
+class TestAnovaDeWelchDoR:
+    @pytest.mark.parametrize(
+        ("caso", "f", "gl1", "gl2", "p"),
+        REFERENCIAS_DO_R_ANOVA_DE_WELCH,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_ANOVA_DE_WELCH],
+    )
+    def test_o_oneway_test_do_r(self, caso, f, gl1, gl2, p):
+        resultado = anova_de_welch(VARIOS_GRUPOS[caso])
+        assert resultado.estatistica == pytest.approx(f, rel=1e-12, abs=1e-12)
+        assert resultado.gl == pytest.approx((gl1, gl2), rel=1e-12)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+
+    def test_o_exemplo_da_documentacao(self):
+        """`oneway.test(weight ~ group, PlantGrowth)`: F = 5,181, 2 e 17,128 gl, p = 0,01739."""
+        resultado = anova_de_welch(VARIOS_GRUPOS["plantas"])
+        assert round(resultado.estatistica, 3) == 5.181
+        assert round(resultado.gl[1], 3) == 17.128
+        assert round(resultado.p, 5) == 0.01739
+
+    def test_com_dois_grupos_o_f_e_o_t_de_welch_ao_quadrado(self):
+        """E com os mesmos graus de liberdade: 19,93 nos dois — o R dá os mesmos."""
+        x, y = DUAS_AMOSTRAS["grupos"]
+        anova, welch = anova_de_welch([x, y]), t_de_welch(x, y)
+        assert anova.estatistica == pytest.approx(welch.estatistica**2, rel=1e-12)
+        assert anova.gl[1] == pytest.approx(welch.gl[0], rel=1e-12)
+        assert anova.p == pytest.approx(welch.p, rel=1e-12)
+
+    @pytest.mark.parametrize("caso", ["plantas", "insetos", "tres"])
+    def test_o_f_oneway_do_scipy_confere(self, caso):
+        esperado = stats.f_oneway(*VARIOS_GRUPOS[caso], equal_var=False)
+        resultado = anova_de_welch(VARIOS_GRUPOS[caso])
         assert resultado.estatistica == pytest.approx(float(esperado.statistic), rel=1e-12)
         assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
 
@@ -525,6 +574,16 @@ class TestRecusas:
         with pytest.raises(ValueError, match="não variam dentro dos grupos"):
             anova_de_um_fator([[5.0, 5.0], [6.0, 6.0], [7.0, 7.0]])
 
+    def test_a_de_welch_com_um_grupo_que_nao_varia(self):
+        """Onde o R devolve `NaN`; a clássica, sobre os mesmos grupos, roda."""
+        with pytest.raises(ValueError, match="um grupo não varia"):
+            anova_de_welch(VARIOS_GRUPOS["um_constante"])
+        assert anova_de_um_fator(VARIOS_GRUPOS["um_constante"]).gl == (2.0, 6.0)
+
+    def test_a_de_welch_com_um_valor_num_grupo(self):
+        with pytest.raises(ValueError, match="pelo menos 2 valores em cada grupo"):
+            anova_de_welch([[30.0], [1.0, 2.0], [3.0, 4.0]])
+
     def test_o_criterio_dos_grupos_para_cada_anova(self):
         """
         Um grupo constante não barra a clássica — a variância combinada é a dos outros —
@@ -593,6 +652,12 @@ class TestContrato:
         assert resultado.nome_da_estatistica == "F"
         assert (resultado.estimativa, resultado.ic, resultado.referencia) == (None, None, None)
         assert resultado.calculo_do_p == "F com k − 1 e N − k graus de liberdade"
+
+    def test_a_de_welch_tambem_nao_estima_nada(self):
+        resultado = anova_de_welch(VARIOS_GRUPOS["plantas"])
+        assert resultado.metodo == ANOVA_DE_WELCH == "ANOVA de Welch"
+        assert (resultado.estimativa, resultado.ic) == (None, None)
+        assert "graus de liberdade do denominador de Welch" in resultado.calculo_do_p
 
     def test_o_de_welch_estima_a_diferenca(self):
         resultado = t_de_welch(*DUAS_AMOSTRAS["grupos"])
