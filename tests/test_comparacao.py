@@ -22,7 +22,9 @@ para cada caminho da regra. Entre grupos, o `bancos.para_comparar_grupos()`, com
 `t.test(y ~ sexo, var.equal = TRUE)` e o `shapiro.test` de cada grupo rodados no R
 sobre ele — em `STUDENT_DO_R` —, o `t.test(y ~ sexo)`, o de Welch, em `WELCH_DO_R`, e
 o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R` e o
-`oneway.test(y ~ escolaridade)`, o de Welch, em `ANOVA_DE_WELCH_DO_R`.
+`oneway.test(y ~ escolaridade)`, o de Welch, em `ANOVA_DE_WELCH_DO_R`. Nas medidas
+repetidas, o `bancos.para_comparar_repetidas()`, com o `aov` e o ε de Greenhouse-Geisser
+do R em `REPETIDAS_DO_R`.
 """
 
 from __future__ import annotations
@@ -43,15 +45,19 @@ from conftest import (
 )
 from flatcap.comparacao import (
     ANOVA,
+    ANOVA_DE_MEDIDAS_REPETIDAS,
     ANOVA_DE_WELCH,
     ARQUIVO_DOIS_GRUPOS,
     ARQUIVO_K_GRUPOS,
+    ARQUIVO_REPETIDAS,
     ARQUIVO_TABELA,
     DOIS_GRUPOS,
+    FRIEDMAN,
     K_GRUPOS,
     KRUSKAL_WALLIS,
     MANN_WHITNEY,
     REGRA,
+    REPETIDAS,
     T_DE_WELCH,
     UMA_AMOSTRA,
     WILCOXON,
@@ -195,6 +201,46 @@ ANOVA_DE_WELCH_DO_R = [
     ("nota", 7.1088234461909936, (2, 34.461935431552092), 0.0026015438081409816),
     ("imc", 0.11146986509410804, (2, 37.324143867146049), 0.89481500877396836),
 ]
+
+
+PAS_0 = Linha("pas_0", "PAS basal", NUMERICA)
+PAS_1 = Linha("pas_1", "PAS 30 dias", NUMERICA)
+PAS_2 = Linha("pas_2", "PAS 90 dias", NUMERICA)
+DICIONARIO_DAS_REPETIDAS = (
+    PAS_0,
+    PAS_1,
+    PAS_2,
+    *(Linha(f"dor_{j}", f"Dor {j}", NUMERICA) for j in range(3)),
+    *(Linha(f"peso_{j}", f"Peso {j}", NUMERICA) for j in range(3)),
+    SEXO,
+)
+ITEM_PAS = ("repetidas", ["pas_0", "pas_1", "pas_2"])
+ITEM_DOR = ("repetidas", ["dor_0", "dor_1", "dor_2"])
+
+# O F do `aov(y ~ t + Error(id / t))`, o ε de Greenhouse-Geisser, o p com os gl
+# corrigidos, e de cada medida o n, a média, o DP e o Shapiro-Wilk — no R 4.3.3, sobre
+# os casos completos de `bancos.para_comparar_repetidas()`:
+#
+#     (medidas, n, F, ε, gl corrigidos, p, ((n, média, DP, W, p) de cada medida))
+REPETIDAS_DO_R = [
+    ("pas", 38, 37.039678284182543, 0.91843540650364708,
+     (1.8368708130072942, 67.964220081269886), 4.3421958447113387e-11, (
+         (38, 130, 11.793264225017648, 0.9822655892357709, 0.7961345117822366),
+         (38, 126.81578947368421, 12.089430861255437, 0.9840043274168192, 0.85184392453344859),
+         (38, 124.28947368421052, 12.595382883651265, 0.97763079287965116, 0.63337362446588985),
+     )),
+    ("dor", 40, 1.9436744323208446, 0.97681901825756734,
+     (1.9536380365151347, 76.19188342409025), 0.15118716398253323, (
+         (40, 0.875, 1.0423715563744347, 0.79668827962160405, 5.7828308311489843e-06),
+         (40, 0.675, 0.88831445113910201, 0.74783655435326679, 6.5318723163127651e-07),
+         (40, 0.5, 0.78446454055273618, 0.67595376665524665, 4.0119023533906341e-08),
+     )),
+]
+
+
+def _repetidas(itens, quadro=None, linhas=DICIONARIO_DAS_REPETIDAS):
+    quadro = bancos.para_comparar_repetidas() if quadro is None else quadro
+    return comparar(banco_em_memoria(quadro), ficha_em_memoria(), linhas, itens, AGORA)
 
 
 def _comparar(quadro=None, linhas=DICIONARIO, itens=ITENS):
@@ -1317,9 +1363,9 @@ class TestFichaEntreGrupos:
         mensagem = _recusa(projeto_vazio, "  - [imc, escolaridade, Kruskal-Wallis]\n")
         assert "entre grupos é o Kruskal-Wallis, que ainda não está no FlatCap" in mensagem
 
-    def test_o_friedman_ainda_nao_existe(self, projeto_vazio):
+    def test_o_friedman_nao_e_de_grupos(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, friedman]\n")
-        assert "o Friedman ainda não está no FlatCap" in mensagem
+        assert "`friedman` não se aplica à comparação entre grupos" in mensagem
 
     def test_a_anova_entre_grupos(self, projeto_vazio):
         itens = _itens(projeto_vazio, "  - [imc, escolaridade, ANOVA]\n")
@@ -1602,6 +1648,305 @@ class TestKGruposTabela:
         assert [g["n"] for g in nota["por_grupo"]] == [20, 20, 20]
 
 
+# ── Medidas repetidas ───────────────────────────────────────────────────────
+
+
+class TestRepetidasDoR:
+    @pytest.mark.parametrize(
+        ("base", "n", "f", "epsilon", "gl", "p", "medidas"),
+        REPETIDAS_DO_R,
+        ids=[base for base, *_ in REPETIDAS_DO_R],
+    )
+    def test_o_aov_o_epsilon_e_o_shapiro_test_de_cada_medida(
+        self, base, n, f, epsilon, gl, p, medidas
+    ):
+        """
+        Com `metodo: anova` escrito, a ANOVA sai também onde a regra não a escolheria —
+        e dá para conferir as duas contra o R: o F, o ε, os gl corrigidos, o p e, de
+        cada medida, o n, a média, o DP e o Shapiro-Wilk sobre os casos completos.
+        """
+        nomes = [f"{base}_{j}" for j in range(3)]
+        comparada = _repetidas((("repetidas", nomes, "anova"),)).variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == ANOVA_DE_MEDIDAS_REPETIDAS
+        assert resultado.estatistica == pytest.approx(f, rel=1e-12)
+        assert resultado.epsilon == pytest.approx(epsilon, rel=1e-9)
+        assert resultado.gl == pytest.approx(gl, rel=1e-9)
+        assert resultado.p == pytest.approx(p, rel=1e-8)
+        assert comparada.validos == n
+        for grupo, (m, media, dp, w, p_shapiro) in zip(comparada.grupos, medidas, strict=True):
+            assert grupo.n == m
+            assert grupo.resumo["media"] == pytest.approx(media, rel=1e-12)
+            assert grupo.resumo["desvio"] == pytest.approx(dp, rel=1e-12)
+            assert grupo.normal.w == pytest.approx(w, rel=1e-6)
+            assert grupo.normal.p == pytest.approx(p_shapiro, rel=1e-4)
+
+
+class TestRepetidasRegra:
+    def test_a_normal_em_todas_vai_para_a_anova_de_medidas_repetidas(self):
+        comparada = _repetidas((ITEM_PAS,)).variaveis[0]
+        assert comparada.delineamento == REPETIDAS
+        assert (comparada.metodo, comparada.escolha.pela_ficha) == (
+            ANOVA_DE_MEDIDAS_REPETIDAS,
+            False,
+        )
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk não rejeita a normal em nenhuma das 3 medidas (PAS basal: "
+            "p = 0,796; PAS 30 dias: p = 0,852; PAS 90 dias: p = 0,633)"
+        )
+        assert comparada.justificativa == (
+            "PAS basal, PAS 30 dias e PAS 90 dias: n = 38 com todas as medidas; "
+            f"{comparada.escolha.motivo} → ANOVA de medidas repetidas (F = 37,04; 1,84 e "
+            "67,96 gl; ε = 0,918)."
+        )
+
+    def test_a_normal_rejeitada_escolhe_o_friedman(self):
+        comparacao = _repetidas((ITEM_DOR,))
+        comparada = comparacao.variaveis[0]
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", FRIEDMAN)
+        assert comparada.celula_do_teste == "não testado: normal rejeitada"
+        assert any(
+            "a regra escolheria Friedman, que ainda não está no FlatCap" in aviso
+            and "Se a ANOVA de medidas repetidas vale aqui" in aviso
+            and "`{repetidas: [dor_0, dor_1, dor_2], metodo: anova}`" in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_a_anova_pela_regra_com_poucos_casos_avisa(self):
+        """
+        Dez casos: o Shapiro-Wilk não rejeita em nenhuma medida, e a regra escolhe a
+        ANOVA por falta de evidência contra a normal — não por evidência a favor.
+        """
+        quadro = pd.DataFrame(
+            {
+                "pas_0": [132, 140, 128, 150, 138, 126, 145, 133, 129, 141],
+                "pas_1": [128, 135, 127, 142, 131, 124, 139, 130, 126, 133],
+                "pas_2": [125, 136, 121, 139, 128, 125, 132, 124, 123, 130],
+            }
+        )
+        comparacao = _repetidas((ITEM_PAS,), quadro, (PAS_0, PAS_1, PAS_2))
+        assert comparacao.variaveis[0].metodo == ANOVA_DE_MEDIDAS_REPETIDAS
+        assert any(
+            "`repetidas: [pas_0, pas_1, pas_2]`: ANOVA de medidas repetidas com 10 casos" in a
+            for a in comparacao.avisos
+        )
+        assert not any("com 38 casos" in a for a in _repetidas((ITEM_PAS,)).avisos)
+
+    def test_a_escala_com_a_normal_rejeitada_avisa_que_e_discreta(self):
+        avisos = _repetidas((ITEM_DOR,)).avisos
+        assert any(
+            "`repetidas: [dor_0, dor_1, dor_2]`: 5 valores distintos em 120 casos" in a
+            for a in avisos
+        )
+
+    def test_a_anova_escrita_contra_a_regra(self):
+        comparacao = _repetidas((("repetidas", ["dor_0", "dor_1", "dor_2"], "anova"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert (
+            "ANOVA de medidas repetidas escrita na ficha (F = 1,94; 1,95 e 76,19 gl; "
+            "ε = 0,977), contra a regra — ela escolheria Friedman, que ainda não está no "
+            "FlatCap"
+        ) in comparada.justificativa
+        assert any("escrita na ficha, contra a regra" in a for a in comparacao.avisos)
+
+    def test_o_registro_da_regra_das_medidas_repetidas(self):
+        assert REGRA[REPETIDAS] == (ANOVA_DE_MEDIDAS_REPETIDAS, FRIEDMAN)
+        assert metodo_escrito("anova", REPETIDAS) == ANOVA_DE_MEDIDAS_REPETIDAS
+        assert metodo_escrito("friedman", REPETIDAS) == ""
+        assert metodo_escrito("welch", REPETIDAS) == ""
+
+
+class TestRepetidasNoBanco:
+    def test_so_os_casos_com_todas_as_medidas(self):
+        """
+        Duas células vazias, em casos diferentes: 38 casos completos, e a média de
+        cada medida é a desses 38 — a da `pas_0` é 130, e não os 129,95 dos quarenta.
+        """
+        comparada = _repetidas((ITEM_PAS,)).variaveis[0]
+        assert (comparada.validos, comparada.faltantes) == (38, 2)
+        assert [g.n for g in comparada.grupos] == [38, 38, 38]
+        assert comparada.grupos[0].resumo["media"] == pytest.approx(130.0, rel=1e-12)
+
+    def test_medidas_que_nao_variam_dentro_dos_casos(self):
+        """Cada caso ganha um quilo por medida: o R daria F = 10²⁹. Aqui, sem teste."""
+        comparacao = _repetidas((("repetidas", ["peso_0", "peso_1", "peso_2"], "anova"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.celula_do_teste == "não testado: as medidas não variam dentro dos casos"
+        assert any("cada caso muda o mesmo tanto" in a for a in comparacao.avisos)
+
+    def test_nenhum_caso_completo(self):
+        quadro = bancos.para_comparar_repetidas().assign(pas_2=None)
+        comparada = _repetidas((ITEM_PAS,), quadro).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: nenhum caso com todas as medidas"
+        assert [linha[2] for linha in linhas_da_tabela(comparada)] == ["—", "—", "—"]
+
+    def test_um_caso_completo(self):
+        quadro = bancos.para_comparar_repetidas()
+        quadro.loc[1:, "pas_2"] = None
+        comparada = _repetidas((ITEM_PAS,), quadro).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: 1 caso com todas as medidas — o teste precisa de pelo menos 2"
+        )
+
+    def test_um_valor_so_em_todas_as_linhas(self):
+        quadro = bancos.para_comparar_repetidas().assign(pas_0=120.0, pas_1=120.0, pas_2=120.0)
+        comparada = _repetidas((ITEM_PAS,), quadro).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: um valor só em todas as linhas"
+
+
+class TestRepetidasTabela:
+    def test_as_cinco_colunas_e_uma_linha_por_medida(self):
+        _, n, _, _, _, p, medidas = REPETIDAS_DO_R[0]
+        tabela = _repetidas((ITEM_PAS,)).tabela_de(REPETIDAS)
+        assert (tabela.nome, tabela.especie, tabela.titulo) == (
+            ARQUIVO_REPETIDAS,
+            REPETIDAS,
+            "Comparação entre medidas repetidas",
+        )
+        assert tabela.colunas == ("medida", "n", "média (DP)", "teste", "p-valor")
+
+        def media_dp(medida):
+            return f"{_como_a_descritiva(medida[1])} ({_como_a_descritiva(medida[2])})"
+
+        assert tabela.linhas == (
+            ("PAS basal", "38", media_dp(medidas[0]), ANOVA_DE_MEDIDAS_REPETIDAS, valor_p(p)),
+            ("PAS 30 dias", "38", media_dp(medidas[1]), "", ""),
+            ("PAS 90 dias", "38", media_dp(medidas[2]), "", ""),
+        )
+
+    def test_as_notas_dizem_como_o_r_faz_e_o_que_falta(self):
+        texto = _repetidas((ITEM_PAS, ITEM_DOR)).tabela_de(REPETIDAS).texto()
+        assert "sempre com a correção de Greenhouse-Geisser" in texto
+        assert "Sem o teste de Mauchly antes" in texto
+        assert "O Friedman ainda não está no FlatCap" in texto
+        assert "um caso com uma medida faltando sai do item inteiro" in texto
+
+    def test_as_quatro_tabelas_na_ordem(self):
+        quadro = bancos.para_comparar_repetidas().assign(
+            imc=[20.0 + (i % 7) for i in range(40)],
+            escolaridade=["A", "B", "C", "D"] * 10,
+        )
+        linhas = (
+            *DICIONARIO_DAS_REPETIDAS,
+            IMC,
+            Linha("escolaridade", "Escolaridade", CATEGORICA, ("A", "B", "C", "D")),
+        )
+        comparacao = _repetidas(
+            (ITEM_PAS, ("imc", 25), ("imc", "sexo"), ("imc", "escolaridade")), quadro, linhas
+        )
+        assert [t.nome for t in comparacao.tabelas] == [
+            ARQUIVO_TABELA,
+            ARQUIVO_DOIS_GRUPOS,
+            ARQUIVO_K_GRUPOS,
+            ARQUIVO_REPETIDAS,
+        ]
+
+    def test_os_detalhes_das_medidas_repetidas(self):
+        comparacao = _repetidas((ITEM_PAS,))
+        (item,) = montar_manifesto(comparacao, DICIONARIO_DAS_REPETIDAS).itens
+        (pas,) = item.detalhes[REPETIDAS]
+        assert pas["medidas"] == ["pas_0", "pas_1", "pas_2"]
+        assert (pas["n"], pas["faltantes"]) == (38, 2)
+        assert [m["rotulo"] for m in pas["por_medida"]] == [
+            "PAS basal",
+            "PAS 30 dias",
+            "PAS 90 dias",
+        ]
+        assert pas["epsilon"] == pytest.approx(0.918435, abs=1e-6)
+        assert item.colunas == ("pas_0", "pas_1", "pas_2")
+        assert [a.arquivo for a in item.artefatos] == [ARQUIVO_REPETIDAS]
+
+    def test_as_medidas_nao_estao_fora(self):
+        manifesto = montar_manifesto(_repetidas((ITEM_PAS,)), DICIONARIO_DAS_REPETIDAS)
+        fora = {f["variavel"] for f in manifesto.fora}
+        assert not fora & {"pas_0", "pas_1", "pas_2"}
+        assert "dor_0" in fora
+
+
+class TestRepetidasRecusas:
+    def _recusa(self, *itens, linhas=DICIONARIO_DAS_REPETIDAS) -> str:
+        with pytest.raises(ItemInvalidoError) as erro:
+            _repetidas(itens, linhas=linhas)
+        return str(erro.value)
+
+    def test_medida_fora_do_dicionario(self):
+        mensagem = self._recusa(("repetidas", ["pas_0", "pas_1", "pas_9"]))
+        assert "repetidas: [pas_0, pas_1, pas_9] — `pas_9` não está no dicionario.csv" in mensagem
+
+    def test_medida_categorica(self):
+        mensagem = self._recusa(("repetidas", ["pas_0", "pas_1", "sexo"]))
+        assert "`sexo` está marcada `categorica`" in mensagem
+        assert "a média de um código não é uma média" in mensagem
+
+    def test_as_medidas_com_o_mesmo_problema_numa_frase_so(self):
+        codigos = tuple(Linha(f"dor_{j}", f"Dor {j}", CATEGORICA) for j in range(3))
+        mensagem = self._recusa(
+            ("repetidas", ["dor_0", "dor_1", "dor_2"]),
+            linhas=(*DICIONARIO_DAS_REPETIDAS[:3], *codigos),
+        )
+        assert "`dor_0`, `dor_1` e `dor_2` estão marcadas `categorica`" in mensagem
+
+    def test_as_mesmas_medidas_em_outra_ordem_repetem(self):
+        mensagem = self._recusa(ITEM_PAS, ("repetidas", ["pas_2", "pas_1", "pas_0"]))
+        assert "repete repetidas: [pas_0, pas_1, pas_2]" in mensagem
+
+    def test_duas_numericas_entre_grupos_ensinam_as_repetidas(self):
+        mensagem = self._recusa(("pas_0", "pas_1"))
+        assert "`- repetidas: [pas_0, pas_1, ...]`" in mensagem
+
+
+class TestRepetidasFicha:
+    def test_as_formas_das_repetidas(self, projeto_vazio):
+        itens = _itens(
+            projeto_vazio,
+            "  - repetidas: [pas_0, pas_1, pas_2]\n"
+            "  - repetidas: [dor_0, dor_1, dor_2]\n"
+            "    metodo: ANOVA\n"
+            "  - {repetidas: [peso_0, peso_1, peso_2], metodo: anova}\n",
+        )
+        assert itens == (
+            Pedido("pas_0", medidas=("pas_0", "pas_1", "pas_2")),
+            Pedido("dor_0", metodo="anova", medidas=("dor_0", "dor_1", "dor_2")),
+            Pedido("peso_0", metodo="anova", medidas=("peso_0", "peso_1", "peso_2")),
+        )
+
+    def test_duas_medidas_sao_o_t_pareado(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1]\n")
+        assert "duas medidas: a comparação é o t pareado, que ainda não está" in mensagem
+
+    def test_uma_medida_so(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - repetidas: pas_0\n")
+        assert "uma medida só" in mensagem
+
+    def test_a_mesma_medida_duas_vezes(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_0]\n")
+        assert "`pas_0` duas vezes" in mensagem
+
+    def test_chave_que_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodos: anova\n"
+        )
+        assert "`metodos` não é uma chave do item de medidas repetidas" in mensagem
+
+    def test_o_friedman_ainda_nao_existe(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: friedman\n"
+        )
+        assert "o Friedman ainda não está no FlatCap" in mensagem
+        assert "o método que se escreve é `anova`" in mensagem
+
+    def test_o_welch_nao_e_das_repetidas(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: welch\n"
+        )
+        assert "`welch` não é um método das medidas repetidas" in mensagem
+
+    def test_numero_na_lista(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, 120, pas_2]\n")
+        assert "depois de `repetidas:` vem a lista das medidas" in mensagem
+
+
 # ── Entre dois grupos: o manifesto ──────────────────────────────────────────
 
 
@@ -1650,6 +1995,7 @@ class TestManifestoEntreGrupos:
             "t_de_student": 3,
             "anova": "2 em cada grupo",
             "anova_de_welch": "2 em cada grupo",
+            "anova_de_medidas_repetidas": "3 medidas e 2 casos com todas elas",
         }
 
 
@@ -1826,6 +2172,22 @@ class TestRelatorio:
         assert grupos.colunas[1] == "grupo"
         assert [linha[1] for linha in grupos.linhas] == ["sexo", "Feminino", "Masculino"]
         assert grupos.linhas[0][5] == "t de Student"
+
+    def test_as_medidas_repetidas_no_documento(self, projeto_com_rodada):
+        """Pelo disco, com o banco das repetidas: a tabela chega à seção, sem alerta."""
+        from flatcap.relatorio import preparar_relatorio
+
+        raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
+        acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1, pas_2]\n")
+        executar_comparacao(preparar_comparacao(raiz, agora=AGORA))
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        assert sorted(p.name for p in pasta.iterdir()) == [ARQUIVO_MANIFESTO, ARQUIVO_REPETIDAS]
+        relatorio = preparar_relatorio(raiz, agora=AGORA).relatorio
+        assert relatorio.alertas == ()
+        secao = next(s for s in relatorio.secoes if s.rotulo == "Comparação")
+        (tabela,) = secao.tabelas
+        assert [linha[0] for linha in tabela.linhas] == ["pas_0", "pas_1", "pas_2"]
+        assert tabela.linhas[0][3] == ANOVA_DE_MEDIDAS_REPETIDAS
 
     def test_sem_ficha_mandando_vem_no_fim(self, projeto_para_comparar):
         from flatcap.normalidade import executar_normalidade, preparar_normalidade
