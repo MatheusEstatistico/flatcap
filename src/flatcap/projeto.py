@@ -686,8 +686,10 @@ _CABECALHO_YAML = """
 #               cliente vai ler. `null` faz o documento sair com um marcador
 #               visível e um aviso dentro dele, e não em silêncio.
 #
-#   analises  o que foi combinado na reunião. A Fase 7 lê esta lista para
-#             saber quais módulos rodar.
+#   analises  as análises combinadas na reunião, na ordem das seções do
+#             relatório — [descritiva, correlacao]. O `flatcap analisar`
+#             roda as desta lista, nessa ordem; os pares e os itens de cada
+#             uma vão num bloco com o nome dela (`correlacao:`).
 #   dados     uma entrada por versão do banco, em ordem cronológica.
 """
 

@@ -309,6 +309,26 @@ def acrescentar_a_ficha(raiz: Path, texto: str) -> Path:
     return caminho
 
 
+def escrever_analises(raiz: Path, texto: str) -> Path:
+    """
+    Troca a linha `analises: []` da ficha pelo que você escreveria na reunião.
+
+    Troca, e não acrescenta como o `acrescentar_a_ficha`: a ficha do `flatcap novo`
+    e a do `escrever_ficha` já trazem a chave vazia, e o YAML recusa a mesma chave
+    duas vezes. `texto` é a linha inteira, como se digita — `analises: [descritiva,
+    normalidade]`, ou a chave com um nome por linha.
+    """
+    caminho = Path(raiz) / ARQUIVO_PROJETO
+    atual = caminho.read_text(encoding="utf-8")
+    assert "\nanalises: []\n" in atual, "a ficha não tem a linha `analises: []` para trocar"
+    caminho.write_text(
+        atual.replace("\nanalises: []\n", "\n" + texto.strip("\n") + "\n", 1),
+        encoding="utf-8",
+        newline="\n",
+    )
+    return caminho
+
+
 # ── Uma rodada de descritiva pronta ─────────────────────────────────────────
 
 
@@ -405,8 +425,8 @@ def congelar_relogio(monkeypatch):
                 return quando
 
         for modulo in (
-            "associacao", "comparacao", "correlacao", "cruzamento", "dados", "descritiva",
-            "normalidade", "perfil", "projeto", "relatorio",
+            "analises", "associacao", "comparacao", "correlacao", "cruzamento", "dados",
+            "descritiva", "normalidade", "perfil", "projeto", "relatorio",
         ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):
@@ -445,6 +465,7 @@ __all__ = [
     "acrescentar_a_ficha",
     "banco_em_memoria",
     "bytes_iguais",
+    "escrever_analises",
     "escrever_ficha",
     "ficha_em_memoria",
     "linhas_do_historico",

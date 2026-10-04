@@ -18,6 +18,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara médias: contra uma referência, entre grupos e entre medidas
+    analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     graficos.py    desenha os .png a partir das tabelas já calculadas
     manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -367,6 +368,40 @@ alguma medida tem faltante, o que a nota diz.
 **A tabela `repetidas.csv`**: uma linha por medida, com o teste e o p na primeira. E
 uma barreira que o R não tem: medidas que não variam dentro dos casos — cada caso
 mudando o mesmo tanto —, em que o R devolve um F de 10²⁹ feito de arredondamento.
+
+## 1.13.0 — o lote
+
+**`flatcap analisar <id>`: as análises da lista `analises:` da ficha, de uma vez.**
+A lista existia desde a Fase 2 e ordenava as seções do relatório desde a 1.3.1; agora
+ela também diz o que roda. O comando obedece e não escolhe: lista vazia recusa, e a
+recusa escreve a linha pronta para copiar a partir dos blocos que a ficha já tem;
+nome que o FlatCap não conhece recusa com a grafia certa — `associação` pede
+`associacao`, `anova` ensina que o teste roda dentro da `comparacao`; nome repetido
+recusa, porque a posição na lista é a posição da seção no documento. Os seis comandos
+de cada análise continuam iguais.
+
+**`analises.py` é a soma dos comandos, e nada além.** Cada análise é preparada e
+escrita pelas funções dela, com os argumentos que o comando dela passaria e o mesmo
+relógio para todas — e a rodada sai, byte a byte, a que o comando dela escreveria. É
+o critério de pronto, e o primeiro teste do `test_analises.py`. As três regras vêm do
+plano da Fase 7: **prepara todas antes de escrever qualquer uma** (se uma recusar,
+nada é arquivado, e as recusas saem todas juntas; o que vale para todas — a ficha, o
+banco, o dicionário — para na primeira); **um registro nome → módulo, com import
+preguiçoso** (importar o `analises.py` não traz o `pandas`); e **o relatório fica de
+fora**, porque entre as análises e o documento há uma leitura sua. Nenhum dos seis
+módulos de análise mudou uma linha.
+
+**Uma falha no meio para o lote.** A análise que falhou se desfaz sozinha, como no
+comando dela; as anteriores ficam; as seguintes não rodam. A frase de onde ele parou
+vai para o `historico.md` e presa ao erro, e um Ctrl+C sai com 130 e a mesma frase —
+dizendo que a pasta da análise interrompida pode ter ficado pela metade, porque o
+desfazer de cada `executar_*` pega `Exception`, e o Ctrl+C não é uma.
+
+**Na CLI, a saída de cada análise é a do comando dela.** O que cada comando mostrava
+antes de escrever virou uma `_mostrar_*`, e o que dizia depois, a `_rodada_escrita`:
+o `analisar` chama as mesmas funções, uma análise depois da outra, e fecha com uma
+tabela do lote. `--resumo` mostra só a tabela. O `_NA_TELA` é o registro da tela, e
+há teste que o exige igual ao `analises.REGISTRO`.
 """
 
-__version__ = "1.12.0"
+__version__ = "1.13.0"

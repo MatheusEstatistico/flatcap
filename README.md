@@ -51,6 +51,7 @@ Ajuda de qualquer comando: `flatcap <comando> --help`.
 | `flatcap perfil <id>` | Descreve o banco e escreve o `perfil.md` e o `dicionario.csv`. |
 | `flatcap descritiva <id>` | Gera a análise descritiva obedecendo ao `dicionario.csv`. |
 | `flatcap normalidade <id>` | Testa a normalidade das variáveis numéricas. |
+| `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
 | `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
 | `flatcap template` | Escreve o modelo `.docx` que o relatório usa. |
 
@@ -191,6 +192,38 @@ Por padrão entram todas as numéricas; uma lista `normalidade:` no `projeto.yam
 flatcap normalidade 42 --sim
 ```
 
+### `flatcap analisar <id>`
+Roda de uma vez as análises da lista `analises:` do `projeto.yaml`, na ordem dela — que é também a ordem das seções do relatório. Cada análise roda como o comando dela: a mesma saída no terminal, os mesmos arquivos em `3. Análises/`, a mesma linha no `historico.md`. No fim, uma tabela com uma linha por análise, e uma linha a mais no histórico dizendo que elas rodaram juntas.
+
+```yaml
+analises: [descritiva, normalidade, correlacao, comparacao]
+
+correlacao:
+  - [idade, imc]
+comparacao:
+  - [imc, sexo]
+```
+
+A lista leva só os nomes; os pares e os itens continuam nos blocos de cada análise. Lista vazia faz o comando recusar e escrever a linha pronta para copiar, montada a partir dos blocos que a ficha já tem — o comando obedece à ficha, e não escolhe análise nenhuma.
+
+Todas são preparadas antes de qualquer uma ser escrita: se uma recusar, nada é escrito nem arquivado, e as recusas aparecem todas juntas. O relatório fica de fora — leia as tabelas e rode `flatcap relatorio` depois. Para rodar uma análise só, o comando dela continua valendo.
+
+| Argumento / Opção | Efeito |
+|---|---|
+| `id` | `record_id` ou matrícula do projeto. |
+| `--aba NOME` | Planilha a ler, quando o `.xlsx` tiver mais de uma. Vale para todas as análises. |
+| `--sem-graficos` | Escreve só as tabelas. Mais rápido, e o `matplotlib` nem é carregado. |
+| `--resumo` | Mostra só a tabela do lote, sem a saída de cada análise. |
+| `--rapido` | Não reconfere o `sha256` dos arquivos. |
+| `--sim` | Executa de fato. Sem isso, apenas simula. |
+| `--env CAMINHO` | Caminho de um `.env` alternativo. |
+
+```bash
+flatcap analisar 42              # simula: a saída de cada análise e o resumo no fim
+flatcap analisar 42 --resumo     # só o resumo
+flatcap analisar 42 --sim        # escreve
+```
+
 ### `flatcap relatorio <id>`
 Monta o relatório `.docx` a partir das análises já rodadas. Varre `3. Análises/`, lê o `manifesto.json` de cada rodada e monta o documento com as seções de todas elas, na ordem da lista `analises:` do `projeto.yaml`.
 
@@ -237,5 +270,7 @@ flatcap perfil 42 --sim                          # perfil.md + dicionario.csv
 flatcap dados adicionar 42 banco_revisado.xlsx --sim   # se veio versão nova
 flatcap descritiva 42 --sim                      # tabelas e gráficos
 flatcap normalidade 42 --sim                     # pressupostos
+#   ou as análises da lista `analises:` do projeto.yaml, de uma vez:
+flatcap analisar 42 --sim
 flatcap relatorio 42 --sim                       # o .docx final
 ```

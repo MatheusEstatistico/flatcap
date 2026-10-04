@@ -8,13 +8,15 @@ Esta camada não contém regras de negócio:
 
 from __future__ import annotations
 
-from dataclasses import replace
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
 from rich.panel import Panel
+from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
@@ -33,6 +35,14 @@ from .dados import (
 )
 from .dicionario import DicionarioError
 from .ficha import IMPLEMENTACAO, FichaError, localizar_projeto
+from .manifesto import (
+    ANALISE_ASSOCIACAO,
+    ANALISE_COMPARACAO,
+    ANALISE_CORRELACAO,
+    ANALISE_CRUZAMENTO,
+    ANALISE_DESCRITIVA,
+    ANALISE_NORMALIDADE,
+)
 from .modelo import (
     ALUNO,
     CAMPO_ANEXO,
@@ -61,6 +71,7 @@ from .projeto import (
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .analises import Etapa, Feita, PlanoAnalises
     from .associacao import Associacao, PlanoAssociacao
     from .comparacao import Comparacao, PlanoComparacao
     from .correlacao import Correlacao, PlanoCorrelacao
@@ -126,6 +137,32 @@ def _configuracao(env: str | None, criar_root: bool = False) -> Config:
         return carregar(env_file = env, criar_root = criar_root)
     except ConfigError as erro:
         raise _abortar("Configuração", str(erro)) from erro
+
+def _rodada_escrita(frase: str, plano: Any, resultado: Any) -> None:
+    """
+    O que o comando de uma análise diz depois de escrevê-la.
+
+    As seis análises diziam a mesma coisa com seis cópias das mesmas linhas, e o
+    `analisar` diz o mesmo depois de cada uma do lote. Uma função só é o que impede
+    a sétima cópia — e a primeira a divergir das outras.
+    """
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
+                style = "dim",
+            )
+        )
+
+    quantos = len(plano.arquivos)
+    console.print(
+        f"\n[green]{frase}[/green] {quantos} "
+        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
+        f"{PASTA_ANALISES}/{plano.pasta.name}"
+    )
 
 @app.callback()
 def principal(
@@ -1178,13 +1215,7 @@ def descritiva(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_da_descritiva(plano))
-    console.print(_tabela_da_descritiva(plano.descritiva))
-    for bloco in _fora_da_descritiva(plano.descritiva):
-        console.print(bloco)
-    for aviso in plano.descritiva.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_da_descritiva(plano))
+    _mostrar_descritiva(plano)
 
     if not sim:
         console.print(
@@ -1204,23 +1235,25 @@ def descritiva(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Descritiva escrita.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Descritiva escrita.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_descritiva(plano: PlanoDescritiva) -> None:
+    """
+    O que a descritiva mostra antes de escrever — no comando dela e no `analisar`.
+
+    Uma função, e não as mesmas linhas nos dois comandos: a simulação do lote é a
+    soma das simulações das análises, e duas cópias da mesma sequência é como uma
+    delas esquece o painel `Fora da descritiva` na próxima mudança. As cinco
+    análises seguintes têm a sua `_mostrar_*` pelo mesmo motivo.
+    """
+    console.print(_cabecalho_da_descritiva(plano))
+    console.print(_tabela_da_descritiva(plano.descritiva))
+    for bloco in _fora_da_descritiva(plano.descritiva):
+        console.print(bloco)
+    for aviso in plano.descritiva.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_descritiva(plano))
 
 
 def _cabecalho_da_descritiva(plano: PlanoDescritiva) -> Text:
@@ -1457,14 +1490,7 @@ def normalidade(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_da_normalidade(plano))
-    console.print(_tabela_da_normalidade(plano.normalidade))
-    console.print(_nota_da_normalidade(plano.normalidade))
-    for bloco in _fora_da_normalidade(plano.normalidade):
-        console.print(bloco)
-    for aviso in plano.normalidade.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_da_normalidade(plano))
+    _mostrar_normalidade(plano)
 
     if not sim:
         console.print(
@@ -1484,23 +1510,21 @@ def normalidade(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Normalidade escrita.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Normalidade escrita.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_normalidade(plano: PlanoNormalidade) -> None:
+    """
+    O que a normalidade mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_normalidade(plano))
+    console.print(_tabela_da_normalidade(plano.normalidade))
+    console.print(_nota_da_normalidade(plano.normalidade))
+    for bloco in _fora_da_normalidade(plano.normalidade):
+        console.print(bloco)
+    for aviso in plano.normalidade.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_normalidade(plano))
 
 
 def _cabecalho_da_normalidade(plano: PlanoNormalidade) -> Text:
@@ -1798,12 +1822,7 @@ def cruzamento(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_do_cruzamento(plano))
-    for par in plano.cruzamento.pares:
-        console.print(_tabela_do_cruzamento(par))
-    for aviso in plano.cruzamento.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_do_cruzamento(plano))
+    _mostrar_cruzamento(plano)
 
     if not sim:
         console.print(
@@ -1823,23 +1842,19 @@ def cruzamento(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Cruzamento escrito.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Cruzamento escrito.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_cruzamento(plano: PlanoCruzamento) -> None:
+    """
+    O que o cruzamento mostra antes de escrever — no comando dele e no `analisar`.
+    """
+    console.print(_cabecalho_do_cruzamento(plano))
+    for par in plano.cruzamento.pares:
+        console.print(_tabela_do_cruzamento(par))
+    for aviso in plano.cruzamento.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_do_cruzamento(plano))
 
 
 def _cabecalho_do_cruzamento(plano: PlanoCruzamento) -> Text:
@@ -2029,12 +2044,7 @@ def associacao(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_da_associacao(plano))
-    console.print(_tabela_da_associacao(plano.associacao))
-    console.print(_nota_da_associacao(plano.associacao))
-    for aviso in plano.associacao.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_da_associacao(plano))
+    _mostrar_associacao(plano)
 
     if not sim:
         console.print(
@@ -2054,23 +2064,19 @@ def associacao(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Associação escrita.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Associação escrita.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_associacao(plano: PlanoAssociacao) -> None:
+    """
+    O que a associação mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_associacao(plano))
+    console.print(_tabela_da_associacao(plano.associacao))
+    console.print(_nota_da_associacao(plano.associacao))
+    for aviso in plano.associacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_associacao(plano))
 
 
 def _cabecalho_da_associacao(plano: PlanoAssociacao) -> Text:
@@ -2308,12 +2314,7 @@ def correlacao(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_da_correlacao(plano))
-    console.print(_tabela_da_correlacao(plano.correlacao))
-    console.print(_nota_da_correlacao(plano.correlacao))
-    for aviso in plano.correlacao.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_da_correlacao(plano))
+    _mostrar_correlacao(plano)
 
     if not sim:
         console.print(
@@ -2333,23 +2334,19 @@ def correlacao(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Correlação escrita.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Correlação escrita.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_correlacao(plano: PlanoCorrelacao) -> None:
+    """
+    O que a correlação mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_correlacao(plano))
+    console.print(_tabela_da_correlacao(plano.correlacao))
+    console.print(_nota_da_correlacao(plano.correlacao))
+    for aviso in plano.correlacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_correlacao(plano))
 
 
 def _cabecalho_da_correlacao(plano: PlanoCorrelacao) -> Text:
@@ -2609,13 +2606,7 @@ def comparacao(
     except OSError as erro:
         raise _abortar("Leitura em disco", str(erro)) from erro
 
-    console.print(_cabecalho_da_comparacao(plano))
-    for tabela in _tabelas_da_comparacao(plano.comparacao):
-        console.print(tabela)
-    console.print(_nota_da_comparacao(plano.comparacao))
-    for aviso in plano.comparacao.avisos:
-        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
-    console.print(_arvore_da_comparacao(plano))
+    _mostrar_comparacao(plano)
 
     if not sim:
         console.print(
@@ -2635,23 +2626,20 @@ def comparacao(
             "anterior — confira a pasta antes de rodar de novo."
         ) from erro
 
-    for aviso in resultado.avisos:
-        erro_console.print(Text(aviso, style = "yellow"))
+    _rodada_escrita("Comparação escrita.", plano, resultado)
 
-    if resultado.arquivado is not None:
-        console.print(
-            Text(
-                f"\nRodada anterior arquivada em {PASTA_ANTIGAS}/{resultado.arquivado[1].name}/",
-                style = "dim",
-            )
-        )
 
-    quantos = len(plano.arquivos)
-    console.print(
-        f"\n[green]Comparação escrita.[/green] {quantos} "
-        f"{_plural(quantos, 'arquivo', 'arquivos')} em "
-        f"{PASTA_ANALISES}/{plano.pasta.name}"
-    )
+def _mostrar_comparacao(plano: PlanoComparacao) -> None:
+    """
+    O que a comparação mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_comparacao(plano))
+    for tabela in _tabelas_da_comparacao(plano.comparacao):
+        console.print(tabela)
+    console.print(_nota_da_comparacao(plano.comparacao))
+    for aviso in plano.comparacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_comparacao(plano))
 
 
 def _cabecalho_da_comparacao(plano: PlanoComparacao) -> Text:
@@ -2839,6 +2827,407 @@ def _arvore_da_comparacao(plano: PlanoComparacao) -> Tree:
     )
 
     arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
+# flatcap analisar
+
+@dataclass(frozen=True)
+class _Tela:
+    """
+    O que o terminal sabe de uma análise: como mostrá-la antes de escrever, a frase
+    de depois de escrita e a linha dela na tabela do lote.
+    """
+
+    mostrar: Callable[[Any], None]
+    escrita: str
+    resumo: Callable[[Any], str]
+
+
+def _sem_teste(quantos: int) -> str:
+    return f", {quantos} sem teste" if quantos else ""
+
+
+def _resumo_da_descritiva(plano: PlanoDescritiva) -> str:
+    descritiva = plano.descritiva
+    quantas = len(descritiva.variaveis)
+    texto = f"{quantas} {_plural(quantas, 'variável', 'variáveis')}"
+    return texto + (f", {len(descritiva.fora)} fora" if descritiva.fora else "")
+
+
+def _resumo_da_normalidade(plano: PlanoNormalidade) -> str:
+    normalidade = plano.normalidade
+    quantas = len(normalidade.variaveis)
+    return f"{quantas} {_plural(quantas, 'numérica', 'numéricas')}" + _sem_teste(
+        len(normalidade.nao_testadas)
+    )
+
+
+def _resumo_do_cruzamento(plano: PlanoCruzamento) -> str:
+    quantos = len(plano.cruzamento.pares)
+    return f"{quantos} {_plural(quantos, 'par', 'pares')}"
+
+
+def _resumo_da_associacao(plano: PlanoAssociacao) -> str:
+    associacao = plano.associacao
+    quantos = len(associacao.pares)
+    return f"{quantos} {_plural(quantos, 'par', 'pares')}" + _sem_teste(
+        quantos - len(associacao.testados)
+    )
+
+
+def _resumo_da_correlacao(plano: PlanoCorrelacao) -> str:
+    correlacao = plano.correlacao
+    quantos = len(correlacao.pares)
+    return f"{quantos} {_plural(quantos, 'par', 'pares')}" + _sem_teste(
+        quantos - len(correlacao.testados)
+    )
+
+
+def _resumo_da_comparacao(plano: PlanoComparacao) -> str:
+    comparacao = plano.comparacao
+    quantos = len(comparacao.variaveis)
+    return f"{quantos} {_plural(quantos, 'item', 'itens')}" + _sem_teste(
+        len(comparacao.sem_teste)
+    )
+
+
+# Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
+# iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
+# saberia mostrar. As funções `_mostrar_*` são as que o comando de cada análise chama,
+# e a frase é a mesma que ele diz: o lote é a soma dos comandos também na tela.
+_NA_TELA: dict[str, _Tela] = {
+    ANALISE_DESCRITIVA: _Tela(
+        _mostrar_descritiva, "Descritiva escrita.", _resumo_da_descritiva
+    ),
+    ANALISE_CRUZAMENTO: _Tela(
+        _mostrar_cruzamento, "Cruzamento escrito.", _resumo_do_cruzamento
+    ),
+    ANALISE_ASSOCIACAO: _Tela(
+        _mostrar_associacao, "Associação escrita.", _resumo_da_associacao
+    ),
+    ANALISE_NORMALIDADE: _Tela(
+        _mostrar_normalidade, "Normalidade escrita.", _resumo_da_normalidade
+    ),
+    ANALISE_CORRELACAO: _Tela(
+        _mostrar_correlacao, "Correlação escrita.", _resumo_da_correlacao
+    ),
+    ANALISE_COMPARACAO: _Tela(
+        _mostrar_comparacao, "Comparação escrita.", _resumo_da_comparacao
+    ),
+}
+
+
+@app.command()
+def analisar(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira. "
+               "Vale para todas as análises."
+    ),
+    sem_graficos: bool = typer.Option(
+        False, "--sem-graficos",
+        help = "Escreve só as tabelas. Mais rápido, e o matplotlib nem é carregado."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    resumo: bool = typer.Option(
+        False, "--resumo",
+        help = "Mostra só a tabela do lote, sem a saída de cada análise."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Roda, de uma vez, as análises da lista `analises:` do projeto.yaml.
+
+    Na ordem da lista, que é também a ordem das seções do relatório. Cada análise
+    roda como o comando dela: a mesma saída no terminal, os mesmos arquivos em
+    `3. Análises/`, a mesma linha no `historico.md`. No fim, uma tabela com uma
+    linha por análise.
+
+    A lista se escreve na ficha, com os nomes das análises:
+
+        analises: \\[descritiva, normalidade, correlacao, comparacao]
+
+    Os pares e os itens continuam nos blocos de cada análise — `correlacao:`,
+    `comparacao:`. Lista vazia faz o comando recusar: ele obedece à ficha, e não
+    escolhe análise nenhuma.
+
+    Todas são preparadas antes de qualquer uma ser escrita. Se uma recusar, nada é
+    escrito nem arquivado, e as recusas saem todas juntas. O relatório fica de
+    fora: leia as tabelas e rode `flatcap relatorio` depois.
+
+    Para rodar uma análise só, o comando dela continua valendo.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `analises.py` não traz o `pandas`; quem traz é cada análise, no `preparar_*`
+    # dela. O import fica aqui dentro pelo mesmo motivo dos outros comandos.
+    from .analises import (
+        AnalisesError,
+        AnalisesRecusadasError,
+        DicionarioDoLoteError,
+        executar_analises,
+        preparar_analises,
+    )
+    from .banco import BancoError
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_analises(
+            raiz, aba = aba, conferir = not rapido, com_graficos = not sem_graficos
+        )
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except DicionarioDoLoteError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except AnalisesRecusadasError as erro:
+        # Um painel por recusa, com o título da análise — o mesmo painel que o
+        # comando dela abriria —, e o fecho do lote por último.
+        for recusa in erro.recusas:
+            erro_console.print(
+                Panel(Text(recusa.mensagem), title = recusa.titulo, border_style = "red")
+            )
+        raise _abortar("Análises", erro.resumo) from erro
+    except AnalisesError as erro:
+        raise _abortar("Análises", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    total = len(plano.etapas)
+    if not resumo:
+        for posicao, etapa in enumerate(plano.etapas, start = 1):
+            if posicao > 1:
+                console.print()
+            console.print(_regua_da_etapa(posicao, total, etapa))
+            _NA_TELA[etapa.nome].mostrar(etapa.plano)
+        console.print()
+        console.print(Rule(Text("O lote", style = "bold"), align = "left"))
+
+    console.print(_cabecalho_do_lote(plano))
+    console.print(_tabela_do_lote(plano))
+    if resumo:
+        for aviso in _avisos_das_etapas(plano):
+            erro_console.print(aviso)
+    for aviso in plano.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_do_lote(plano))
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            f"Repita com [bold]--sim[/bold] para escrever "
+            f"{'a análise' if total == 1 else f'as {total} análises'}."
+        )
+        return
+
+    def ao_escrever(feita: Feita) -> None:
+        _rodada_escrita(_NA_TELA[feita.nome].escrita, feita.etapa.plano, feita.resultado)
+
+    try:
+        resultado = executar_analises(plano, ao_escrever = ao_escrever)
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Detalhe técnico: {erro}\n\n{_notas(erro)}\n\n"
+            "Confira as pastas antes de rodar de novo."
+        ) from erro
+    except KeyboardInterrupt as erro:
+        # Ctrl+C no meio do lote. O `click` diria só «Aborted!», e aqui a pergunta
+        # que sobra é qual análise ficou escrita e qual ficou pela metade — a mesma
+        # frase que acabou de ir para o `historico.md`.
+        erro_console.print(
+            Panel(Text(_notas(erro)), title = "Interrompido", border_style = "yellow")
+        )
+        raise typer.Exit(code = 130) from None
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    console.print(
+        f"\n[green]Lote escrito.[/green] {total} "
+        f"{_plural(total, 'análise', 'análises')} da lista em {PASTA_ANALISES}/"
+    )
+    console.print(
+        Text(
+            "Leia as tabelas antes do documento: "
+            f"`flatcap relatorio {plano.ficha.record_id} --sim` monta o .docx com as "
+            "rodadas de agora.",
+            style = "dim",
+        )
+    )
+
+
+def _notas(erro: BaseException) -> str:
+    """
+    As notas que o `executar_analises` prende ao erro: onde o lote parou.
+    """
+    return "\n".join(getattr(erro, "__notes__", ()))
+
+
+def _regua_da_etapa(posicao: int, total: int, etapa: Etapa) -> Rule:
+    """
+    A linha que abre a saída de cada análise, com a posição dela no lote.
+    """
+    return Rule(
+        Text.assemble((f"{posicao}/{total}  ", "dim"), (etapa.nome, "bold")),
+        align = "left",
+        style = "dim",
+    )
+
+
+def _cabecalho_do_lote(plano: PlanoAnalises) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantas análises a lista pede.
+
+    O banco é o de todas: cada análise o abriu por conta própria, e todas abriram a
+    versão vigente da ficha.
+    """
+    ficha = plano.ficha
+    banco = plano.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantas = len(plano.etapas)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantas} {_plural(quantas, 'análise', 'análises')}", ""),
+            (" da lista `analises:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_do_lote(plano: PlanoAnalises) -> Table:
+    """
+    Uma linha por análise, na ordem da lista: o que entra nela, quantos arquivos, e
+    se a rodada é a primeira ou refaz uma anterior.
+
+    «Sem teste» aparece aqui porque é o que se procura primeiro depois de uma
+    simulação longa: a linha que a regra escolheu e o FlatCap ainda não calcula, ou o
+    par que não tinha casos para o teste.
+    """
+    tabela = Table(show_header = True, header_style = "bold")
+    tabela.add_column("#", justify = "right", no_wrap = True)
+    tabela.add_column("Análise", no_wrap = True)
+    tabela.add_column("O que entra", overflow = "fold")
+    tabela.add_column("Arquivos", justify = "right", no_wrap = True)
+    tabela.add_column("Rodada", no_wrap = True)
+
+    for posicao, etapa in enumerate(plano.etapas, start = 1):
+        entra = _NA_TELA[etapa.nome].resumo(etapa.plano)
+        tabela.add_row(
+            Text(str(posicao)),
+            Text(etapa.nome),
+            Text(entra, style = "yellow" if "sem teste" in entra else ""),
+            Text(str(len(etapa.arquivos))),
+            Text("nova", style = "dim") if etapa.arquivamento is None else Text("refeita"),
+        )
+    return tabela
+
+
+def _avisos_das_etapas(plano: PlanoAnalises) -> list[Text]:
+    """
+    Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
+
+    Os do banco saem uma vez só: toda análise os repete no começo da lista dela, e
+    seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
+    """
+    do_banco = tuple(plano.banco.avisos)
+    textos = [Text(f"\n{aviso}", style = "yellow") for aviso in do_banco]
+    for etapa in plano.etapas:
+        for aviso in etapa.conteudo.avisos:
+            if aviso in do_banco:
+                continue
+            textos.append(
+                Text.assemble(
+                    ("\n", ""), (f"{etapa.nome}: ", "bold yellow"), (aviso, "yellow")
+                )
+            )
+    return textos
+
+
+def _arvore_do_lote(plano: PlanoAnalises) -> Tree:
+    """
+    Desenha o que `executar_analises` escreveria, lendo o próprio plano.
+
+    As pastas, e não os arquivos: os arquivos de cada análise estão na árvore dela,
+    logo acima. Aqui é o lote inteiro de uma vez — o que vai para
+    `2. Versões antigas/` e o que nasce ou se refaz em `3. Análises/`.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    arquivadas = [etapa for etapa in plano.etapas if etapa.arquivamento is not None]
+    if arquivadas:
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        for etapa in arquivadas:
+            de, para = etapa.arquivamento
+            quantos = len([p for p in de.iterdir()])
+            ramo.add(
+                Text.assemble(
+                    (f"{para.name}/", "yellow"),
+                    (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+                )
+            )
+
+    ramo = arvore.add(Text(f"{PASTA_ANALISES}/"))
+    for etapa in plano.etapas:
+        ramo.add(
+            Text.assemble(
+                (f"{etapa.pasta.name}/", "bold green"),
+                ("   novo" if etapa.arquivamento is None else "   refeito", "dim"),
+                (f" · {len(etapa.arquivos)} arquivo(s)", "dim"),
+            )
+        )
+
+    linhas = len(plano.etapas) + 1
+    arvore.add(
+        Text.assemble(
+            (ARQUIVO_HISTORICO, ""),
+            (f"   + {linhas} linhas — uma de cada análise e a do lote", "dim"),
+        )
+    )
     return arvore
 
 
