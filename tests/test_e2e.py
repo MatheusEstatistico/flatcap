@@ -25,7 +25,7 @@ import pytest
 
 import bancos
 import servidor_falso
-from conftest import acrescentar_a_ficha
+from conftest import acrescentar_a_ficha, escrever_analises
 from servidor_falso import ERRO_FIELDS_INDEXADOS
 
 pytestmark = pytest.mark.e2e
@@ -434,6 +434,40 @@ class TestFluxoCompleto:
         assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == k_csv
 
 
+    def test_o_lote_roda_a_lista_e_o_relatorio_a_segue(self, tmp_path, anexo):
+        """
+        O `analisar` pelo executável: a lista vazia recusa com o código que o shell
+        recebe, a lista escrita roda de uma vez, e o relatório monta as seções na ordem
+        dela — o cruzamento antes da descritiva, porque a ficha disse.
+        """
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            assert flatcap("perfil", "40", "--sim", env=env).returncode == 0
+
+            vazia = flatcap("analisar", "40", env=env)
+            assert vazia.returncode == 1
+            assert "analises: [descritiva]" in " ".join(vazia.stderr.replace("│", " ").split())
+
+            escrever_analises(raiz, "analises: [cruzamento, descritiva, comparacao]")
+            acrescentar_a_ficha(
+                raiz, "cruzamento:\n  - [sexo, escolaridade]\ncomparacao:\n  - [imc, 25]\n"
+            )
+            lote = flatcap("analisar", "40", "--sem-graficos", "--sim", env=env)
+            assert lote.returncode == 0, lote.stdout + lote.stderr
+            for pasta in ("cruzamento", "descritiva", "comparacao"):
+                assert (raiz / "3. Análises" / pasta / "manifesto.json").is_file()
+            historico = (raiz / "historico.md").read_text(encoding="utf-8")
+            assert "`flatcap analisar 40` — 3 análises da lista `analises:`" in historico
+
+            relatorio = flatcap("relatorio", "40", "--sim", env=env)
+            assert relatorio.returncode == 0, relatorio.stdout + relatorio.stderr
+            assert "cruzamento · descritiva · comparacao" in " ".join(relatorio.stdout.split())
+            assert list(raiz.glob("Relatorio_00740_*.docx"))
+
     def test_as_medidas_repetidas_do_docx_e_as_do_csv(self, tmp_path):
         """
         As medidas repetidas pela mesma régua, com um banco que as tem: a tabela no
@@ -539,6 +573,21 @@ class TestSemRede:
                 flatcap(*anterior, env=env)
         resultado = flatcap(*comando, env=env)
         assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+    def test_o_lote_roda_com_o_servidor_fora_do_ar(self, projeto_pronto):
+        """
+        As seis análises de uma vez, com o servidor derrubado: o lote é a soma de
+        comandos que não tocam a rede, e não pode passar a tocá-la.
+        """
+        env, raiz = projeto_pronto
+        assert flatcap("perfil", "40", "--sim", env=env).returncode == 0
+        escrever_analises(
+            raiz,
+            "analises: [descritiva, normalidade, cruzamento, associacao, correlacao, comparacao]",
+        )
+        resultado = flatcap("analisar", "40", "--sem-graficos", "--sim", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        assert len(list((raiz / "3. Análises").glob("*/manifesto.json"))) == 6
 
 
 class TestCodigosDeSaida:
