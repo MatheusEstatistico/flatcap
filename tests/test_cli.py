@@ -20,11 +20,13 @@ fazer" sai com 0, para não quebrar script.
 
 from __future__ import annotations
 
+import shutil
+
 import pytest
 from typer.testing import CliRunner
 
 import bancos
-from conftest import MATRICULA, RECORD_ID, acrescentar_a_ficha
+from conftest import MATRICULA, RECORD_ID, acrescentar_a_ficha, escrever_analises
 from flatcap import __version__
 from flatcap.cli import app
 from flatcap.projeto import (
@@ -807,6 +809,218 @@ class TestComparacao:
         assert "`student` não se aplica a 3 grupos" in _sem_moldura(resultado)
 
 
+class TestAnalisar:
+    LISTA = "analises: [descritiva, cruzamento, comparacao]"
+    # O segundo item da comparação é o que dá aviso — 12 casos por grupo —, e o
+    # `--resumo` precisa de um aviso para mostrar.
+    BLOCOS = TestCruzamento.BLOCO + "comparacao:\n  - [imc, 25]\n  - [imc, sexo]\n"
+
+    @pytest.fixture
+    def projeto_do_lote(self, projeto_com_banco):
+        """
+        Banco, dicionário, a lista e os blocos — sem rodada nenhuma, para que o lote e
+        os comandos um por um partam do mesmo lugar.
+        """
+
+        def montar(lista: str | None = None, blocos: str | None = None):
+            from flatcap.perfil import executar_perfil, preparar_perfil
+
+            raiz = projeto_com_banco()
+            executar_perfil(preparar_perfil(raiz))
+            escrever_analises(raiz, lista or self.LISTA)
+            acrescentar_a_ficha(raiz, self.BLOCOS if blocos is None else blocos)
+            return raiz
+
+        return montar
+
+    def test_simula_por_padrao_e_mostra_cada_analise_e_o_lote(self, rodar, projeto_do_lote):
+        raiz = projeto_do_lote()
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos")
+        assert resultado.exit_code == 0
+        assert not any((raiz / PASTA_ANALISES).iterdir())
+        saida = _saida(resultado)
+        assert "1/3 descritiva" in saida
+        assert "2/3 cruzamento" in saida
+        assert "3/3 comparacao" in saida
+        assert "sexo × escolaridade" in saida  # a tabela do cruzamento, inteira
+        assert "Escolha do teste (regra dos pressupostos)" in saida  # a nota da comparação
+        assert "O lote" in saida
+        assert "3 análises da lista `analises:` do projeto.yaml" in saida
+        assert "Repita com --sim para escrever as 3 análises." in saida
+
+    def test_a_saida_de_cada_analise_e_a_do_comando_dela(self, rodar, projeto_do_lote):
+        """
+        A escolha da saída foi "tudo, e o resumo no fim": o que o comando de cada
+        análise mostraria antes de escrever está dentro da saída do lote, igual.
+        """
+        projeto_do_lote()
+        lote = _saida(rodar("analisar", RECORD_ID, "--sem-graficos"))
+        for comando in (
+            ("descritiva", RECORD_ID, "--sem-graficos"),
+            ("cruzamento", RECORD_ID),
+            ("comparacao", RECORD_ID),
+        ):
+            sozinho = _saida(rodar(*comando)).split(" Simulação. ")[0]
+            assert sozinho in lote, comando[0]
+
+    def test_resumo_mostra_so_o_lote_e_os_avisos(self, rodar, projeto_do_lote):
+        projeto_do_lote()
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos", "--resumo")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "1/3" not in saida
+        assert "sexo × escolaridade" not in saida
+        assert "3 análises da lista `analises:` do projeto.yaml" in saida
+        assert "comparacao: `imc` por `sexo`: t de Welch com 12 valores" in saida
+
+    def test_com_sim_escreve_todas(self, rodar, projeto_do_lote):
+        raiz = projeto_do_lote()
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos", "--sim")
+        assert resultado.exit_code == 0
+        for pasta in (PASTA_DESCRITIVA, PASTA_CRUZAMENTO, PASTA_COMPARACAO):
+            assert (raiz / PASTA_ANALISES / pasta / "manifesto.json").is_file()
+        saida = _saida(resultado)
+        assert "Descritiva escrita." in saida
+        assert "Cruzamento escrito." in saida
+        assert "Comparação escrita." in saida
+        assert "Lote escrito. 3 análises da lista em 3. Análises/" in saida
+        assert f"flatcap relatorio {RECORD_ID} --sim" in saida
+
+    def test_o_lote_e_a_soma_dos_comandos(
+        self, rodar, projeto_do_lote, congelar_relogio, root, tmp_path, monkeypatch
+    ):
+        """
+        O critério de pronto do `analises.py`, pela linha de comando inteira: o mesmo
+        `FLATCAP_ROOT` em duas cópias, o lote numa e os três comandos na outra, com o
+        relógio parado. `3. Análises/` sai igual byte a byte, e o histórico do lote é o
+        dos comandos mais a linha dele.
+        """
+        from conftest import PASTA, PROJETO, linhas_do_historico
+
+        congelar_relogio()
+        raiz = projeto_do_lote()
+        outro_root = tmp_path / "OutroRoot"
+        shutil.copytree(root, outro_root)
+        outra = outro_root / PASTA / PROJETO
+
+        assert rodar("analisar", RECORD_ID, "--sem-graficos", "--sim").exit_code == 0
+        monkeypatch.setenv("FLATCAP_ROOT", str(outro_root))
+        assert rodar("descritiva", RECORD_ID, "--sem-graficos", "--sim").exit_code == 0
+        assert rodar("cruzamento", RECORD_ID, "--sim").exit_code == 0
+        assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
+
+        def arquivos(pasta):
+            return {
+                str(caminho.relative_to(pasta)): caminho.read_bytes()
+                for caminho in sorted((pasta / PASTA_ANALISES).rglob("*"))
+                if caminho.is_file()
+            }
+
+        assert arquivos(raiz) == arquivos(outra)
+        assert linhas_do_historico(raiz)[:-1] == linhas_do_historico(outra)
+
+    def test_o_historico_ganha_a_linha_de_cada_analise_e_a_do_lote(
+        self, rodar, projeto_do_lote
+    ):
+        from conftest import linhas_do_historico
+
+        raiz = projeto_do_lote()
+        antes = len(linhas_do_historico(raiz))
+        rodar("analisar", RECORD_ID, "--sem-graficos", "--sim")
+        linhas = linhas_do_historico(raiz)
+        assert len(linhas) == antes + 4
+        assert f"`flatcap analisar {RECORD_ID}`" in linhas[-1]
+
+    def test_lista_vazia_sai_com_um_e_ensina_a_linha(self, rodar, projeto_com_rodada):
+        """O colchete da linha pronta é marcação para o `rich`: ela não pode sumir."""
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, TestCruzamento.BLOCO)
+        resultado = rodar("analisar", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Análises" in saida
+        assert "analises: [descritiva, cruzamento]" in saida
+
+    def test_as_recusas_saem_num_painel_por_analise(self, rodar, projeto_do_lote):
+        raiz = projeto_do_lote(
+            "analises: [descritiva, correlacao, comparacao]",
+            "correlacao:\n  - [idade, peso]\ncomparacao:\n  - [sexo, 25]\n",
+        )
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos")
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Correlação" in saida and "Comparação" in saida
+        assert "`peso` não está no dicionario.csv" in saida
+        assert "2 das 3 análises da lista recusaram" in saida
+        assert "Nada foi escrito nem arquivado" in saida
+        assert not any((raiz / PASTA_ANALISES).iterdir())
+
+    def test_nome_desconhecido_sai_com_um(self, rodar, projeto_do_lote):
+        projeto_do_lote("analises: [descritiva, associação]", "")
+        resultado = rodar("analisar", RECORD_ID)
+        assert resultado.exit_code == 1
+        assert "escreva `associacao`, sem acento" in _sem_moldura(resultado)
+
+    def test_o_help_mostra_a_forma_da_lista(self):
+        """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
+        saida = _saida(runner.invoke(app, ["analisar", "--help"]))
+        assert "analises: [descritiva, normalidade, correlacao, comparacao]" in saida
+        assert "--resumo" in saida
+
+    def test_a_falha_de_escrita_vira_painel_e_diz_onde_parou(
+        self, rodar, projeto_do_lote, monkeypatch
+    ):
+        def disco_cheio(_plano):
+            raise OSError(28, "No space left on device")
+
+        projeto_do_lote()
+        monkeypatch.setattr("flatcap.cruzamento.executar_cruzamento", disco_cheio)
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos", "--sim")
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Descritiva escrita." in saida
+        assert "Escrita em disco" in saida
+        assert "No space left on device" in saida
+        assert "Parou na análise `cruzamento`" in saida
+        assert "A análise `comparacao` não rodou." in saida
+
+    def test_o_ctrl_c_sai_com_130_e_diz_onde_parou(self, rodar, projeto_do_lote, monkeypatch):
+        """
+        O `click` diria só «Aborted!». O que sobra para saber depois de um Ctrl+C no
+        meio do lote é qual análise ficou escrita e qual pode ter ficado pela metade.
+        """
+
+        def interrompe(_plano):
+            raise KeyboardInterrupt
+
+        projeto_do_lote()
+        monkeypatch.setattr("flatcap.cruzamento.executar_cruzamento", interrompe)
+        resultado = rodar("analisar", RECORD_ID, "--sem-graficos", "--sim")
+        assert resultado.exit_code == 130
+        saida = _sem_moldura(resultado)
+        assert "Interrompido" in saida
+        assert "pode ter ficado pela metade" in saida
+
+    def test_nao_toca_a_rede(self, rodar, projeto_do_lote, monkeypatch):
+        def bomba(*_a, **_k):
+            raise AssertionError("o lote tentou falar com a rede")
+
+        monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
+        projeto_do_lote()
+        assert rodar("analisar", RECORD_ID, "--sem-graficos").exit_code == 0
+        assert rodar("analisar", RECORD_ID, "--sem-graficos", "--sim").exit_code == 0
+
+    def test_toda_analise_do_registro_sabe_se_mostrar(self):
+        """
+        Uma análise que o lote rodasse sem estar no `_NA_TELA` seria uma análise que ele
+        não saberia mostrar — o `KeyError` apareceria no meio da simulação.
+        """
+        from flatcap.analises import REGISTRO
+        from flatcap.cli import _NA_TELA
+
+        assert set(_NA_TELA) == {registro.nome for registro in REGISTRO}
+
+
 class TestRelatorio:
     def test_simula_por_padrao(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()
@@ -901,6 +1115,7 @@ class TestInvariantes:
             ("associacao", RECORD_ID),
             ("correlacao", RECORD_ID),
             ("comparacao", RECORD_ID),
+            ("analisar", RECORD_ID),
             ("relatorio", RECORD_ID),
             ("template",),
         ],
