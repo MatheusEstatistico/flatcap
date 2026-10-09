@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A descritiva — o passo 2a do fluxo, o que se repete em todos os projetos.
 
@@ -96,7 +98,7 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, abrir, formato_de_data
+from .banco import Banco, abrir, formato_de_data, serie_de_texto, texto_de_numero
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -1617,41 +1619,10 @@ def _e_data(serie: pd.Series) -> bool:
     return bool(pd.api.types.is_datetime64_any_dtype(serie))
 
 
-def serie_de_texto(serie: pd.Series) -> pd.Series:
-    """
-    Os valores preenchidos como texto, do jeito que eles devem aparecer na tabela.
-
-    Um código lido como número (`1`, `2`) viraria `"1.0"` e `"2.0"` num
-    `astype(str)` cru — e código como categórica é justamente o que a Fase 4
-    sugere para essas colunas. Lógico vira Sim/Não, e data vira `dd/mm/aaaa`:
-    os dois são o que se escreve em uma tabela em português, e o dicionário é
-    quem decidiu que a coluna é categórica.
-
-    Pública desde a 1.4.0, com o apelido privado que este módulo usa. O
-    `cruzamento.py` escreve a mesma categoria na tabela dele, e uma segunda
-    conversão é como o `1` da tabela de frequência vira `1.0` no cruzamento da
-    página seguinte — o `1.0` que o `pd.crosstab` imprime quando a coluna de
-    código tem uma célula vazia.
-    """
-    preenchidos = serie.dropna()
-    if preenchidos.empty:
-        return preenchidos.astype("object")
-
-    if pd.api.types.is_bool_dtype(preenchidos):
-        return preenchidos.map(lambda valor: "Sim" if valor else "Não")
-
-    if pd.api.types.is_datetime64_any_dtype(preenchidos):
-        return preenchidos.dt.strftime("%d/%m/%Y")
-
-    if _e_numerica(preenchidos):
-        valores = preenchidos.astype("float64")
-        if bool((valores % 1 == 0).all()):
-            return valores.astype("int64").astype(str)
-        return valores.map(lambda valor: _numero(valor, 4))
-
-    return preenchidos.astype(str)
-
-
+# A `serie_de_texto` desceu para o `banco.py` na 1.13.1, para o perfil propor as
+# categorias com a mesma escrita das análises. Ela continua importável daqui —
+# `from .descritiva import serie_de_texto` é como as outras análises a chamam —,
+# e com o apelido privado que este módulo usa.
 _serie_de_texto = serie_de_texto
 
 
@@ -1733,18 +1704,11 @@ def numero(valor: float | None, casas: int = CASAS_RESUMO) -> str:
 
     Pública desde a Fase 7 pelo mesmo motivo do `tamanho_legivel` do `projeto.py`:
     dois formatadores diferentes para a mesma grandeza é como um relatório sai com
-    `20,5` em uma tabela e `20.5` na seguinte, na mesma página.
+    `20,5` em uma tabela e `20.5` na seguinte, na mesma página. Pelo mesmo motivo,
+    a conta mora no `banco.texto_de_numero` desde a 1.13.1: a `serie_de_texto`
+    desceu para lá e escreve os números com ela.
     """
-    if valor is None:
-        return "—"
-    valor = float(valor)
-    if not math.isfinite(valor):
-        return "—"
-
-    texto = f"{round(valor, casas):.{casas}f}"
-    if "." in texto:
-        texto = texto.rstrip("0").rstrip(".")
-    return texto.replace(".", ",")
+    return texto_de_numero(valor, casas)
 
 
 _numero = numero
