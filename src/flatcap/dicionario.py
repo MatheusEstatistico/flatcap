@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `dicionario.csv` — a decisão da reunião, escrita em um arquivo.
 
@@ -101,6 +103,7 @@ from __future__ import annotations
 import csv
 import io
 import unicodedata
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -453,13 +456,23 @@ def _tabela(
     precisa saber qual caractere já foi gasto para separar campos, senão volta a
     partir `Alta; a pedido` em duas categorias. Ver `_lista`.
 
-    As linhas iniciadas por `#` são o cabeçalho explicativo que o FlatCap escreve.
-    Elas são descartadas na leitura e reescritas na gravação — o que também
-    significa que um comentário que você acrescente no meio do arquivo não
-    sobrevive. É o limite conhecido do formato: `.csv` não tem comentário.
+    As linhas iniciadas por `#` **no começo do arquivo** são o cabeçalho explicativo
+    que o FlatCap escreve: são descartadas na leitura e reescritas na gravação.
+    Depois do cabeçalho das colunas, uma linha começada por `#` é uma variável —
+    `#`, `#id` e `# paciente` são nomes de coluna que existem em banco de verdade.
+    Até a 1.13.0 elas eram descartadas em qualquer lugar do arquivo: a variável
+    sumia do dicionário a cada leitura, o perfil a acrescentava de novo a cada
+    rodada, e a descritiva recusava o banco por uma coluna "que o dicionário não
+    conhece".
+
+    O número de cada registro é a **linha do arquivo**, contando o cabeçalho
+    explicativo — o que o editor de texto e o Excel mostram. Até a 1.13.0 era a
+    posição depois dos comentários, e "linhas 2 e 4" eram as linhas 17 e 19.
     """
-    linhas = [linha for linha in texto.splitlines() if not linha.lstrip().startswith("#")]
-    conteudo = "\n".join(linhas).strip()
+    todas = texto.splitlines()
+    puladas = linhas_de_comentario(todas)
+    linhas = todas[puladas:]
+    conteudo = "\n".join(linhas).rstrip()
 
     if not conteudo:
         raise DicionarioInvalidoError(
@@ -487,17 +500,41 @@ def _tabela(
             caminho,
         )
 
-    for numero, valores in enumerate(leitor, start=2):
+    for valores in leitor:
+        # `line_num` conta as linhas físicas que o leitor já consumiu, e um campo
+        # entre aspas pode atravessar mais de uma; somado ao que foi pulado, é a
+        # linha do arquivo em que o registro termina.
+        numero = puladas + leitor.line_num
         if not any(valor.strip() for valor in valores):
             continue
         if len(valores) > len(campos):
             raise DicionarioInvalidoError(
                 _mensagem_campos_demais(caminho, numero, campos, valores), caminho
             )
-        valores = list(valores) + [""] * (len(campos) - len(valores))
-        registros.append((numero, dict(zip(campos, valores, strict=True))))
+        completos = list(valores) + [""] * (len(campos) - len(valores))
+        registros.append((numero, dict(zip(campos, completos, strict=True))))
 
     return campos, registros, separador
+
+
+def linhas_de_comentario(linhas: Sequence[str]) -> int:
+    """
+    Quantas linhas do começo são cabeçalho explicativo: as começadas por `#` e as
+    vazias, até a primeira que não é nenhuma das duas.
+
+    Só o começo, e é essa a regra inteira. O FlatCap escreve os comentários dos
+    seus `.csv` — este dicionário e as tabelas das análises — sempre antes do
+    cabeçalho das colunas, e depois dele o `#` no início de uma linha é dado: a
+    coluna `#` de um banco, a categoria `#N/D` que o Excel deixa numa célula com
+    erro de fórmula. Pública porque o `relatorio.ler_tabela` lê as tabelas das
+    análises com a mesma regra — duas regras para o mesmo formato é como uma
+    categoria some do documento e continua no `.csv`.
+    """
+    for posicao, linha in enumerate(linhas):
+        texto = linha.strip()
+        if texto and not texto.startswith("#"):
+            return posicao
+    return len(linhas)
 
 
 def _separador_de_campos(linhas: list[str]) -> str:
