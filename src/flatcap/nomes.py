@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Construção das funções sobre regras de nomenclatura das pastas dos `Clientes` e
 dos seus projetos, e como reencontrá-las no disco.
@@ -62,7 +64,8 @@ def sanitizar(texto: str) -> str:
     1. remove caracteres de controle;
     2. remove caracteres proibidos (windows);
     3. corrige espaços em excesso;
-    4. tira espaços e pontos no início e no final do nome.
+    4. tira os espaços das duas pontas e os pontos do final — que o Windows
+       apagaria em silêncio, e a pasta deixaria de ter o nome que o FlatCap procura.
 
     """
     limpo = _CONTROLE.sub("", texto or "")
@@ -82,8 +85,8 @@ def nome_pasta(matricula: str, nome: str) -> str:
 
     if not matricula_limpa:
         raise NomeInvalidoError(
-            f"Matrícula vazia. Recebido: {matricula!r}"
-            "Ver REDCap manualmente..."
+            f"Matrícula vazia. Recebido: {matricula!r}\n"
+            "Confira o cadastro no REDCap."
         )
     if not nome_limpo:
         """
