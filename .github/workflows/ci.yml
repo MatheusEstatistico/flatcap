@@ -1,0 +1,76 @@
+# A CI: o ritual do CONTRIBUTING.md, em toda mudança, nos três sistemas.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install ruff
+      - run: ruff check src tests tools
+
+  documentacao:
+    name: a documentação está em dia com o código
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python tools/gerar_doc.py --conferir
+
+  testes:
+    name: testes (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install -e ".[dev]"
+      - name: a suíte offline
+        run: python -m pytest
+      - name: a suíte ponta a ponta
+        run: python -m pytest -m e2e
+
+  pacote:
+    name: o pacote instala e roda fora do repositório
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install build twine
+      - run: python -m build
+      - run: python -m twine check --strict dist/*
+      # A ponta a ponta roda o `flatcap` como subprocesso: com o wheel instalado num
+      # ambiente limpo, é ele — e não o src/ — que ela exercita.
+      - name: o wheel, num ambiente limpo, passa na ponta a ponta
+        run: |
+          python -m venv "$RUNNER_TEMP/limpo"
+          "$RUNNER_TEMP/limpo/bin/python" -m pip install dist/*.whl pytest
+          "$RUNNER_TEMP/limpo/bin/flatcap" --version
+          PATH="$RUNNER_TEMP/limpo/bin:$PATH" "$RUNNER_TEMP/limpo/bin/python" -m pytest -m e2e -p no:cacheprovider
