@@ -1,5 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
-Os `.png` da descritiva.
+Os `.png` das análises: as barras, os histogramas e as colunas da descritiva, o
+Q-Q da normalidade e a dispersão da correlação.
 
 Este módulo **desenha e não calcula**. Ele recebe um `Grafico` com as contagens já
 prontas — as barras já contadas, as classes do histograma já cortadas — e o
@@ -9,13 +12,14 @@ de arredondamento para o `.png` dizer 37 e o `.csv` dizer 38 sobre a mesma coisa
 e ninguém confere gráfico contra tabela.
 
 É também o único módulo do pacote que importa o `matplotlib`, e por isso ele é
-importado **de dentro** de `executar_descritiva`, e não no topo do `descritiva.py`.
+importado **de dentro** do `executar_*` de cada análise que desenha, e não no
+topo do módulo dela.
 Meio segundo de partida é o preço da biblioteca de desenho, e `--sem-graficos`
 existe para não pagá-lo. Mesma decisão que a Fase 4 tomou com o `pandas` na CLI.
 
 Não declara erro próprio, como o `perfil.py`: o que pode falhar aqui é escrita em
-disco, que é `OSError`, e quem sabe o que fazer com ela é o `executar_descritiva`
-— que desfaz a rodada inteira.
+disco, que é `OSError`, e quem sabe o que fazer com ela é o `executar_*` que o
+chamou — que desfaz a rodada inteira.
 
 ## As decisões de desenho
 
@@ -109,9 +113,16 @@ FONTE = ("Arial", "Liberation Sans", "Helvetica", "DejaVu Sans", "sans-serif")
 # salva, e devolve o estado no fim. Os dois dentro do mesmo contexto de
 # propósito: o matplotlib só resolve a fonte na hora de desenhar, e quem desenha
 # é o `savefig`.
+#
+# `text.parse_math` desligado porque nenhum texto destas figuras é fórmula, e
+# todos vêm do banco do cliente. Ligado — o padrão do matplotlib —, dois `$` na
+# mesma etiqueta abrem e fecham uma expressão matemática: a faixa de renda
+# `R$ 1.000 a R$ 2.000` saía desenhada `R1.000aR 2.000`, em itálico e sem os
+# espaços, ao lado da tabela que dizia certo.
 APARENCIA: dict[str, object] = {
     "font.family": "sans-serif",
     "font.sans-serif": list(FONTE),
+    "text.parse_math": False,
 }
 
 import matplotlib.pyplot as plt  # noqa: E402 - obrigatoriamente depois do `use`
