@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Camada fina sobre a API do REDCap.
 A API tem três particularidades que este módulo isola, para que nenhuma delas vaze para o resto do
@@ -85,14 +87,25 @@ def _requisitar(cfg: Config, payload: dict[str,str]) -> requests.Response:
             f"O servidor não respondeu em {TIMEOUT_SEGUNDOS}s: {cfg.api_url}"
         ) from erro
     except requests.exceptions.ConnectionError as erro:
-        # Precisa vir **depois** do SSLError e do Timeout: no `requests`, os dois são
-        # subclasses desta. Sem esta cláusula, máquina sem rede, VPN caída ou proxy
-        # recusando derrubavam o `doctor` com o traceback inteiro do `urllib3` — que é
-        # exatamente o oposto do que o `doctor` existe para fazer.
+        # Precisa vir **depois** do SSLError e do Timeout: no `requests`, o
+        # `SSLError` e o `ConnectTimeout` são subclasses desta. Sem esta cláusula,
+        # máquina sem rede, VPN caída ou proxy recusando derrubavam o `doctor` com o
+        # traceback inteiro do `urllib3` — que é exatamente o oposto do que o
+        # `doctor` existe para fazer.
         raise RedcapError(
             f"Não foi possível chegar a {cfg.api_url}\n"
             "A máquina está sem rede, a VPN institucional está fora, ou o endereço da "
             "API está errado.\n"
+            f"Detalhe técnico: {type(erro).__name__}: {erro}"
+        ) from erro
+    except requests.exceptions.RequestException as erro:
+        # O resto da família do `requests`: a conexão que cai no meio do download
+        # de um anexo grande (`ChunkedEncodingError`), o servidor que redireciona
+        # em círculo, a URL que o `requests` não aceita. Por último, porque é a
+        # mãe de todas as de cima.
+        raise RedcapError(
+            f"A conversa com {cfg.api_url} falhou no meio.\n"
+            "Rode o comando de novo; se repetir, confira a rede e o REDCAP_API_URL.\n"
             f"Detalhe técnico: {type(erro).__name__}: {erro}"
         ) from erro
 
@@ -118,6 +131,36 @@ def _erro_no_corpo(resposta: requests.Response) -> str | None:
         return str(corpo["error"])
     return None
 
+def _conferir_status(resposta: requests.Response, contexto: str) -> None:
+    """
+    Recusa a resposta HTTP de erro que não trouxe o `{"error": ...}` do REDCap.
+
+    Até a 1.13.0 quem fazia isto era o `raise_for_status()` do `requests`, e a
+    exceção dele, `requests.HTTPError`, não é `RedcapError`: um 500 do servidor,
+    ou o 502 de um proxy institucional em manutenção, derrubava o `novo` e o
+    `listar --conferir-anexos` com o traceback inteiro — que é o que esta camada
+    existe para impedir. O erro de aplicação, com o JSON, já foi traduzido antes
+    de chegar aqui, pelo `_erro_no_corpo`.
+    """
+    if resposta.status_code < 400:
+        return
+
+    motivo = getattr(resposta, "reason", "") or ""
+    trecho = resposta.text[:200].replace("\n", " ").strip()
+    linhas = [
+        f"O servidor respondeu HTTP {resposta.status_code}"
+        f"{f' ({motivo})' if motivo else ''} ao pedir {contexto}."
+    ]
+    if resposta.status_code >= 500:
+        linhas.append(
+            "É um erro do lado do servidor: o REDCap, ou o proxy na frente dele, pode "
+            "estar fora do ar ou em manutenção. Tente de novo em alguns minutos."
+        )
+    if trecho:
+        linhas.append(f"Começo da resposta: {trecho!r}")
+    raise RedcapError("\n".join(linhas))
+
+
 def _post(cfg: Config, payload: dict[str, str]) -> Any:
     """
     Chamada autenticada com resposta JSON, já decodificada.
@@ -127,6 +170,8 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
     erro = _erro_no_corpo(resposta)
     if erro is not None:
         raise RedcapError(f"O REDCap recusou a chamada: {erro}")
+
+    _conferir_status(resposta, f"content={payload.get('content', '?')}")
 
     try:
         corpo = resposta.json()
@@ -138,8 +183,6 @@ def _post(cfg: Config, payload: dict[str, str]) -> Any:
             "REDCap, e não para o endpoint da API.\n"
             f"Começo da resposta: {trecho!r}"
         ) from causa
-
-    resposta.raise_for_status()
 
     if corpo is None:
         raise RedcapError(
@@ -257,7 +300,7 @@ def exportar_arquivo(cfg: Config, record_id: str, campo: str) -> ArquivoRedcap:
             f"Não consegui baixar o campo '{campo}' do registro {record_id}: {erro}"
         )
 
-    resposta.raise_for_status()
+    _conferir_status(resposta, f"o anexo '{campo}' do registro {record_id}")
 
     return ArquivoRedcap(
         nome=_nome_do_anexo(resposta) or f"{record_id}_{campo}",
@@ -321,5 +364,3 @@ def _limpar_nome_de_arquivo(bruto: str) -> str:
     nome = nome.replace("\\", "/").split("/")[-1]
     nome = nome.replace("\x00", "").strip()
     return "" if nome in {"", ".", ".."} else nome
-
-

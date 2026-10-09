@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `.docx` do relatório.
 
@@ -452,7 +454,8 @@ def _escrever_tabela(
     documento, tabela: TabelaLida, numero: int, estilos: Estilos
 ) -> None:
     """
-    Uma tabela do `.csv`, com a legenda em cima e as notas embaixo.
+    Uma tabela do `.csv`, com a legenda em cima. As notas do `.csv` não vêm
+    junto: ver o comentário no fim da função.
 
     O texto das células atravessa intacto: `28,7` no arquivo é `28,7` no Word. A
     única decisão de apresentação é o alinhamento — texto à esquerda, porque se lê
@@ -655,13 +658,31 @@ def _fixar_larguras(quadro, larguras) -> None:
 def _escrever_figura(documento, figura: Any, numero: int, estilos: Estilos) -> None:
     """
     Uma figura, na largura útil da página do modelo.
+
+    Um `.png` que não abre — a rodada interrompida no meio da gravação, o disco
+    que encheu, a sincronização da nuvem que deixou o arquivo pela metade — não
+    sobe como a exceção do `python-docx` (`UnrecognizedImageError`, que nem é
+    `OSError`): vira `RelatorioError` com o nome do arquivo, e o
+    `executar_relatorio` devolve o relatório anterior ao lugar.
     """
     _legenda(documento, f"Figura {numero}. {figura.titulo}", estilos)
 
     paragrafo = documento.add_paragraph()
     paragrafo.alignment = WD_ALIGN_PARAGRAPH.LEFT
     paragrafo.paragraph_format.space_after = Pt(10)
-    paragrafo.add_run().add_picture(str(figura.caminho), width=_largura_util(documento))
+    try:
+        paragrafo.add_run().add_picture(str(figura.caminho), width=_largura_util(documento))
+    except Exception as erro:  # noqa: BLE001 - a leitura de imagem estoura de várias formas
+        from .relatorio import RelatorioError
+
+        pasta = Path(figura.caminho).parent.name
+        raise RelatorioError(
+            f"Não consegui pôr no documento a figura `{figura.arquivo}`, da pasta "
+            f"`{pasta}`: o arquivo não é uma imagem que se abra.\n"
+            "Quase sempre é uma rodada interrompida no meio da gravação. Rode a "
+            f"análise de novo (`flatcap {pasta} <id> --sim`) e depois o relatório.\n\n"
+            f"Detalhe técnico: {type(erro).__name__}: {erro}"
+        ) from erro
 
 
 def _legenda(documento, texto: str, estilos: Estilos) -> None:
@@ -868,26 +889,23 @@ def _salvar_atomico(documento, caminho: Path) -> None:
     temporário é criado na **mesma pasta** do destino, porque `os.replace` só é
     atômico dentro do mesmo sistema de arquivos. Meio `.docx` não é um documento
     incompleto — é um arquivo que o Word se recusa a abrir.
+
+    O temporário é o do `ficha.temporario_ao_lado`, que respeita o `umask`: o
+    `.docx` sai com a permissão de qualquer arquivo novo, e não só para o dono.
     """
     import os
-    import tempfile
+
+    from .ficha import temporario_ao_lado
 
     caminho = Path(caminho)
-    temporario: Path | None = None
+    descritor, temporario = temporario_ao_lado(caminho)
+    os.close(descritor)
     try:
-        with tempfile.NamedTemporaryFile(
-            dir=caminho.parent,
-            prefix=caminho.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as arquivo:
-            temporario = Path(arquivo.name)
         documento.save(str(temporario))
         os.replace(temporario, caminho)
-        temporario = None
-    finally:
-        if temporario is not None and temporario.exists():
-            temporario.unlink(missing_ok=True)
+    except BaseException:
+        temporario.unlink(missing_ok=True)
+        raise
 
 
 # XML que a API do python-docx não expõe
@@ -1063,7 +1081,7 @@ def escrever_template(caminho: Path) -> Path:
     dentro imprimiria as instruções em cima do documento que você entrega.
 
     O que ele traz é o que se ajusta no Word: página, margens, cabeçalho,
-    rodapé com o número da página, e os cinco estilos `FlatCap *` que o relatório
+    rodapé com o número da página, e os seis estilos `FlatCap *` que o relatório
     procura antes de qualquer outro. Mude a fonte de `FlatCap Corpo` e o
     documento inteiro muda; ponha o logotipo no cabeçalho e ele aparece em todas
     as páginas de todos os relatórios.

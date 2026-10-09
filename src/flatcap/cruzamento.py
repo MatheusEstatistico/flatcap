@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O cruzamento — uma tabela por par de variáveis categóricas.
 
@@ -74,9 +76,9 @@ coluna que `flatcap cruzamento` aceitaria.
 
 ## O que ele deliberadamente não faz
 
-**Não testa independência.** Qui-quadrado e Fisher são outra análise, com os
-pressupostos dela — frequência esperada, tamanho da tabela — e as recusas dela. O
-`scipy` já está instalado para quando ela for pedida.
+**Não testa independência.** Qui-quadrado e Fisher são outra análise, a
+`associacao`, com os pressupostos dela — frequência esperada, tamanho da tabela —
+e as recusas dela.
 
 **Não desenha.** O `graficos.py` tem uma cor de série só, e de propósito. Um
 gráfico de duas variáveis precisa de uma paleta, e essa é uma decisão de desenho

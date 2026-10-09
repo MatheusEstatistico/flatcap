@@ -1,0 +1,105 @@
+# Mudanças
+
+O que mudou em cada versão, em uma linha por mudança. O porquê de cada uma — o texto longo,
+com as decisões e os defeitos que elas evitam — está no docstring de
+[`src/flatcap/__init__.py`](src/flatcap/__init__.py), reproduzido na
+[documentação](docs/Doc.Flatcap.md). O formato segue o
+[Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
+[versionamento semântico](https://semver.org/lang/pt-BR/).
+
+## [1.13.1] — a revisão antes da abertura do código
+
+### Corrigido
+- O `perfil` propõe as categorias com a mesma escrita das análises: numa coluna de código
+  com uma célula vazia, ele propunha `1.0|2.0` e ensinava `1.0=Feminino`, que a descritiva
+  nunca encontrava. **Dicionários já escritos com `1.0=` precisam ser corrigidos à mão.**
+- O `#` só é comentário no cabeçalho do `dicionario.csv` e das tabelas: a variável `#id` e a
+  categoria `#N/D` deixaram de sumir. As mensagens do dicionário dão a linha do arquivo.
+- O cifrão do banco (`R$ 1.000 a R$ 2.000`) não vira fórmula matemática nos gráficos.
+- Os arquivos gravados seguem o `umask`, e não `0600` — num `FLATCAP_ROOT` dividido pela
+  equipe, no Linux e no macOS, só o dono os abria.
+- Todo erro HTTP do REDCap, e toda falha do `requests`, vira mensagem, e não traceback.
+- Uma falha inesperada ao escrever o `.docx` devolve o relatório anterior ao lugar; uma
+  figura ilegível vira mensagem com o nome do arquivo.
+- A codificação de um `.csv` é confirmada no arquivo inteiro, e não só nos primeiros 64 KiB.
+- Mensagens: frases coladas no `novo`, o resumo do `listar`, "com a ANOVA" no histórico, a
+  ajuda do `template` e do `relatorio`, e nenhuma "Fase 5" no texto que o usuário lê.
+
+### Acrescentado
+- O `.env` da sua conta, para quem instala o FlatCap com o `pipx` ou o `uv`, e
+  `flatcap doctor --criar-env`, que o escreve.
+- `LICENSE` (GPL-3.0-or-later), `NOTICE.md`, cabeçalhos SPDX, e a licença no
+  `flatcap --version`.
+- CI, publicação de versões no GitHub, `pre-commit`, e os modelos de issue e de pull request.
+
+## [1.13.0] — o lote
+- `flatcap analisar`: as análises da lista `analises:` da ficha, de uma vez, preparadas
+  todas antes de qualquer uma ser escrita.
+
+## [1.12.0] — as medidas repetidas
+- A ANOVA de medidas repetidas, sempre com a correção de Greenhouse-Geisser
+  (`- repetidas: [pas_0, pas_1, pas_2]`), e a tabela `repetidas.csv`.
+
+## [1.11.0] — a ANOVA de Welch
+- Entre três grupos ou mais, a ANOVA de Welch é o paramétrico da regra, como o `oneway.test`.
+
+## [1.10.0] — três grupos ou mais, e a ANOVA
+- A comparação entre três grupos ou mais (`k_grupos.csv`) e a ANOVA clássica, quando escrita.
+
+## [1.9.0] — o t de Welch
+- Entre dois grupos, o t de Welch é o paramétrico da regra, como o `t.test` sem argumento.
+
+## [1.8.0] — dois grupos, e o t de Student
+- A comparação entre os dois grupos de uma categórica (`dois_grupos.csv`) e o t de Student,
+  quando escrito.
+
+## [1.7.0] — a comparação
+- `flatcap comparacao`: a média contra um valor de referência, pelo t de uma amostra, e o
+  `hipoteses.py` com a aritmética dos testes, conferida contra o R.
+
+## [1.6.0] — a correlação
+- `flatcap correlacao`: Pearson, Spearman ou Kendall pelos pressupostos, com o Spearman
+  exato do AS 89 e uma dispersão por par.
+
+## [1.5.0] — a associação
+- `flatcap associacao`: qui-quadrado ou Fisher exato pela regra de Cochran, com o V de Cramér.
+
+## [1.4.0] — o cruzamento
+- `flatcap cruzamento`: uma tabela cruzada por par de categóricas.
+
+## [1.3.1] — o relatório enxerga todas as análises
+- O relatório varre `3. Análises/*/`, e a lista `analises:` da ficha ordena as seções.
+
+## [1.3.0] — os rótulos de categoria
+- `1=Feminino|2=Masculino` em `categorias_ordem` dá nome aos códigos de uma coluna.
+
+## [1.2.0] — a normalidade
+- `flatcap normalidade`: Shapiro-Wilk, assimetria, curtose e Q-Q das numéricas.
+
+## [1.1.0] — um cliente, vários projetos
+- A pasta do cliente (`matrícula - nome`) passa a guardar uma pasta por projeto
+  (`Projeto NNN`).
+
+## [1.0.0] — o relatório
+- `flatcap relatorio` e `flatcap template`: o `.docx` montado a partir das análises.
+
+## [0.6.0] — a descritiva
+- `flatcap descritiva`: frequências, resumos, faixas, períodos e gráficos, obedecendo ao
+  `dicionario.csv`.
+
+## [0.5.0] — o perfil
+- `flatcap perfil`: o `perfil.md` para a reunião e o `dicionario.csv`.
+
+## [0.4.0] — o versionamento dos bancos
+- `flatcap dados adicionar` e `flatcap dados listar`.
+
+## [0.3.0] — a pasta do projeto
+- `flatcap novo`: a pasta, o banco baixado do REDCap, a ficha e o histórico.
+
+## [0.2.0] — as solicitações
+- `flatcap listar`.
+
+## [0.1.0] — a fundação
+- `flatcap doctor`: a configuração e a conexão com o REDCap.
+
+[1.13.1]: https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.13.1

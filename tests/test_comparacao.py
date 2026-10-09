@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os testes do `comparacao.py`.
 
@@ -1487,6 +1489,20 @@ class TestKGruposRegra:
         assert "ANOVA escrita na ficha (F = 6,39; 2 e 57 gl), contra a regra — ela " in (
             comparada.justificativa
         )
+
+    def test_o_historico_concorda_o_artigo_da_anova(self):
+        """
+        REGRESSÃO da 1.13.0: o `historico.md` dizia "1 com o ANOVA". A frase usa o
+        `_com_artigo`, como as outras frases do módulo.
+        """
+        from types import SimpleNamespace
+
+        from flatcap.comparacao import _acao_do_historico
+
+        comparacao = _grupos((("nota", "escolaridade", "anova"),))
+        acao = _acao_do_historico(SimpleNamespace(comparacao=comparacao, arquivamento=None))
+        assert "1 com a ANOVA" in acao
+        assert "com o ANOVA" not in acao
 
     def test_o_metodo_de_dois_grupos_em_tres(self):
         with pytest.raises(ItemInvalidoError) as erro:

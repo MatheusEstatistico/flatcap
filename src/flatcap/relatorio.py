@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -111,7 +113,7 @@ from pathlib import Path
 from typing import Any
 
 from .dados import linha_do_tempo
-from .dicionario import ARQUIVO_DICIONARIO
+from .dicionario import ARQUIVO_DICIONARIO, linhas_de_comentario
 from .dicionario import ler as ler_dicionario
 from .ficha import Ficha, Versao, versao_vigente
 from .ficha import ler as ler_ficha
@@ -574,7 +576,11 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
                 f"historico.md: {erro}"
             )
 
-    except (OSError, RelatorioError):
+    # `Exception`, como no `executar_*` de cada análise, e não só `OSError` e
+    # `RelatorioError`: até a 1.13.0 um `.png` ilegível estourava o `python-docx`
+    # com uma exceção que não é nenhuma das duas, e o relatório anterior ficava em
+    # `2. Versões antigas/` sem o novo no lugar dele. O erro sobe do mesmo jeito.
+    except Exception:
         for passo in reversed(desfazer):
             try:
                 passo()
@@ -916,9 +922,10 @@ def _secoes(pasta: Path, manifesto: Manifesto) -> tuple[tuple[Secao, ...], list[
 
 def ler_tabela(caminho: Path, especie: str = "", titulo: str = "") -> TabelaLida:
     """
-    Lê um `.csv` da descritiva sem o `pandas` e sem converter valor nenhum.
+    Lê um `.csv` de uma análise sem o `pandas` e sem converter valor nenhum.
 
-    O formato é o que a Fase 5 escreve: BOM, algumas linhas de comentário com o
+    O formato é o que a Fase 5 escreveu primeiro, e o `manifesto.Tabela` de toda
+    análise escreve desde a Fase 7: BOM, algumas linhas de comentário com o
     título e os denominadores, e a tabela separada por `;`. As linhas de
     comentário viram `notas` — elas carregam os dois denominadores da tabela de
     frequência, que é a resposta do roteiro para "quando o cliente lê 45%, ele
@@ -940,19 +947,22 @@ def ler_tabela(caminho: Path, especie: str = "", titulo: str = "") -> TabelaLida
     except OSError as erro:
         raise TabelaIlegivelError(_mensagem_ilegivel(caminho, erro)) from erro
 
-    comentarios: list[str] = []
-    corpo: list[str] = []
-    for linha in texto.splitlines():
-        if linha.lstrip().startswith("#"):
-            comentarios.append(linha.lstrip().lstrip("#").strip())
-        elif linha.strip():
-            corpo.append(linha)
+    # Os comentários são só os do começo, como no `dicionario.csv`: depois do
+    # cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
+    # que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
+    # tabela do documento e virava nota, e o `Total` deixava de somar.
+    todas = texto.splitlines()
+    puladas = linhas_de_comentario(todas)
+    comentarios = [
+        linha.lstrip().lstrip("#").strip() for linha in todas[:puladas] if linha.strip()
+    ]
+    corpo = [linha for linha in todas[puladas:] if linha.strip()]
 
     if not corpo:
         raise TabelaIlegivelError(
-            f"O arquivo `{caminho.name}` da descritiva não tem nenhuma linha de "
-            "dados — só o cabeçalho de comentário.\n"
-            "Rode `flatcap descritiva <id> --sim` para refazer a rodada."
+            f"O arquivo `{caminho.name}`, da pasta `{caminho.parent.name}`, não tem "
+            "nenhuma linha de dados — só o cabeçalho de comentário.\n"
+            f"Rode `flatcap {caminho.parent.name} <id> --sim` para refazer a rodada."
         )
 
     leitor = csv.reader(io.StringIO("\n".join(corpo)), delimiter=_SEPARADOR_CAMPO)
@@ -1368,9 +1378,10 @@ def _faixas_mudaram(faixas: tuple[str, ...], detalhes: dict[str, Any]) -> str:
 
 def _mensagem_ilegivel(caminho: Path, erro: Exception) -> str:
     return (
-        f"Não consegui ler `{caminho.name}`, que a descritiva escreveu.\n"
+        f"Não consegui ler `{caminho.name}`, que a análise da pasta "
+        f"`{caminho.parent.name}` escreveu.\n"
         "Os arquivos da rodada não são feitos para ser editados à mão — se você "
-        "precisou mexer em um, apague a pasta e rode `flatcap descritiva <id> --sim` "
+        f"precisou mexer em um, rode `flatcap {caminho.parent.name} <id> --sim` "
         "de novo.\n\n"
         f"Detalhe técnico: {type(erro).__name__}: {erro}"
     )

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Configuração — Fase 0.
 
@@ -8,11 +10,22 @@ uma contra um engano específico, e o produto principal do módulo são as
 
 from __future__ import annotations
 
+import os
+import stat
 from dataclasses import FrozenInstanceError
+from pathlib import Path
 
 import pytest
 
-from flatcap.config import CHAVES, Config, ConfigError, carregar
+import flatcap.config as config
+from flatcap.config import (
+    CHAVES,
+    TEXTO_DO_ENV,
+    Config,
+    ConfigError,
+    carregar,
+    criar_env_da_conta,
+)
 
 
 def _env(tmp_path, **valores):
@@ -159,6 +172,81 @@ class TestPrecedenciaEArquivo:
             FLATCAP_ROOT=str(root),
         )
         assert carregar(env_file=caminho).origem_env == str(caminho)
+
+
+class TestEnvDaConta:
+    """
+    O terceiro degrau da procura, desde a 1.13.1: o `.env` de quem instalou o
+    FlatCap por um pacote e roda o comando de qualquer pasta. O `ambiente_limpo`
+    do `conftest.py` aponta a pasta da conta para dentro do `tmp_path` — e por
+    isso ela é chamada pelo módulo, `config.pasta_de_configuracao()`, que é onde
+    a troca acontece.
+    """
+
+    @staticmethod
+    def _completo(root, url="https://conta/redcap/api/") -> str:
+        return f"REDCAP_API_URL={url}\nREDCAP_TOKEN={'0' * 32}\nFLATCAP_ROOT={root}\n"
+
+    def test_sem_env_na_pasta_o_da_conta_e_lido(self, root):
+        conta = config.pasta_de_configuracao()
+        conta.mkdir()
+        (conta / ".env").write_text(self._completo(root), encoding="utf-8")
+
+        cfg = carregar()
+
+        assert cfg.origem_env == str(conta / ".env")
+        assert cfg.api_url == "https://conta/redcap/api/"
+
+    def test_o_da_pasta_vence_o_da_conta(self, tmp_path, root):
+        conta = config.pasta_de_configuracao()
+        conta.mkdir()
+        (conta / ".env").write_text(self._completo(root), encoding="utf-8")
+        _env(
+            tmp_path, REDCAP_API_URL="https://local/redcap/api/", REDCAP_TOKEN="0" * 32,
+            FLATCAP_ROOT=str(root),
+        )
+
+        assert carregar().api_url == "https://local/redcap/api/"
+
+    def test_sem_env_nenhum_a_mensagem_ensina_o_da_conta(self):
+        with pytest.raises(ConfigError) as erro:
+            carregar()
+        texto = str(erro.value)
+        assert str(config.pasta_de_configuracao() / ".env") in texto
+        assert "flatcap doctor --criar-env" in texto
+
+    def test_criar_escreve_o_modelo_e_nunca_sobrescreve(self):
+        caminho = criar_env_da_conta()
+        assert caminho == config.pasta_de_configuracao() / ".env"
+        assert caminho.read_text(encoding="utf-8") == TEXTO_DO_ENV
+
+        caminho.write_text("o meu", encoding="utf-8")
+        assert criar_env_da_conta() is None
+        assert caminho.read_text(encoding="utf-8") == "o meu"
+
+    @pytest.mark.skipif(os.name != "posix", reason="no Windows, quem decide é a pasta")
+    def test_o_env_da_conta_nasce_so_para_o_dono(self):
+        """Ele guarda o token do REDCap, e um token é uma senha."""
+        caminho = criar_env_da_conta()
+        assert stat.S_IMODE(caminho.stat().st_mode) == 0o600
+
+    def test_o_modelo_em_branco_acusa_as_tres_chaves(self):
+        """
+        O modelo vem em branco de propósito: copiado sem preencher, ele faz a
+        falta ser acusada, e não um `doctor` tentando falar com `<seu-servidor>`.
+        """
+        criar_env_da_conta()
+        with pytest.raises(ConfigError) as erro:
+            carregar()
+        for chave in CHAVES:
+            assert chave in str(erro.value)
+        assert "Arquivo .env lido" in str(erro.value)
+
+    def test_o_env_example_do_repositorio_e_o_modelo(self):
+        exemplo = Path(__file__).resolve().parents[1] / ".env.example"
+        if not exemplo.is_file():
+            pytest.skip("fora de um clone do repositório")
+        assert exemplo.read_text(encoding="utf-8") == TEXTO_DO_ENV
 
 
 class TestConfig:

@@ -1,0 +1,11 @@
+Variable / Field Name,Form Name,Section Header,Field Type,Field Label,"Choices, Calculations, OR Slider Labels",Field Note,Text Validation Type OR Show Slider Number,Text Validation Min,Text Validation Max,Identifier?,Branching Logic (Show field only if...),Required Field?,Custom Alignment,Question Number (surveys only),Matrix Group Name,Matrix Ranking?,Field Annotation
+record_id,solicitacao,,text,Record ID,,,,,,,,,,,,,
+intro,solicitacao,Identificação,radio,Você é professor/colaborador ou aluno?,"1, Professor/Colaborador | 2, Aluno",,,,,,,y,,,,,
+matricula1,solicitacao,,text,Número de matrícula do professor/colaborador,,Digite apenas números,integer,,,y,[intro] = '1',y,,,,,
+matricula2,solicitacao,,text,Número de matrícula do aluno,,Digite apenas números,integer,,,y,[intro] = '2',y,,,,,
+aluno2,solicitacao,,text,Nome do aluno,,,,,,y,[intro] = '2',y,,,,,
+prof1,solicitacao,,text,Nome do professor orientador ou autor responsável pelos dados,,,,,,y,,y,,,,,
+fin,solicitacao,O estudo,radio,Qual a principal finalidade da análise?,"1, Artigo científico | 2, Projeto de iniciação científica | 3, Cálculo amostral | 4, Outro",,,,,,,y,,,,,
+outros1,solicitacao,,text,Qual?,,,,,,,[fin] = '4',y,,,,,
+obj1,solicitacao,,notes,Objetivo geral e objetivos específicos do estudo,,,,,,,,y,LH,,,,
+database,solicitacao,,file,Banco de dados,,.xlsx ou .csv,,,,,,,LH,,,,

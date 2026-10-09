@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os rótulos de valor das categorias — `categorias_ordem = 1=Feminino|2=Masculino`.
 
@@ -42,7 +44,7 @@ CABECALHO = "variavel;rotulo;tipo;categorias_ordem;faixas;no_banco\n"
 
 def _arquivo(*linhas: str) -> Path:
     caminho = Path(tempfile.mkdtemp()) / "dicionario.csv"
-    caminho.write_text("﻿" + CABECALHO + "".join(linhas), encoding="utf-8")
+    caminho.write_text("\ufeff" + CABECALHO + "".join(linhas), encoding="utf-8")
     return caminho
 
 

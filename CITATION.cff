@@ -1,0 +1,20 @@
+cff-version: 1.2.0
+message: "Se você usar o FlatCap num trabalho, cite-o assim."
+type: software
+title: "FlatCap"
+abstract: >-
+  Ferramenta de linha de comando que automatiza o fluxo de um serviço de assessoria
+  estatística que recebe as solicitações pelo REDCap: organiza as pastas de cada cliente
+  e projeto, versiona os bancos, descreve-os, roda análises conferidas contra o R e
+  escreve o relatório .docx.
+authors:
+  - family-names: "Fernandes"
+    given-names: "Matheus"
+repository-code: "https://github.com/MatheusEstatistico/flatcap"
+license: GPL-3.0-or-later
+keywords:
+  - REDCap
+  - estatística
+  - bioestatística
+  - consultoria estatística
+  - relatório

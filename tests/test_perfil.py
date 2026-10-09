@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O perfil do banco — Fase 4.
 
@@ -17,13 +19,15 @@ import pytest
 
 import bancos
 from flatcap.banco import Banco, Leitura
-from flatcap.dicionario import CATEGORICA, DATA, IGNORAR, NUMERICA
+from flatcap.descritiva import _descrever_categorica
+from flatcap.dicionario import CATEGORICA, DATA, IGNORAR, NUMERICA, Linha
 from flatcap.ficha import Ficha, Versao
 from flatcap.perfil import (
     ARQUIVO_PERFIL,
     CONFIRMAR,
     CORRIGIR,
     NOTA,
+    _perfilar_coluna,
     executar_perfil,
     perfilar,
     preparar_perfil,
@@ -600,3 +604,66 @@ class TestTravasEstruturais:
         assert not culpados, (
             "compare o dtype só dentro dos predicados nomeados: " + ", ".join(culpados)
         )
+
+
+# ── O código como a análise o escreve ───────────────────────────────────────
+
+
+class TestCodigoComCelulaVazia:
+    """
+    REGRESSÃO da 1.13.0 — o código que o perfil escrevia e a descritiva não achava.
+
+    Uma coluna de código com uma célula vazia chega como `float64`, e o perfil a
+    escrevia com `str()`: `1.0|2.0` no `dicionario.csv` e `1.0=Feminino` na dica do
+    `categoria_sem_rotulo`. A descritiva escreve `1`, e a tabela saía com
+    `Feminino 0`, `Masculino 0`, `1 20` e `2 10`, mais dois avisos. A escrita agora
+    é uma só — a `serie_de_texto` do `banco.py` —, e é o que estes testes cobram.
+    """
+
+    @staticmethod
+    def _serie() -> pd.Series:
+        return pd.Series([1, 2, 1, None] * 10, dtype="float64")
+
+    def test_as_categorias_saem_como_a_analise_escreve(self):
+        coluna = _perfilar_coluna(self._serie(), "sexo", 1, 40)
+
+        assert dict(coluna.categorias) == {"1": 20, "2": 10}
+        assert coluna.categorias_sugeridas == ("1", "2")
+
+    def test_a_dica_ensina_o_codigo_que_a_tabela_encontra(self):
+        coluna = _perfilar_coluna(self._serie(), "sexo", 1, 40)
+        achado = next(a for a in coluna.achados if a.codigo == "categoria_sem_rotulo")
+
+        assert "1=Feminino" in achado.detalhe
+        assert "1.0" not in achado.detalhe
+
+    def test_o_dicionario_proposto_e_o_que_a_descritiva_conta(self):
+        """
+        A ida e a volta inteiras: o que o perfil propõe, rotulado como a dica
+        manda, conta todos os casos na descritiva e não gera aviso nenhum.
+        """
+        serie = self._serie()
+        codigos = _perfilar_coluna(serie, "sexo", 1, 40).categorias_sugeridas
+        linha = Linha(
+            variavel="sexo",
+            rotulo="Sexo",
+            tipo=CATEGORICA,
+            categorias_ordem=codigos,
+            rotulos_das_categorias=tuple(zip(codigos, ("Feminino", "Masculino"), strict=True)),
+        )
+
+        v = _descrever_categorica(linha, serie, "sexo", 40, int(serie.isna().sum()))
+        contagem = {celulas[0]: celulas[1] for celulas in v.tabelas[0].linhas}
+
+        assert v.avisos == ()
+        assert (contagem["Feminino"], contagem["Masculino"]) == ("20", "10")
+
+    def test_o_decimal_sai_com_virgula_como_na_tabela(self):
+        coluna = _perfilar_coluna(pd.Series([0.5, 1.5, 0.5, None] * 10), "escala", 1, 40)
+
+        assert [valor for valor, _ in coluna.categorias] == ["0,5", "1,5"]
+
+    def test_o_logico_sai_como_sim_e_nao(self):
+        coluna = _perfilar_coluna(pd.Series([True, False, True] * 10), "fumante", 1, 30)
+
+        assert [valor for valor, _ in coluna.categorias] == ["Sim", "Não"]

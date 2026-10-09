@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O que mais de um arquivo de teste usa.
 
@@ -79,6 +81,11 @@ def ambiente_limpo(monkeypatch, tmp_path):
     # `find_dotenv` sobe a árvore a partir do diretório atual: se a suíte rodar
     # da raiz do repositório, ela acharia o `.env` de verdade.
     monkeypatch.chdir(tmp_path)
+    # E o `.env` da sua conta é o terceiro degrau da procura desde a 1.13.1: sem
+    # isto, a suíte leria o que você criou com `flatcap doctor --criar-env`.
+    monkeypatch.setattr(
+        "flatcap.config.pasta_de_configuracao", lambda: tmp_path / "configuracao-da-conta"
+    )
     return tmp_path
 
 

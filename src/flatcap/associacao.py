@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-FileCopyrightText: 1995-2026 The R Core Team
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A associação — qui-quadrado ou exato de Fisher, escolhido pela regra de Cochran.
 
@@ -153,7 +156,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from fractions import Fraction
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
 
@@ -941,6 +944,10 @@ def qui_quadrado(contagens: Sequence[Sequence[int]]) -> tuple[float, int, float,
 
     O `scipy` entra só na distribuição do qui-quadrado, e dentro da função, como no
     `normalidade.py`: nenhum comando que não testa nada paga o import.
+
+    Derivado de `src/library/stats/R/chisq.test.R`, do R — (C) 1995-2013 The R
+    Core Team, GPL-2.0-or-later. Origem, e os direitos autorais do original: ver o
+    `NOTICE.md`.
     """
     from scipy import stats
 
@@ -1033,6 +1040,10 @@ def _fisher_2x2(tabela: list[list[int]]) -> float:
 
     A normalização por `max(logdc)` antes do `exp` é a do R, e é o que mantém a
     conta de pé em tabela com n na casa dos milhares.
+
+    Derivado de `src/library/stats/R/fisher.test.R`, do R — (C) 1995-2026 The R
+    Core Team, GPL-2.0-or-later. Origem, e os direitos autorais do original: ver o
+    `NOTICE.md`.
     """
     (a, b), (c, d) = tabela
     m, n, k = a + c, b + d, a + b
@@ -1134,7 +1145,7 @@ def _fisher_rede(tabela: list[list[int]], limite: int) -> float:
                 break
         return lf[total] - soma
 
-    @lru_cache(maxsize=None)
+    @cache
     def limites(k: int, resto: tuple[int, ...]) -> tuple[float, float]:
         # (teto do melhor futuro, piso do pior) depois de k colunas.
         if k > ultima:

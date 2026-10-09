@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -11,6 +13,8 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     banco.py       abre a versão vigente do banco como um quadro do pandas
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
+    manifesto.py   o formato do manifesto.json e o contrato de saída das análises
+    graficos.py    desenha os .png a partir das tabelas já calculadas
     descritiva.py  obedece ao dicionário: conta, resume e monta as tabelas
     normalidade.py testa a normalidade das numéricas (Shapiro-Wilk, forma, Q-Q)
     cruzamento.py  cruza pares de categóricas: uma tabela por par
@@ -19,8 +23,6 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara médias: contra uma referência, entre grupos e entre medidas
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
-    graficos.py    desenha os .png a partir das tabelas já calculadas
-    manifesto.py   o formato do manifesto.json e o contrato de saída das análises
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
 
@@ -29,7 +31,9 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
 `projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
 e `manifesto`, `relatorio` conhece `manifesto`, `dicionario`, `dados` e `ficha`, e nenhuma
-delas conhece a `cli`.
+delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento` conhece o
+`Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
+`executar_relatorio`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -402,6 +406,35 @@ antes de escrever virou uma `_mostrar_*`, e o que dizia depois, a `_rodada_escri
 o `analisar` chama as mesmas funções, uma análise depois da outra, e fecha com uma
 tabela do lote. `--resumo` mostra só a tabela. O `_NA_TELA` é o registro da tela, e
 há teste que o exige igual ao `analises.REGISTRO`.
+
+## 1.13.1 — a revisão antes da abertura do código
+
+Uma revisão de todos os arquivos antes de o repositório virar público, e nenhuma
+funcionalidade nova. Cada correção tem o seu teste de regressão.
+
+**O perfil escreve as categorias como as análises.** Uma coluna de código com uma
+célula vazia chega como `float64`, e o perfil escrevia `1.0|2.0` no `dicionario.csv` e
+`1.0=Feminino` na dica; a descritiva escreve `1`, e a tabela saía com `Feminino 0` ao
+lado de `1 20`. A `serie_de_texto` desceu para o `banco.py`, ao lado dos
+`FORMATOS_DATA` e pelo mesmo motivo deles. O dicionário já escrito com `1.0=` não é
+reescrito — a fusão nunca toca linha existente —, e o conserto é à mão.
+
+**O `#` só é comentário no começo do arquivo.** No dicionário, a variável `#id` sumia a
+cada leitura; na tabela de uma análise, a categoria `#N/D` saía do `.docx` e o `Total`
+deixava de fechar. E as mensagens do dicionário passam a dar a linha do arquivo.
+
+**O que o disco e o terminal mostram.** O cifrão do banco não vira fórmula nos
+gráficos; o arquivo gravado segue o `umask`, e não `0o600`; todo erro HTTP do REDCap
+vira `RedcapError`; a falha inesperada no relatório devolve o anterior ao lugar; e a
+codificação do `.csv` é confirmada no arquivo inteiro, e não só nos primeiros 64 KiB.
+
+**A distribuição por pacote.** O `.env` da sua conta é o terceiro degrau da procura,
+para quem instala o FlatCap com o `pipx` ou o `uv` e roda o comando de qualquer pasta;
+`flatcap doctor --criar-env` o escreve. A versão passou a morar só aqui — o
+`pyproject.toml` a lê com `dynamic = ["version"]`.
+
+**A abertura.** `LICENSE` com a GPL-3.0, `NOTICE.md` com os trechos derivados do R, o
+cabeçalho SPDX em todo arquivo de código, e o `flatcap --version` dizendo a licença.
 """
 
-__version__ = "1.13.0"
+__version__ = "1.13.1"

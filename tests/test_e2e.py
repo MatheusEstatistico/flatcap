@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Ponta a ponta — o `flatcap` como subprocesso, contra um REDCap de mentira.
 
@@ -47,6 +49,7 @@ def flatcap(*argumentos: str, env: Path, cwd: Path | None = None):
         capture_output=True,
         text=True,
         cwd=str(cwd) if cwd else None,
+        env=ambiente,
         timeout=180,
     )
 

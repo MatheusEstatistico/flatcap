@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Esse módulo serve para transformar professores/colaboradores e alunos em apenas `Cliente`.
 Sua principal utilidade é que caso a variável `intro` receba outras categorias, só vai ser

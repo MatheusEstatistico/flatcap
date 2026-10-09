@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os testes do `analises.py` — o lote.
 
@@ -93,7 +95,9 @@ def _arquivos(raiz: Path) -> dict[str, bytes]:
     """Tudo o que está em `3. Análises/`, pelo caminho relativo, com os bytes."""
     pasta = raiz / PASTA_ANALISES
     return {
-        str(caminho.relative_to(pasta)): caminho.read_bytes()
+        # `as_posix`, e não `str`: no Windows o separador seria `\`, e o teste que
+        # parte o caminho na `/` deixaria de achar a pasta de cada análise.
+        caminho.relative_to(pasta).as_posix(): caminho.read_bytes()
         for caminho in sorted(pasta.rglob("*"))
         if caminho.is_file()
     }

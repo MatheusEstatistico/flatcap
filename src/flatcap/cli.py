@@ -1,8 +1,10 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Interface de linha de comando do FlatCap.
 
-Esta camada não contém regras de negócio: 
-    ela lê argumentos, chama as camadas de baixo, 
+Esta camada não contém regras de negócio:
+    ela lê argumentos, chama as camadas de baixo,
     formata a saída e escolhe o código de saída do processo.
 """
 
@@ -22,7 +24,7 @@ from rich.text import Text
 from rich.tree import Tree
 
 from . import __version__
-from .config import Config, ConfigError, carregar
+from .config import Config, ConfigError, carregar, criar_env_da_conta
 from .dados import (
     ArquivoOrigemError,
     DadosError,
@@ -83,7 +85,7 @@ if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
 
 app = typer.Typer(
     name="flatcap",
-    help="Orquestrador de fluxo para atendimento estatistico",
+    help="Orquestrador de fluxo para atendimento estatístico.",
     no_args_is_help=True,
     add_completion=False,
 )
@@ -101,9 +103,21 @@ erro_console = Console(stderr = True)
 OK = "[green]OK[/green]"
 FALHA = "[red]FALHA[/red]"
 
+# O aviso que a GPL pede que um programa mostre, no formato dos programas GNU. O
+# titular dos direitos autorais é o mesmo do `NOTICE.md` e dos cabeçalhos SPDX.
+_AVISO_DE_LICENCA = (
+    "Copyright (C) 2026 Matheus Fernandes.\n"
+    "Licença GPL-3.0-or-later: GNU GPL, versão 3 ou posterior "
+    "<https://www.gnu.org/licenses/gpl-3.0.html>.\n"
+    "Este é um software livre: você pode alterá-lo e redistribuí-lo.\n"
+    "NÃO HÁ GARANTIA, na extensão permitida pela lei."
+)
+
+
 def _versao(valor: bool) -> None:
     if valor:
-        console.print(f"flatcap {__version__}")
+        console.print(f"flatcap {__version__}", highlight = False)
+        console.print(Text(_AVISO_DE_LICENCA))
         raise typer.Exit()
 
 def _plural(quantidade: int, singular: str, plural: str) -> str:
@@ -181,6 +195,10 @@ def doctor(
         False, "--criar-root",
         help = "Cria a pasta FLATCAP_ROOT se ela ainda não existir."
     ),
+    criar_env: bool = typer.Option(
+        False, "--criar-env",
+        help = "Cria o .env da sua conta, com as três chaves em branco, e sai."
+    ),
     env: str | None = typer.Option(
         None, "--env",
         help = "Caminho de um .env alternativo."
@@ -190,6 +208,12 @@ def doctor(
     Testar as credenciais, a conexão com o REDCap e a pasta de dados.
     Responde se o problema está na configuração, na rede ou no token.
     """
+    if criar_env:
+        # Como o `--criar-root`, não simula: criar é o pedido. E não sobrescreve
+        # nunca — o arquivo guarda o token, e um token perdido se pede de novo.
+        _criar_env_da_conta()
+        return
+
     tabela = Table(show_header = True, header_style = "bold")
     tabela.add_column("Verificação", no_wrap = True)
     tabela.add_column("Resultado")
@@ -236,12 +260,44 @@ def doctor(
         raise _abortar(
             "Instalação incompleta",
             f"Falta {quais}. Sem isso o FlatCap não abre o banco, não desenha os "
-            "gráficos ou não escreve o relatório.\n\n"
-            "Da raiz do repositório, com o .venv ativado:\n\n"
-            '    pip install -e ".[dev]"'
+            "gráficos ou não escreve o relatório. Reinstale do jeito que instalou:\n\n"
+            "    pipx reinstall flatcap               (pelo pipx)\n"
+            "    uv tool install --reinstall flatcap  (pelo uv)\n"
+            '    pip install -e ".[dev]"              (num clone, com o .venv ativado)'
         )
 
     console.print(f"\n[green]Tudo certo.[/green] Projeto conectado: [bold]{titulo}[/bold]")
+
+def _criar_env_da_conta() -> None:
+    """
+    O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
+    """
+    from .config import arquivo_env_da_conta
+
+    try:
+        caminho = criar_env_da_conta()
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao criar {arquivo_env_da_conta()}.\nDetalhe técnico: {erro}",
+        ) from erro
+
+    if caminho is None:
+        _nada_a_fazer(
+            f"O .env da sua conta já existe:\n    {arquivo_env_da_conta()}\n"
+            "Edite-o à mão; o FlatCap nunca o sobrescreve."
+        )
+        return
+
+    console.print(f"[green].env criado.[/green] {caminho}")
+    console.print(
+        Text(
+            "Abra o arquivo, preencha as três chaves e rode `flatcap doctor`. Ele vale "
+            "para todo comando rodado de uma pasta sem .env próprio.",
+            style = "dim",
+        )
+    )
+
 
 # As bibliotecas que abrem o banco, calculam, desenham e escrevem o documento.
 # A ordem é a do fluxo: ler, calcular, desenhar, entregar.
@@ -294,7 +350,7 @@ def listar(
         None, "-n", "--ultimos", min = 1, metavar = "N",
         help = "Mostra apenas as N solicitações mais recentes, isto é, "
                         "as de maior record_id. Sem esta opção mostra todas."
-    ), 
+    ),
     env: str | None = typer.Option(
         None, "--env",
         help = "Caminho de um .env alternativo."
@@ -424,11 +480,11 @@ def _resumo(
 
     cortado = len(clientes) != total
     contagem = (
-        f"[bold]{len(clientes)}[/bold] de {total} solicitações." if cortado
-        else f"[bold]{total}[/bold] solicitações."
+        f"[bold]{len(clientes)}[/bold] de {total} solicitações" if cortado
+        else f"[bold]{total}[/bold] {_plural(total, 'solicitação', 'solicitações')}"
     )
 
-    partes = [contagem, f"[bold]{len(pendentes)}[/bold] sem pasta local."]
+    partes = [contagem, f"[bold]{len(pendentes)}[/bold] sem pasta local"]
     if sem_anexo:
         partes.append(f"[yellow]{len(sem_anexo)} sem anexo[/yellow]")
     if incompletos:
@@ -436,11 +492,11 @@ def _resumo(
     if alunos:
         partes.append(f"{len(alunos)} de alunos")
 
-    resumo = "\n" + " . ".join(partes)
+    resumo = "\n" + " · ".join(partes) + "."
     if cortado:
         resumo += (
             f"\n[dim]As {len(clientes)} mais recentes por record_id. "
-            f"Rode `-n` para ver as {total}.[/dim]"
+            f"Rode sem `-n` para ver as {total}.[/dim]"
         )
 
     return resumo
@@ -463,8 +519,8 @@ def novo(
 ) -> None:
     """
     Cria a pasta do projeto a partir de uma solicitação do REDCap.
-    POR PADRÃO APENAS SIMULA: 
-        Desenha a árvore que seria criada e não escreve nada. 
+    POR PADRÃO APENAS SIMULA:
+        Desenha a árvore que seria criada e não escreve nada.
         Repita com --sim para executar.
     """
     cfg = _configuracao(env)
@@ -974,7 +1030,7 @@ def perfil(
     if not plano.fusao.existia:
         console.print(
             Text(
-                "Revise a coluna `tipo` do dicionário antes da Fase 5 — a sugestão é palpite.",
+                "Revise a coluna `tipo` do dicionário antes das análises — a sugestão é palpite.",
                 style = "yellow",
             )
         )
@@ -3242,7 +3298,7 @@ def relatorio(
     template: Path | None = typer.Option(
         None, "--template", metavar = "ARQUIVO",
         help = "Um .docx para herdar estilos, cabeçalho e capa. Sem isso, o "
-               "template.docx da pasta do projeto ou do FLATCAP_ROOT."
+               "template.docx da pasta do projeto, da do cliente ou do FLATCAP_ROOT."
     ),
     titulo: str | None = typer.Option(
         None, "--titulo", metavar = "TEXTO",
@@ -3265,10 +3321,10 @@ def relatorio(
     Monta o relatório .docx a partir das análises já rodadas.
 
     Varre `3. Análises/`, lê o `manifesto.json` de cada rodada que estiver lá e
-    monta um documento com as seções de todas elas: a tabela, as notas de
-    denominador e a figura de cada uma. A descritiva dá uma seção por variável,
-    na ordem do dicionário; o cruzamento, uma seção por par; a normalidade, a
-    tabela de pressupostos e os Q-Q.
+    monta um documento com as seções de todas elas, cada uma com as tabelas e as
+    figuras que a análise escreveu. A descritiva dá uma seção por variável, na
+    ordem do dicionário; o cruzamento, uma seção por par; a normalidade, a
+    tabela de pressupostos e os Q-Q. As notas dos `.csv` ficam nos `.csv`.
 
     A ordem das análises é a da lista `analises:` do `projeto.yaml` — o que foi
     combinado na reunião. O que não estiver na lista entra depois, e o que
@@ -3386,11 +3442,11 @@ def template(
     """
     Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
 
-    O modelo sai com o corpo vazio e com os estilos `FlatCap Titulo`,
-    `FlatCap Secao`, `FlatCap Corpo`, `FlatCap Legenda` e `FlatCap Nota` já
-    definidos. Ajuste-os no Word — fonte, cor, tamanho —, ponha o logotipo no
-    cabeçalho e salve. Todo relatório gerado daí em diante sai com essa cara, sem
-    uma linha de Python.
+    O modelo sai com o corpo vazio e com os seis estilos `FlatCap Titulo`,
+    `FlatCap Subtitulo`, `FlatCap Secao`, `FlatCap Corpo`, `FlatCap Legenda` e
+    `FlatCap Tabela` já definidos. Ajuste-os no Word — fonte, cor, tamanho —,
+    ponha o logotipo no cabeçalho e salve. Todo relatório gerado daí em diante
+    sai com essa cara, sem uma linha de Python.
 
     Tudo o que você escrever no corpo do modelo aparece **antes** do relatório, em
     todo relatório. É assim que uma capa institucional continua sendo a capa.
@@ -3434,8 +3490,8 @@ def template(
     console.print(
         Text(
             "Abra no Word, ajuste os estilos `FlatCap *` e o cabeçalho, e salve. O "
-            "relatório procura este arquivo na pasta do projeto e depois no "
-            "FLATCAP_ROOT.",
+            "relatório procura o template.docx na pasta do projeto, depois na do "
+            "cliente e por fim no FLATCAP_ROOT.",
             style = "dim",
         )
     )

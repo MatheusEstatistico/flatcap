@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Abrir o banco — Fase 4.
 
@@ -96,6 +98,25 @@ class TestLeituraDeCsv:
         quadro, leitura = abrir_arquivo(caminho)
         assert leitura.codificacao.startswith("utf-8")
         assert str(quadro["cidade"].iloc[1]) == "São Paulo"
+
+    def test_o_primeiro_acento_depois_da_amostra(self, tmp_path):
+        """
+        REGRESSÃO da 1.13.0 — o outro lado da amostra. Um `.csv` do Excel em
+        cp1252 cujos primeiros 64 KiB são só ASCII passava no teste do UTF-8, e o
+        `pandas` estourava no `Não` da linha 3000: "não consegui abrir" sobre um
+        arquivo que abre no Excel. A escolha da amostra agora é confirmada no
+        arquivo inteiro.
+        """
+        caminho = tmp_path / "grande.csv"
+        linhas = ["id;grupo;obs"] + [f"{i};{i % 3};" for i in range(1, 9000)]
+        linhas.append("9000;1;Não respondeu")
+        caminho.write_bytes(("\n".join(linhas) + "\n").encode("cp1252"))
+        assert caminho.stat().st_size > 64 * 1024
+
+        quadro, leitura = abrir_arquivo(caminho)
+
+        assert leitura.codificacao == "cp1252"
+        assert str(quadro["obs"].iloc[-1]) == "Não respondeu"
 
     def test_csv_de_uma_coluna_nao_e_partido_pela_virgula_decimal(self, tmp_path):
         """

@@ -1,0 +1,7 @@
+# Mantém em dia as ações usadas na CI e na publicação das versões.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

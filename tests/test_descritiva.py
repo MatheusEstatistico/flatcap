@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A descritiva — Fase 5.
 
@@ -112,7 +114,7 @@ class TestRecusas:
     def test_coluna_do_banco_que_o_dicionario_desconhece(self, projeto_com_banco):
         raiz = projeto_com_banco()
         (raiz / "dicionario.csv").write_text(
-            "﻿variavel;rotulo;tipo;categorias_ordem;faixas;no_banco\n"
+            "\ufeffvariavel;rotulo;tipo;categorias_ordem;faixas;no_banco\n"
             "sexo;Sexo;categorica;;;sim\n",
             encoding="utf-8",
             newline="\n",

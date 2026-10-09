@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os comandos — a fiação.
 
@@ -8,7 +10,7 @@ recentes" é o `test_modelo.py`, porque a regra mora lá.
 
 Três invariantes atravessam o arquivo:
 
-**Os cinco comandos que escrevem simulam por padrão.** Sem `--sim`, nada no
+**Todo comando que escreve simula por padrão.** Sem `--sim`, nada no
 disco muda. É a rede de proteção, e ela é conferida comando a comando.
 
 **Erro previsto vira painel, não traceback.** Toda exceção declarada pelos
@@ -83,6 +85,12 @@ class TestGlobais:
         assert resultado.exit_code == 0
         assert __version__ in resultado.output
 
+    def test_version_diz_a_licenca(self, rodar):
+        """O aviso que a GPL pede, no formato dos programas GNU."""
+        saida = _saida(rodar("--version"))
+        assert "GPL-3.0-or-later" in saida
+        assert "NÃO HÁ GARANTIA" in saida
+
     def test_sem_argumento_mostra_a_ajuda(self):
         resultado = runner.invoke(app, [])
         assert "doctor" in resultado.output and "relatorio" in resultado.output
@@ -148,6 +156,18 @@ class TestDoctor:
         saida = _saida(rodar("doctor"))
         assert "python-docx" in saida
 
+    def test_criar_env_escreve_o_da_conta_e_nao_sobrescreve(self, rodar):
+        from flatcap.config import arquivo_env_da_conta
+
+        primeira = rodar("doctor", "--criar-env")
+        assert primeira.exit_code == 0
+        assert arquivo_env_da_conta().is_file()
+        assert ".env criado" in _saida(primeira)
+
+        segunda = rodar("doctor", "--criar-env")
+        assert segunda.exit_code == 0
+        assert "já existe" in _sem_moldura(segunda)
+
     def test_falha_de_conexao_vira_painel(self, rodar, monkeypatch):
         from flatcap.redcap import RedcapError
 
@@ -190,6 +210,22 @@ class TestListar:
         saida = _saida(rodar("listar", "-n", "2"))
         assert "2 de 7" in saida
         assert "45" in saida
+
+    def test_o_resumo_se_le_numa_linha(self, rodar, com_registros):
+        """
+        REGRESSÃO da 1.13.0: `7 solicitações. . 6 sem pasta local. . 2 sem
+        anexo`, e a dica mandava rodar `-n` para ver todas — que é justamente o
+        que corta.
+        """
+        saida = _saida(rodar("listar", "-n", "2"))
+        assert ". ." not in saida
+        assert "Rode sem `-n` para ver as 7" in saida
+
+    def test_uma_solicitacao_no_singular(self, rodar, monkeypatch, registros):
+        monkeypatch.setattr("flatcap.cli.exportar_registros", lambda *a, **k: registros[:1])
+        saida = _saida(rodar("listar"))
+        assert "1 solicitação" in saida
+        assert "solicitações" not in saida
 
     def test_n_zero_e_recusado_pelo_typer(self, rodar, com_registros):
         assert rodar("listar", "-n", "0").exit_code != 0

@@ -1,276 +1,341 @@
-# FlatCap 
-Ferramenta para orquestrar o fluxo de trabalho estatístico com Python e REDCap: 
+# FlatCap
 
-**REDCap (entrada) → organização de pastas → versionamento dos bancos → análises gerais → relatório `.docx`**.
+Ferramenta de linha de comando para o fluxo de trabalho de um serviço de assessoria
+estatística que recebe as solicitações pelo REDCap:
 
-## Princípio norteador 
-Automatizar o que é repetitivo e mecânico e manter manual o que é decisão técnica. Tudo que é automatizado fica documentado em disco, para que qualquer projeto possa ser reaberto meses depois e compreendido sem depender da memória. Nada é apagado, as versões antigas são documentadas na pasta do cliente/projeto. 
+**REDCap (entrada) → organização de pastas → versionamento dos bancos → análises → relatório `.docx`**
 
-> A documentação completa pode ser encontrada em [`Doc.Flatcap`](https://github.com/MatheusEstatistico/flatcap/blob/main/documenta%C3%A7%C3%B5es/Doc.Flatcap.md).
+> **In English.** FlatCap is a command-line tool that automates the routine of a statistical
+> consulting service whose requests arrive through a REDCap survey: it creates one folder per
+> client and project, versions the client's datasets, profiles them, runs descriptive and
+> inferential analyses (normality, cross-tabulation, chi-square/Fisher, Pearson/Spearman/Kendall,
+> t-tests and ANOVAs) checked against R, and writes a `.docx` report. Code, messages and
+> documentation are in Brazilian Portuguese. Licensed under GPL-3.0-or-later.
+
+## Princípio
+
+Automatizar o que é repetitivo e mecânico, e manter manual o que é decisão técnica. Tudo o
+que é automatizado fica documentado em disco, para que qualquer projeto possa ser reaberto
+meses depois e compreendido sem depender da memória. Nada é apagado: as versões antigas vão
+para uma pasta própria dentro do projeto.
+
+- **Simula por padrão.** Todo comando que escreve em disco primeiro mostra o que faria;
+  `--sim` executa.
+- **O que se analisa está escrito.** As decisões da reunião com o cliente moram no
+  `dicionario.csv` e no `projeto.yaml` do projeto, e as análises obedecem a eles.
+- **Conferido contra o R.** Os testes estatísticos reproduzem o R 4.3.3, e a suíte compara
+  com valores calculados no R — nunca com o próprio FlatCap.
+- **O relatório não abre o banco.** Um número do `.docx` é, letra por letra, o número do
+  `.csv` que a análise escreveu.
+
+A documentação completa — o projeto inteiro, módulo por módulo, com todos os comentários do
+código — está em [`docs/Doc.Flatcap.md`](docs/Doc.Flatcap.md).
+
+> O FlatCap não é afiliado à Vanderbilt University nem ao REDCap Consortium. Ele só conversa
+> com a API do servidor REDCap da sua instituição, com o token que ela concede.
+
 ---
 
-## Instalação 
-Requer **Python 3.11+** <br>
-Requer **Git** <br>
-Requer **_** <br>
+## Instalação
+
+Requer **Python 3.11 ou mais novo**. O FlatCap é um programa de terminal, e o jeito
+recomendado de instalá-lo é como uma ferramenta isolada — com o
+[`pipx`](https://pipx.pypa.io) ou com o [`uv`](https://docs.astral.sh/uv/) —, sem clonar o
+repositório. O `uv` baixa até o Python, se a máquina não tiver.
+
+Cada [versão publicada](https://github.com/MatheusEstatistico/flatcap/releases) traz o pacote
+`flatcap-<versão>-py3-none-any.whl`. Instale pelo endereço dele:
 
 ```bash
-git clone git@github.com:<usuario>/flatcap.git
+# com o uv
+uv tool install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+
+# ou com o pipx
+pipx install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+```
+
+Ou direto do repositório, pela etiqueta da versão (precisa do Git na máquina):
+
+```bash
+uv tool install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
+pipx install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
+```
+
+Para trocar de versão, rode o mesmo comando com o endereço da nova e `--force`. Para
+desinstalar: `uv tool uninstall flatcap` ou `pipx uninstall flatcap`.
+
+### Para desenvolver
+
+```bash
+git clone https://github.com/MatheusEstatistico/flatcap.git
 cd flatcap
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
-```
- 
-## Configuração 
-Copie `.env.example` para `.env` e preencha: 
-```env
-REDCAP_API_URL=https://<servidor-institucional>/redcap/api/
-REDCAP_TOKEN=32caracteres
-FLATCAP_ROOT=pasta_local
+pre-commit install
 ```
 
-| Chave | Onde obter |
+O ritual de cada mudança está no [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Configuração
+
+O FlatCap precisa de três chaves, lidas de um arquivo `.env`:
+
+| Chave | O que é, e onde obter |
 |---|---|
-| `REDCAP_API_URL` | Página **API Playground** do projeto. **Não** é o link curto do survey. |
-| `REDCAP_TOKEN` | Menu **API** do projeto → *Request API token*. <br>Precisa de permissão para exportar **registros, metadados e arquivos**. |
-| `FLATCAP_ROOT` | Caminho absoluto da pasta onde os projetos vivem. |
---- 
+| `REDCAP_API_URL` | A URL da API, no formato `https://<servidor>/redcap/api/`. Está na página **API Playground** do projeto. **Não** é o link curto do survey. |
+| `REDCAP_TOKEN` | O token do projeto, no menu **API** → *Request API token*. Precisa de permissão para exportar **registros, metadados e arquivos**. |
+| `FLATCAP_ROOT` | O caminho absoluto da pasta onde ficam as pastas dos clientes — fora de qualquer repositório Git, porque é onde moram os dados. |
 
-## Comandos disponíveis
+O `.env` é procurado nesta ordem, e o primeiro que existir é o lido:
 
-Ajuda de qualquer comando: `flatcap <comando> --help`.
+1. o arquivo indicado com `--env CAMINHO`, que todo comando aceita;
+2. um `.env` na pasta atual ou em alguma acima dela — o de quem trabalha num clone do
+   repositório;
+3. o `.env` da sua conta — o de quem instalou o FlatCap como ferramenta:
+   `%APPDATA%\flatcap\.env` no Windows, `~/.config/flatcap/.env` no Linux e
+   `~/Library/Application Support/flatcap/.env` no macOS.
 
-| Comando | Função |
-|---|---|
-| `flatcap doctor` | Testa credenciais, conexão com o REDCap, `FLATCAP_ROOT` e as bibliotecas instaladas. |
-| `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
-| `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação. |
-| `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco na pasta do projeto. |
-| `flatcap dados listar <id>` | Mostra a linha do tempo das versões do banco. |
-| `flatcap perfil <id>` | Descreve o banco e escreve o `perfil.md` e o `dicionario.csv`. |
-| `flatcap descritiva <id>` | Gera a análise descritiva obedecendo ao `dicionario.csv`. |
-| `flatcap normalidade <id>` | Testa a normalidade das variáveis numéricas. |
-| `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
-| `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
-| `flatcap template` | Escreve o modelo `.docx` que o relatório usa. |
+Para criar o da sua conta, com as três chaves em branco, e conferir tudo depois de
+preenchê-lo:
 
-> Comandos que escrevem em disco **simulam por padrão**: eles desenham a árvore do que seria feito e não tocam em nada. Use `--sim` para executar de fato.
+```bash
+flatcap doctor --criar-env
+flatcap doctor
+```
 
-**Opções globais**
+Variáveis de ambiente com os mesmos nomes valem mais que o `.env` — é o que permite rodar num
+servidor sem arquivo nenhum. **O `.env` guarda o token: ele nunca vai para o Git.** Se um token
+vazar, troque-o no REDCap; ver o [`SECURITY.md`](SECURITY.md).
 
-| Opção | Efeito |
-|---|---|
-| `--version`, `-V` | Mostra a versão e sai. |
-| `--help` | Mostra a ajuda do comando e sai. |
+## O formulário do REDCap
 
-O `<id>` é o `record_id` **ou** a matrícula do projeto, como aparece no `flatcap listar`. <br>
-Todo comando aceita `--env CAMINHO` para usar um `.env` alternativo.
+O FlatCap foi feito para um formulário de solicitação de análise, e lê dele estes campos
+(`modelo.CAMPOS_REDCAP`):
+
+| Campo | Tipo no REDCap | Para quê |
+|---|---|---|
+| `record_id` | — | identifica a solicitação; vira a pasta `Projeto NNN` |
+| `intro` | radio: `1` professor/colaborador, `2` aluno | decide de quais campos vêm a matrícula e o nome |
+| `matricula1`, `prof1` | texto | matrícula e nome do professor (`intro = 1`) |
+| `matricula2`, `aluno2` | texto | matrícula e nome do aluno (`intro = 2`) |
+| `fin` | radio | a finalidade, impressa na primeira página do relatório |
+| `outros1` | texto | a finalidade escrita pelo cliente quando ele marca "Outros" |
+| `obj1` | texto longo | os objetivos do estudo, também impressos no relatório |
+| `database` | arquivo | o banco de dados, baixado pelo `flatcap novo` |
+
+Um formulário com esses nomes funciona sem mudar nada no código. O dicionário de dados de um
+formulário mínimo, pronto para importar no REDCap (*Designer → Upload Data Dictionary*), está
+em [`docs/redcap/formulario-minimo.csv`](docs/redcap/formulario-minimo.csv). Para usar outros
+nomes de campo, a tradução mora num lugar só: o `src/flatcap/modelo.py`.
 
 ---
 
+## Comandos
+
+Ajuda de qualquer comando: `flatcap <comando> --help`. O `<id>` é o `record_id` **ou** a
+matrícula do projeto, como aparece no `flatcap listar`.
+
+| Comando | Função |
+|---|---|
+| `flatcap doctor` | Testa a configuração, a conexão com o REDCap, o `FLATCAP_ROOT` e as bibliotecas. |
+| `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
+| `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
+| `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco. |
+| `flatcap dados listar <id>` | Mostra a linha do tempo das versões do banco, conferida contra o disco. |
+| `flatcap perfil <id>` | Descreve o banco: escreve o `perfil.md` e o `dicionario.csv`. |
+| `flatcap descritiva <id>` | Tabelas de frequência, resumos, faixas e gráficos, obedecendo ao `dicionario.csv`. |
+| `flatcap normalidade <id>` | Shapiro-Wilk, assimetria, curtose e Q-Q das numéricas. |
+| `flatcap cruzamento <id>` | Uma tabela cruzada por par da lista `cruzamento:`. |
+| `flatcap associacao <id>` | Qui-quadrado ou Fisher, pela regra de Cochran, para os pares da lista `associacao:`. |
+| `flatcap correlacao <id>` | Pearson, Spearman ou Kendall, pelos pressupostos, para os pares da lista `correlacao:`. |
+| `flatcap comparacao <id>` | Testes t e ANOVAs — contra uma referência, entre grupos ou entre medidas repetidas. |
+| `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
+| `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
+| `flatcap template` | Escreve o modelo `.docx` que o relatório usa, para ajustar no Word. |
+
+> Os comandos que escrevem em disco **simulam por padrão**: mostram o que seria feito e não
+> tocam em nada. Use `--sim` para executar de fato.
+
+Opções que valem para vários comandos:
+
+| Opção | Efeito |
+|---|---|
+| `--version`, `-V` | Mostra a versão e a licença, e sai. |
+| `--env CAMINHO` | Usa outro `.env`. |
+| `--sim` | Executa de fato (nos comandos que escrevem). |
+| `--aba NOME` | A planilha a ler, quando o `.xlsx` tem mais de uma. Sem isso, a primeira. |
+| `--rapido` | Não reconfere o `sha256` das versões do banco. Útil com bancos muito grandes. |
+| `--sem-graficos` | Escreve só as tabelas, sem carregar o `matplotlib` (descritiva, normalidade, correlação e lote). |
+
 ### `flatcap doctor`
-Testa as credenciais, a conexão com o REDCap e a pasta de dados. Responde se o problema está na configuração, na rede ou no token, e confere se `pandas`, `openpyxl`, `scipy`, `matplotlib` e `python-docx` estão instalados.
+
+Testa as credenciais, a conexão com o REDCap e a pasta de dados. Responde se o problema está
+na configuração, na rede ou no token, e confere se `pandas`, `openpyxl`, `scipy`, `matplotlib`
+e `python-docx` estão instalados.
 
 | Opção | Efeito |
 |---|---|
 | `--criar-root` | Cria a pasta `FLATCAP_ROOT` se ela ainda não existir. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap doctor
-flatcap doctor --criar-root
-```
+| `--criar-env` | Cria o `.env` da sua conta, com as três chaves em branco, e sai. Nunca sobrescreve. |
 
 ### `flatcap listar`
-Lista as solicitações no REDCap e o que já foi para o disco. É o comando que coordena o fluxo diário: mostra o que chegou de novo de um lado e o que já virou pasta do outro.
+
+Lista as solicitações no REDCap e o que já foi para o disco. É o comando que coordena o fluxo
+diário: mostra o que chegou de um lado e o que já virou pasta do outro.
 
 | Opção | Efeito |
 |---|---|
-| `-n N`, `--ultimos N` | Mostra apenas as N solicitações mais recentes (maior `record_id`). Sem isso, mostra todas. |
-| `--conferir-anexos` | Confirma cada anexo na API. Mais lento, e só necessário se a coluna `anexo` vier vazia para todo mundo. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap listar
-flatcap listar -n 10
-```
+| `-n N`, `--ultimos N` | Só as N solicitações mais recentes (maior `record_id`). |
+| `--conferir-anexos` | Confirma cada anexo na API. Mais lento; só necessário se a coluna `Anexo` vier vazia para todo mundo. |
 
 ### `flatcap novo <record_id>`
-Cria a pasta do projeto a partir de uma solicitação do REDCap, já com o anexo baixado em `1. Dados originais/` como `00_redcap_AAAA-MM-DD_<nome original>`, somente leitura. Sem anexo no registro, a pasta é criada assim mesmo e o banco entra depois pelo `flatcap dados adicionar`.
 
-| Argumento / Opção | Efeito |
-|---|---|
-| `record_id` | `record_id` da solicitação, como aparece no `flatcap listar`. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
+Cria a pasta do projeto a partir de uma solicitação do REDCap, com o anexo baixado em
+`1. Dados originais/` como `00_redcap_AAAA-MM-DD_<nome original>`, somente leitura. Sem anexo,
+a pasta é criada assim mesmo, e o banco entra depois pelo `flatcap dados adicionar`.
 
 ```bash
 flatcap novo 42          # simula
 flatcap novo 42 --sim    # cria
 ```
 
-### `flatcap dados adicionar <id> <arquivo>`
-Registra uma nova versão do banco na pasta do projeto. Copia o arquivo para `1. Dados originais/` com o próximo número da série, manda a versão de trabalho anterior para `2. Versões antigas/` e acrescenta a entrada em `dados:` no `projeto.yaml`. O `00_redcap_*` nunca é tocado.
+### `flatcap dados adicionar <id> <arquivo>` e `flatcap dados listar <id>`
 
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `arquivo` | O arquivo revisado que o cliente mandou. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
+O `adicionar` registra uma nova versão do banco: copia o arquivo para `1. Dados originais/`
+com o próximo número da série, manda a versão de trabalho anterior para
+`2. Versões antigas/` e acrescenta a entrada em `dados:` no `projeto.yaml`. O `00_redcap_*`
+nunca é tocado, e um reenvio idêntico não vira versão.
+
+O `listar` mostra a linha do tempo e confronta a ficha com o disco: aponta versão registrada
+que sumiu, arquivo alterado depois do registro e arquivo na pasta que a ficha desconhece.
 
 ```bash
 flatcap dados adicionar 42 ~/Downloads/banco_revisado.xlsx --sim
-```
-
-### `flatcap dados listar <id>`
-Mostra a linha do tempo das versões do banco. Além do que está registrado em `dados:`, confronta a ficha com o disco: aponta versão registrada que sumiu, arquivo alterado depois do registro e arquivo presente na pasta que a ficha desconhece.
-
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--rapido` | Não reconfere o `sha256` dos arquivos. Útil com bancos muito grandes. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
 flatcap dados listar 42
 ```
 
 ### `flatcap perfil <id>`
-Descreve o banco e prepara a reunião com o cliente. Abre a versão vigente registrada na ficha, mede cada variável, aponta os problemas conhecidos e escreve dois arquivos: o `perfil.md`, que é o documento que você leva para a conversa, e o `dicionario.csv`, que dirige a descritiva daqui em diante.
 
-O dicionário que já existir **não é sobrescrito**: as linhas que você preencheu ficam intactas e só entram as variáveis novas.
+Descreve o banco e prepara a reunião com o cliente. Abre a versão vigente, mede cada
+variável, aponta os problemas conhecidos e escreve o `perfil.md`, o documento que você leva
+para a conversa, e o `dicionario.csv`, que dirige as análises daqui em diante. O dicionário
+que já existir **não é sobrescrito**: as linhas que você preencheu ficam intactas, e só entram
+as variáveis novas.
 
-| Argumento / Opção | Efeito |
+O `dicionario.csv` tem uma linha por variável: `tipo` (`categorica`, `numerica`, `data` ou
+`ignorar`), `categorias_ordem` (a ordem das categorias, com o rótulo de cada código —
+`1=Feminino|2=Masculino`) e `faixas` (os cortes de uma numérica — `0|18|30|60|120`).
+
+### As análises
+
+Cada análise escreve em `3. Análises/<análise>/` as suas tabelas (`.csv`), as figuras
+(`.png`) e um `manifesto.json` que diz de qual variável, de qual versão do banco e com quais
+bibliotecas saiu cada arquivo. Rodar de novo arquiva a rodada anterior inteira em
+`2. Versões antigas/`.
+
+| Análise | O que precisa no `projeto.yaml` |
 |---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--aba NOME` | Planilha a ler, quando o `.xlsx` tiver mais de uma. Sem isso, a primeira. |
-| `--rapido` | Não reconfere o `sha256` dos arquivos. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
+| `descritiva` | nada: descreve todas as variáveis que o dicionário não marcou `ignorar` |
+| `normalidade` | nada: testa todas as numéricas; uma lista `normalidade: [idade, imc]` restringe |
+| `cruzamento` | `cruzamento:` com os pares — `- [sexo, escolaridade]` |
+| `associacao` | `associacao:` com os pares — `- [sexo, desfecho]` ou `- desfecho: [sexo, escolaridade]` |
+| `correlacao` | `correlacao:` com os pares — `- [idade, imc]`, ou `- [dor, ansiedade, kendall]` com o método |
+| `comparacao` | `comparacao:` com os itens — `- [imc, 25]` (uma amostra), `- [imc, sexo]` (grupos), `- repetidas: [pas_0, pas_1, pas_2]` |
 
-```bash
-flatcap perfil 42 --sim
-flatcap perfil 42 --aba "Dados 2024" --sim
-```
+Os pares e os itens se escrevem na ficha, na reunião: trinta variáveis dão 435 pares, e
+testar todos é *p-hacking* feito por máquina. Sem a lista, o comando recusa e diz o que
+escrever. Um exemplo de ficha com todos os blocos:
 
-### `flatcap descritiva <id>`
-Gera a análise descritiva obedecendo ao `dicionario.csv`: uma tabela de frequência e um gráfico de barras por categórica; resumo, tabela por faixas e histograma por numérica; período e distribuição no tempo por data. Tudo em `3. Análises/descritiva/`, com um `manifesto.json` que diz de qual variável saiu cada arquivo.
+```yaml
+analises: [descritiva, normalidade, associacao, comparacao]   # a ordem das seções do relatório
 
-Sem `faixas` preenchida no dicionário, as faixas saem pelos quartis da própria variável. Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
-
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--aba NOME` | Planilha a ler, quando o `.xlsx` tiver mais de uma. |
-| `--sem-graficos` | Escreve só as tabelas. Mais rápido, e o `matplotlib` nem é carregado. |
-| `--rapido` | Não reconfere o `sha256` dos arquivos. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap descritiva 42 --sim
-flatcap descritiva 42 --sem-graficos --sim
-```
-
-### `flatcap normalidade <id>`
-Testa a normalidade das variáveis numéricas do `dicionario.csv`. Para cada `numerica`: o teste de Shapiro-Wilk, a assimetria, a curtose e um gráfico Q-Q, em `3. Análises/normalidade/` com o seu `manifesto.json`.
-
-Por padrão entram todas as numéricas; uma lista `normalidade:` no `projeto.yaml` restringe às variáveis que você escrever nela. Rodar de novo arquiva a rodada anterior inteira.
-
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--aba NOME` | Planilha a ler, quando o `.xlsx` tiver mais de uma. |
-| `--sem-graficos` | Escreve só a tabela. Mais rápido, e o `matplotlib` nem é carregado. |
-| `--rapido` | Não reconfere o `sha256` dos arquivos. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap normalidade 42 --sim
+normalidade: [idade, imc]
+associacao:
+  - [sexo, desfecho]
+comparacao:
+  - [imc, 25]                   # uma amostra, contra a referência
+  - [imc, sexo]                 # dois grupos: o t de Welch
+  - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
+  - repetidas: [pas_0, pas_1, pas_2]
 ```
 
 ### `flatcap analisar <id>`
-Roda de uma vez as análises da lista `analises:` do `projeto.yaml`, na ordem dela — que é também a ordem das seções do relatório. Cada análise roda como o comando dela: a mesma saída no terminal, os mesmos arquivos em `3. Análises/`, a mesma linha no `historico.md`. No fim, uma tabela com uma linha por análise, e uma linha a mais no histórico dizendo que elas rodaram juntas.
 
-```yaml
-analises: [descritiva, normalidade, correlacao, comparacao]
-
-correlacao:
-  - [idade, imc]
-comparacao:
-  - [imc, sexo]
-```
-
-A lista leva só os nomes; os pares e os itens continuam nos blocos de cada análise. Lista vazia faz o comando recusar e escrever a linha pronta para copiar, montada a partir dos blocos que a ficha já tem — o comando obedece à ficha, e não escolhe análise nenhuma.
-
-Todas são preparadas antes de qualquer uma ser escrita: se uma recusar, nada é escrito nem arquivado, e as recusas aparecem todas juntas. O relatório fica de fora — leia as tabelas e rode `flatcap relatorio` depois. Para rodar uma análise só, o comando dela continua valendo.
-
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--aba NOME` | Planilha a ler, quando o `.xlsx` tiver mais de uma. Vale para todas as análises. |
-| `--sem-graficos` | Escreve só as tabelas. Mais rápido, e o `matplotlib` nem é carregado. |
-| `--resumo` | Mostra só a tabela do lote, sem a saída de cada análise. |
-| `--rapido` | Não reconfere o `sha256` dos arquivos. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap analisar 42              # simula: a saída de cada análise e o resumo no fim
-flatcap analisar 42 --resumo     # só o resumo
-flatcap analisar 42 --sim        # escreve
-```
+Roda de uma vez as análises da lista `analises:`, na ordem dela. Cada análise roda como o
+comando dela — a mesma saída, os mesmos arquivos, a mesma linha no `historico.md`. Todas são
+preparadas antes de qualquer uma ser escrita: se uma recusar, nada é escrito, e as recusas
+aparecem juntas. `--resumo` mostra só a tabela do lote. O relatório fica de fora: leia as
+tabelas antes.
 
 ### `flatcap relatorio <id>`
-Monta o relatório `.docx` a partir das análises já rodadas. Varre `3. Análises/`, lê o `manifesto.json` de cada rodada e monta o documento com as seções de todas elas, na ordem da lista `analises:` do `projeto.yaml`.
 
-Não abre o banco e não recalcula nada: os números do documento são, letra por letra, os dos `.csv` que estão em `3. Análises/`. O documento sai na raiz da pasta do projeto como `Relatorio_<matrícula>_AAAA-MM-DD.docx`, e o anterior vai para `2. Versões antigas/`.
-
-| Argumento / Opção | Efeito |
-|---|---|
-| `id` | `record_id` ou matrícula do projeto. |
-| `--template ARQUIVO` | Um `.docx` para herdar estilos, cabeçalho e capa. Sem isso, o `template.docx` da pasta do projeto ou do `FLATCAP_ROOT`. |
-| `--titulo TEXTO` | O título na primeira linha do documento. |
-| `--rapido` | Não reconfere o `sha256` do banco. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
-
-```bash
-flatcap relatorio 42 --sim
-flatcap relatorio 42 --titulo "Análise descritiva preliminar" --sim
-```
-
-### `flatcap template`
-Escreve o modelo `.docx` que o relatório usa, para você ajustar no Word. Sai com o corpo vazio e com os estilos `FlatCap Titulo`, `FlatCap Secao`, `FlatCap Corpo`, `FlatCap Legenda` e `FlatCap Nota` já definidos. Tudo o que você escrever no corpo do modelo aparece **antes** do relatório, em todo relatório — é assim que uma capa institucional continua sendo a capa.
+Monta o `.docx` a partir das análises já rodadas: lê o `manifesto.json` de cada rodada em
+`3. Análises/` e escreve as seções na ordem da lista `analises:`. Não abre o banco e não
+recalcula nada. O documento sai na raiz da pasta do projeto como
+`Relatorio_<matrícula>_AAAA-MM-DD.docx`, e o anterior vai para `2. Versões antigas/`. Quando
+uma rodada já não descreve o que está na pasta — banco novo, dicionário mexido —, o documento
+sai assim mesmo, com o aviso escrito dentro dele.
 
 | Opção | Efeito |
 |---|---|
-| `--saida ARQUIVO` | Onde escrever. Sem isso, `template.docx` na raiz do `FLATCAP_ROOT`. |
-| `--sim` | Executa de fato. Sem isso, apenas simula. |
-| `--env CAMINHO` | Caminho de um `.env` alternativo. |
+| `--template ARQUIVO` | Um `.docx` de onde herdar estilos, cabeçalho e capa. Sem isso, o `template.docx` da pasta do projeto, da do cliente ou do `FLATCAP_ROOT`. |
+| `--titulo TEXTO` | O título da primeira linha do documento. |
 
-```bash
-flatcap template --sim
-flatcap template --saida ~/modelos/institucional.docx --sim
-```
+### `flatcap template`
+
+Escreve o modelo `.docx` que o relatório usa, para você ajustar no Word: A4, margens,
+cabeçalho, rodapé com o número da página e os seis estilos `FlatCap Titulo`,
+`FlatCap Subtitulo`, `FlatCap Secao`, `FlatCap Corpo`, `FlatCap Legenda` e `FlatCap Tabela`.
+Tudo o que estiver no corpo do modelo aparece **antes** do relatório, em todo relatório — é
+assim que uma capa institucional continua sendo a capa. Ao lado dele, o
+`template-decisoes.md` explica o que se ajusta no Word e o que é código.
 
 ---
 
 ## Fluxo típico
 
 ```bash
-flatcap doctor                                   # a instalação está de pé?
+flatcap doctor                                   # a configuração está de pé?
 flatcap listar -n 10                             # o que chegou de novo?
 flatcap novo 42 --sim                            # cria a pasta do projeto
 flatcap perfil 42 --sim                          # perfil.md + dicionario.csv
-#   revise a coluna `tipo` do dicionario.csv e converse com o cliente
+#   reunião com o cliente: revise o dicionario.csv e escreva as listas no projeto.yaml
 flatcap dados adicionar 42 banco_revisado.xlsx --sim   # se veio versão nova
-flatcap descritiva 42 --sim                      # tabelas e gráficos
-flatcap normalidade 42 --sim                     # pressupostos
-#   ou as análises da lista `analises:` do projeto.yaml, de uma vez:
-flatcap analisar 42 --sim
-flatcap relatorio 42 --sim                       # o .docx final
+flatcap analisar 42 --sim                        # as análises da lista `analises:`
+flatcap relatorio 42 --sim                       # o .docx
 ```
+
+## O que fica onde
+
+```
+FLATCAP_ROOT/                                   fora do Git
+├── template.docx                               o modelo institucional do relatório
+└── 00742 - José Antônio de Sá/                 o cliente: matrícula - nome
+    └── Projeto 006/                            o projeto: o record_id, em três dígitos
+        ├── projeto.yaml                        a ficha: o cliente, as listas, as versões
+        ├── historico.md                        uma linha por ação do FlatCap
+        ├── perfil.md                           o documento da reunião
+        ├── dicionario.csv                      as decisões da reunião
+        ├── Relatorio_00742_2026-09-20.docx     o que se entrega
+        ├── 1. Dados originais/                 o banco do REDCap e a versão vigente
+        ├── 2. Versões antigas/                 o que deixou de ser vigente
+        └── 3. Análises/                        uma pasta por análise
+```
+
+**Banco de pesquisa, nome de aluno e relatório não entram no Git**, nem em repositório
+privado: o `.gitignore` bloqueia `*.xlsx`, `*.csv`, `*.docx` e afins, e o `FLATCAP_ROOT` mora
+fora do repositório.
+
+## Contribuir, segurança e licença
+
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — como propor uma mudança, e o ritual de testes antes
+  dela.
+- [`SECURITY.md`](SECURITY.md) — token vazado, dado de cliente e como relatar uma
+  vulnerabilidade.
+- [`CHANGELOG.md`](CHANGELOG.md) — o que mudou em cada versão.
+
+Copyright (C) 2026 Matheus Fernandes. O FlatCap é software livre, distribuído sob a
+**GNU General Public License, versão 3 ou posterior** (`GPL-3.0-or-later`) — ver
+[`LICENSE`](LICENSE). Algumas funções são transcrições de código do R, também sob a GPL; a
+origem de cada uma está no [`NOTICE.md`](NOTICE.md).

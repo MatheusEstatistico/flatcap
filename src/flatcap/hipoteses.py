@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-FileCopyrightText: 1998-2018 The R Core Team
+# SPDX-FileCopyrightText: 1998 B. D. Ripley
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A aritmética dos testes de hipótese — como o R os calcula, e mais nada.
 
@@ -418,7 +422,10 @@ def anova_de_medidas_repetidas(medidas: Sequence[Sequence[float]]) -> Resultado:
     é 1 e o p é o da ANOVA sem correção.
 
     **Transcrita, e não importada**: o `scipy` não tem ANOVA de medidas repetidas — é
-    o terceiro degrau da régua do topo. Do `scipy` vem só a cauda da F.
+    o terceiro degrau da régua do topo. Do `scipy` vem só a cauda da F. Derivada do
+    `anova.mlm`, em `src/library/stats/R/mlm.R`, do R — (C) 1998-2018 The R Core Team
+    e (C) 1998 B. D. Ripley, GPL-2.0-or-later. Origem, e os direitos autorais do
+    original: ver o `NOTICE.md`.
 
     `medidas` são as k colunas, cada uma com os mesmos n casos, na mesma ordem: quem
     chama tira antes os casos com alguma medida faltando, como o `lm` do R faz.

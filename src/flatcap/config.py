@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Leitura e validação da configuração do FlatCap.
 
@@ -7,6 +9,22 @@ um objeto `Config` pronto. Consequência prática: nenhum caminho fixo e nenhum
 Regra de precedência: variáveis já definidas no ambiente do sistema prevalecem
 sobre o `.env` (`override=False`). Isso permite rodar em outra máquina, em um
 servidor ou em um teste sem editar arquivo nenhum.
+
+## Qual `.env`
+
+Nesta ordem, e o primeiro que existir é o lido:
+
+1. o arquivo do `--env`, quando o comando o recebe;
+2. um `.env` na pasta atual ou em alguma acima dela — é o de quem trabalha num
+   clone do repositório, na raiz dele;
+3. o `.env` da sua conta, na pasta de configuração do sistema
+   (`pasta_de_configuracao`) — é o de quem instalou o FlatCap por um pacote, com
+   o `pipx` ou o `uv`, e roda o comando de qualquer pasta.
+
+O terceiro degrau entrou na 1.13.1, junto com a distribuição por pacote: sem ele,
+o FlatCap instalado só achava a configuração quando o comando rodava de dentro da
+pasta certa. `flatcap doctor --criar-env` escreve esse arquivo com as três chaves
+em branco.
 """
 
 from __future__ import annotations
@@ -34,9 +52,33 @@ CHAVES: dict[str, str] = {
     ),
     "FLATCAP_ROOT": (
         "Caminho absoluto da pasta onde ficam os diretórios "
-        "'matrícula - nome completo'. Precisa ficar fora do repositório. "
+        "'matrícula - nome completo'. Precisa ficar fora de qualquer repositório Git: "
+        "é onde moram os dados dos clientes."
     ),
 }
+
+NOME_DO_APLICATIVO = "flatcap"
+
+# O modelo do `.env`, com as três chaves em branco. É o que o `doctor --criar-env`
+# escreve, e o `.env.example` da raiz do repositório tem de ser igual a ele — o
+# `test_config.py` confere. Em branco, e não com valores de exemplo: com o exemplo
+# copiado sem preencher, a falta não era acusada e o `doctor` ia tentar falar com
+# `https://<seu-servidor>`.
+TEXTO_DO_ENV = """\
+# FlatCap — a configuração. Preencha as três chaves; nenhuma tem valor padrão.
+# Este arquivo guarda o token do REDCap: não o envie a ninguém e não o ponha no Git.
+
+# A URL da API, no formato https://<servidor>/redcap/api/ — não é o link do survey.
+REDCAP_API_URL=
+
+# O token do projeto, no menu API do REDCap. Precisa exportar registros, metadados
+# e arquivos: a última permissão é a que se esquece, e é a que baixa o banco.
+REDCAP_TOKEN=
+
+# A pasta onde ficam as pastas dos clientes. Caminho absoluto, fora de qualquer
+# repositório Git: é onde moram os dados.
+FLATCAP_ROOT=
+"""
 
 
 class ConfigError(RuntimeError):
@@ -72,7 +114,8 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
 
     Args:
         env_file: caminho explícito de um `.env`. Se omitido, procura a partir do
-            diretório atual e sobe na árvore.
+            diretório atual e sobe na árvore; não achando, usa o `.env` da sua
+            conta, se ele existir. Ver o docstring do módulo.
         criar_root: se True, cria `FLATCAP_ROOT` caso não exista. O padrão é False
             de propósito — um caminho digitado errado deve dar erro, não virar uma
             pasta vazia silenciosa em lugar nenhum.
@@ -101,6 +144,51 @@ def carregar(env_file: str | Path | None = None, criar_root: bool = False) -> Co
     )
 
 
+# O `.env` da sua conta
+
+def pasta_de_configuracao() -> Path:
+    """
+    A pasta de configuração da sua conta, onde mora o `.env` de quem instalou o
+    FlatCap por um pacote:
+
+        Windows   C:\\Users\\<você>\\AppData\\Roaming\\flatcap
+        macOS     ~/Library/Application Support/flatcap
+        Linux     ~/.config/flatcap   (ou $XDG_CONFIG_HOME/flatcap)
+
+    Quem calcula é o `typer.get_app_dir`, a regra de cada sistema escrita uma vez —
+    nenhuma dependência nova.
+    """
+    import typer
+
+    return Path(typer.get_app_dir(NOME_DO_APLICATIVO))
+
+
+def arquivo_env_da_conta() -> Path:
+    """
+    O `.env` da sua conta: o terceiro degrau da procura, e o que o
+    `doctor --criar-env` escreve.
+    """
+    return pasta_de_configuracao() / ".env"
+
+
+def criar_env_da_conta() -> Path | None:
+    """
+    Escreve o `.env` da sua conta com as três chaves em branco. Devolve o caminho,
+    ou `None` quando ele já existe — o arquivo é seu, e nunca é sobrescrito.
+
+    No Linux e no macOS o arquivo nasce `0o600`, legível só por você: ele guarda o
+    token do REDCap, e um token é uma senha.
+    """
+    caminho = arquivo_env_da_conta()
+    if caminho.exists():
+        return None
+    caminho.parent.mkdir(parents = True, exist_ok = True)
+    modo = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    with open(os.open(caminho, modo, 0o600), "w", encoding = "utf-8", newline = "\n") as arquivo:
+        arquivo.write(TEXTO_DO_ENV)
+    return caminho
+
+
 # Validações individuais
 
 def _localizar_env(env_file: str | Path | None) -> str:
@@ -110,7 +198,11 @@ def _localizar_env(env_file: str | Path | None) -> str:
     Um `--env` apontado para um arquivo que não existe é barrado.
     """
     if env_file is None:
-        return find_dotenv(usecwd = True)
+        encontrado = find_dotenv(usecwd = True)
+        if encontrado:
+            return encontrado
+        da_conta = arquivo_env_da_conta()
+        return str(da_conta) if da_conta.is_file() else ""
 
     caminho = Path(env_file).expanduser()
     if not caminho.exists():
@@ -179,9 +271,15 @@ def _mensagem_faltando(faltando: list[str], caminho_env: str) -> str:
 
     if caminho_env:
         linhas.append(f"Arquivo .env lido: {caminho_env}")
-        linhas.append("Preencha as chaves acima novamente e reinicie o FlatCap.")
+        linhas.append("Preencha as chaves acima e rode o comando de novo.")
     else:
-        linhas.append("Nenhum arquivo .env foi encontrado na pasta atual")
-        linhas.append("Crie o arquivo .env copiando o modelo versionado:")
+        linhas.append(
+            "Nenhum arquivo .env foi encontrado — nem na pasta atual e nas de cima, "
+            f"nem o da sua conta, em {arquivo_env_da_conta()}."
+        )
+        linhas.append("")
+        linhas.append("Para criar o da sua conta, com as três chaves em branco:")
+        linhas.append("     flatcap doctor --criar-env")
+        linhas.append("Num clone do repositório, ele também pode ficar na raiz:")
         linhas.append("     cp .env.example .env")
     return "\n".join(linhas)

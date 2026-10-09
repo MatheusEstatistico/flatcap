@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O conteúdo do relatório — Fase 6.
 
@@ -30,6 +32,7 @@ from flatcap.relatorio import (
     TITULO_PADRAO,
     DescritivaAusenteError,
     ModeloAusenteError,
+    RelatorioError,
     TabelaIlegivelError,
     executar_relatorio,
     ler_tabela,
@@ -196,6 +199,33 @@ class TestLerTabela:
         caminho.write_bytes("# Frequência\ncategoria;n\nNão;3\n".encode("cp1252"))
         assert ler_tabela(caminho).linhas[0][0] == "Não"
 
+    def test_a_categoria_comecada_por_cerquilha_fica_na_tabela(self, tmp_path):
+        """
+        REGRESSÃO da 1.13.0. O `#N/D` que o Excel deixa numa célula com erro de
+        fórmula é uma categoria como outra qualquer. Lido como comentário, ele
+        saía da tabela do documento e virava nota — quatro linhas no `.csv`, três
+        no `.docx`, e um `Total` que não fechava.
+        """
+        from flatcap.manifesto import Tabela
+
+        escrita = Tabela(
+            nome="freq_x.csv",
+            especie="frequencia",
+            variavel="x",
+            titulo="Frequência de x",
+            colunas=("x", "n"),
+            linhas=(("A", "5"), ("#N/D", "2"), ("B", "3"), ("Total", "10")),
+            notas=("denominador: todos os casos",),
+        )
+        caminho = tmp_path / "freq_x.csv"
+        caminho.write_text(escrita.texto(), encoding="utf-8")
+
+        lida = ler_tabela(caminho)
+
+        assert lida.linhas == escrita.linhas
+        assert lida.titulo == "Frequência de x"
+        assert lida.notas == ("denominador: todos os casos",)
+
 
 # ── As quatro conferências ──────────────────────────────────────────────────
 
@@ -338,7 +368,7 @@ class TestAlertas:
         """
         raiz = projeto_com_rodada()
         (raiz / "dicionario.csv").write_text(
-            "﻿variavel;tipo\nsexo;continua\n", encoding="utf-8", newline="\n"
+            "\ufeffvariavel;tipo\nsexo;continua\n", encoding="utf-8", newline="\n"
         )
         plano = preparar_relatorio(raiz, agora=QUANDO)
         assert plano.relatorio.avisos
@@ -479,6 +509,50 @@ class TestExecucao:
             executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
         assert anterior.is_file()
         assert not list((raiz / PASTA_ANTIGAS).glob("Relatorio_*.docx"))
+
+    def test_a_falha_inesperada_tambem_devolve_o_anterior(
+        self, projeto_com_rodada, monkeypatch
+    ):
+        """
+        REGRESSÃO da 1.13.0. O desfazer pegava só `OSError` e `RelatorioError`, e
+        o `python-docx` estoura com exceções que não são nenhuma das duas: o
+        relatório anterior ficava em `2. Versões antigas/` sem o novo no lugar.
+        O erro continua subindo — ele é bug —, mas depois de desfazer.
+        """
+        raiz = projeto_com_rodada()
+        anterior = raiz / "Relatorio_00742_2026-09-01.docx"
+        anterior.write_bytes(b"anterior")
+
+        import flatcap.documento as documento
+
+        def falhar(*_a, **_k):
+            raise ValueError("falha que ninguém previu (simulada)")
+
+        monkeypatch.setattr(documento, "escrever", falhar)
+        with pytest.raises(ValueError):
+            executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+        assert anterior.is_file()
+        assert not list((raiz / PASTA_ANTIGAS).glob("Relatorio_*.docx"))
+
+    def test_a_figura_ilegivel_vira_recusa_com_o_nome_do_arquivo(
+        self, projeto_com_rodada, pasta_da_rodada
+    ):
+        """
+        REGRESSÃO da 1.13.0. Um `.png` pela metade — a rodada interrompida, a
+        nuvem que não terminou de sincronizar — derrubava o comando com o
+        `UnrecognizedImageError` do `python-docx` e o relatório anterior fora do
+        lugar. Agora é `RelatorioError`, que a CLI mostra num painel.
+        """
+        raiz = projeto_com_rodada()
+        anterior = raiz / "Relatorio_00742_2026-09-01.docx"
+        anterior.write_bytes(b"anterior")
+        figura = next(pasta_da_rodada(raiz).glob("*.png"))
+        figura.write_bytes(b"\x89PNG\r\n\x1a\n")
+
+        with pytest.raises(RelatorioError) as erro:
+            executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+        assert figura.name in str(erro.value)
+        assert anterior.is_file()
 
     def test_a_rodada_arquivada_nao_e_a_que_o_comando_monta(self, projeto_com_rodada):
         """

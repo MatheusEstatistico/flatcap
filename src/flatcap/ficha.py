@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Leitura e escrita do `projeto.yaml` — a ficha do atendimento.
 
@@ -38,23 +40,25 @@ comentários, a ordem das chaves e o estilo de aspas presos aos dados, e os
 devolve na gravação. É o que sustenta literalmente a promessa do cabeçalho da
 ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 
-Toda a persistência do `projeto.yaml` está atrás das quatro funções públicas
-abaixo — `ler`, `acrescentar_versao`, `localizar_projeto` e `caminho_da_ficha`.
-`dados.py` e `cli.py` importam só isso e não sabem qual biblioteca está em uso.
+Toda a persistência do `projeto.yaml` está atrás das funções públicas abaixo —
+`ler`, `bloco`, `acrescentar_versao`, `localizar_projeto`, `projetos_da_matricula`,
+`caminho_da_ficha`, `versao_vigente` e `sequencia_do_nome`. Quem importa este
+módulo não sabe qual biblioteca de YAML está em uso.
 
-Há uma quinta função pública, `escrever_atomico`, e ela **não** faz parte desse
-contrato: é o utilitário de gravação que a Fase 4 passou a compartilhar para o
-`dicionario.csv` e o `perfil.md`. Ela mora aqui porque foi aqui que a garantia
+Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
+fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
+compartilhar — o `dicionario.csv`, o `perfil.md`, as tabelas e os manifestos das
+análises, e o `.docx` do relatório. Moram aqui porque foi aqui que a garantia
 precisou existir primeiro, e porque duas implementações de escrita atômica no
 mesmo pacote é como uma delas deixa de receber a próxima correção. Quem trocar
-esta implementação de YAML por outra precisa levá-la junto.
+esta implementação de YAML por outra precisa levá-las junto.
 """
 
 from __future__ import annotations
 
 import os
 import re
-import tempfile
+import secrets
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -789,8 +793,8 @@ def _representar_nulo(dumper, _dados):
 
     O ruamel, por padrão, grava `prazo:` — que o parser lê como nulo, mas que
     parece uma linha que alguém começou e não terminou. `prazo: null` diz que o
-    campo está deliberadamente vazio. É também o que o PyYAML escreve, o que
-    mantém as duas implementações de `ficha.py` produzindo o mesmo arquivo.
+    campo está deliberadamente vazio. É também o que o PyYAML do `projeto.py`
+    escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
     """
     return dumper.represent_scalar("tag:yaml.org,2002:null", "null")
 
@@ -829,7 +833,7 @@ def _mapa_da_versao(versao: Versao) -> CommentedMap:
     return mapa
 
 
-# Auxiliares comuns às duas implementações
+# Auxiliares de leitura e gravação
 
 
 def sequencia_do_nome(nome: str) -> int | None:
@@ -882,26 +886,46 @@ def escrever_atomico(caminho: Path, texto: str) -> None:
     arquivo vazio.
     """
     caminho = Path(caminho)
-    temporario: Path | None = None
+    descritor, temporario = temporario_ao_lado(caminho)
     try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            newline="\n",
-            dir=caminho.parent,
-            prefix=caminho.name + ".",
-            suffix=".tmp",
-            delete=False,
-        ) as arquivo:
-            temporario = Path(arquivo.name)
+        with open(descritor, "w", encoding="utf-8", newline="\n") as arquivo:
             arquivo.write(texto)
             arquivo.flush()
             os.fsync(arquivo.fileno())
         os.replace(temporario, caminho)
-        temporario = None
-    finally:
-        if temporario is not None and temporario.exists():
-            temporario.unlink(missing_ok=True)
+    except BaseException:
+        temporario.unlink(missing_ok=True)
+        raise
+
+
+def temporario_ao_lado(destino: Path) -> tuple[int, Path]:
+    """
+    Cria um arquivo vazio, de nome único, na pasta do destino. Devolve o
+    descritor aberto para escrita e o caminho.
+
+    O modo pedido é `0o666`, e o sistema tira dele o `umask` do processo — o que
+    acontece com qualquer arquivo que um programa cria. Até a 1.13.0 quem criava
+    o temporário era o `tempfile.NamedTemporaryFile`, que usa `0o600` de propósito
+    (um temporário não é para mais ninguém ler), e o `os.replace` levava esse modo
+    para o destino: todo `projeto.yaml`, `dicionario.csv`, `perfil.md`, tabela,
+    manifesto e `.docx` saía legível só pelo dono. Num `FLATCAP_ROOT` dividido pela
+    equipe num servidor Linux ou num Mac, os colegas não abriam nada. No Windows
+    quem decide é a permissão da pasta, e nada mudou por lá.
+
+    Pública porque o `documento.py` grava o `.docx` atomicamente com o mesmo
+    temporário — e duas formas de criá-lo é como uma delas fica com o defeito.
+    """
+    destino = Path(destino)
+    # `O_BINARY` só existe no Windows: sem ele a biblioteca C trocaria cada `\n`
+    # por `\r\n` na escrita, por baixo do `newline="\n"`.
+    modo = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+    for _ in range(100):
+        temporario = destino.parent / f"{destino.name}.{secrets.token_hex(4)}.tmp"
+        try:
+            return os.open(temporario, modo, 0o666), temporario
+        except FileExistsError:
+            continue
+    raise FileExistsError(f"Não consegui criar um temporário ao lado de {destino}.")
 
 
 def _texto(documento, chave: str) -> str:
