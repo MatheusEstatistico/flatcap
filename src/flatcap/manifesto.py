@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `manifesto.json` — o índice de uma rodada de análise, e o contrato entre uma
 análise e quem escreve os arquivos dela.
@@ -159,7 +161,7 @@ SEMENTE = 42
 
 # O BOM, o mesmo do `dicionario.csv` e pela mesma razão: é ele que faz o Excel em
 # português abrir o arquivo em UTF-8 em vez de cp1252.
-_BOM = "﻿"
+_BOM = "\ufeff"
 
 
 class ManifestoError(RuntimeError):
