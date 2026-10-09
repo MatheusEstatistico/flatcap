@@ -1,0 +1,20 @@
+name: Ideia
+description: Uma análise, um comando ou uma mudança no fluxo.
+labels: ["ideia"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: O problema
+      description: O que hoje é manual, lento ou fácil de errar.
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: A proposta
+  - type: textarea
+    id: referencia
+    attributes:
+      label: Como o R faz
+      description: Para uma análise nova, a função do R que é a referência — o FlatCap confere contra ela.
