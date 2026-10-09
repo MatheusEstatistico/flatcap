@@ -1,0 +1,39 @@
+# Uma vez por clone: `pre-commit install`. As versões envelhecem: `pre-commit autoupdate`.
+exclude: ^tests/fixtures/
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: check-added-large-files
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+      - id: check-toml
+      - id: check-yaml
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: mixed-line-ending
+        args: [--fix=lf]
+      - id: trailing-whitespace
+        args: [--markdown-linebreak-ext=md]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.16.10
+    hooks:
+      - id: ruff-check
+
+  # Token, senha e chave privada, antes de entrarem no histórico.
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
+    hooks:
+      - id: gitleaks
+
+  # A segunda linha de defesa da LGPD, depois do .gitignore: barra o `git add -f`.
+  - repo: local
+    hooks:
+      - id: sem-dados-de-cliente
+        name: nenhum banco, relatório ou .env no commit
+        language: fail
+        entry: "Dado de cliente e credencial não entram no Git (ver o SECURITY.md):"
+        files: '(?i)(\.(xlsx|xls|xlsm|xlsb|ods|csv|tsv|sav|zsav|dta|sas7bdat|rds|rdata|docx|doc|pdf)$|(^|/)\.env$)'
+        exclude: ^docs/redcap/
