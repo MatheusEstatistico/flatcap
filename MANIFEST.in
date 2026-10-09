@@ -1,0 +1,6 @@
+# O que o sdist leva além do pacote. Sem isto o setuptools leva só os
+# tests/test_*.py, e a suíte do sdist não roda: faltam o conftest.py, os
+# ajudantes e os fixtures.
+graft tests
+graft docs
+include CHANGELOG.md CONTRIBUTING.md SECURITY.md CITATION.cff .env.example
