@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Abrir o banco de dados de um projeto.
 
@@ -46,6 +48,7 @@ fiel ao que o cliente mandou, e é o `perfil.py` que aponta o que está torto.
 from __future__ import annotations
 
 import csv
+import math
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
@@ -395,9 +398,10 @@ def _ler_csv(caminho: Path) -> tuple[pd.DataFrame, Leitura]:
     verdade. `latin-1` fica por último porque decodifica qualquer byte sem
     reclamar: tentada antes, aceitaria um arquivo UTF-8 e devolveria "JosÃ©".
     """
-    bruto = caminho.read_bytes()[:_AMOSTRA_BYTES]
+    conteudo = caminho.read_bytes()
 
-    codificacao, amostra = _decodificar(bruto)
+    codificacao, amostra = _decodificar(conteudo[:_AMOSTRA_BYTES])
+    codificacao = _confirmar_no_arquivo_inteiro(conteudo, codificacao)
     separador = _separador(amostra)
 
     avisos: list[str] = []
@@ -472,6 +476,31 @@ def _decodificar(bruto: bytes) -> tuple[str, str]:
             continue
 
     return "latin-1", amostra.decode("latin-1", errors="replace")
+
+
+def _confirmar_no_arquivo_inteiro(conteudo: bytes, codificacao: str) -> str:
+    """
+    Confirma no arquivo inteiro a codificação que a amostra escolheu.
+
+    A amostra decide pelos primeiros 64 KiB. Num `.csv` do Excel em cp1252 cujo
+    primeiro acento só aparece depois deles — um banco grande de códigos, com o
+    `Não` numa coluna de observação lá embaixo —, o UTF-8 passa no teste da
+    amostra sem ter sido testado de verdade, e o `pandas` estourava no meio da
+    leitura: "não consegui abrir" sobre um arquivo que abre no Excel. O arquivo já
+    está na memória, e decodificá-lo inteiro custa uma passada.
+
+    Só o palpite que pode estar errado é conferido: com BOM, o arquivo se declarou
+    UTF-8; `latin-1` aceita qualquer byte.
+    """
+    if codificacao not in _CODIFICACOES or codificacao == "latin-1":
+        return codificacao
+    for nome in _CODIFICACOES[_CODIFICACOES.index(codificacao):]:
+        try:
+            conteudo.decode(nome)
+        except UnicodeDecodeError:
+            continue
+        return nome
+    return "latin-1"
 
 
 def _ate_a_ultima_linha(bruto: bytes) -> bytes:
@@ -608,6 +637,73 @@ def formato_de_data(
         if quantas / len(textos) >= proporcao:
             return formato, quantas
     return None, 0
+
+
+# Como um valor do banco se escreve como texto
+#
+# Mora aqui pelo mesmo motivo dos `FORMATOS_DATA`: o perfil, que propõe as
+# categorias do `dicionario.csv`, e as análises, que as conferem contra o banco,
+# têm de escrever o mesmo valor do mesmo jeito. Até a 1.13.0 a escrita das
+# análises morava na descritiva e o perfil fazia a dele com `str()`: numa coluna
+# de código com uma célula vazia — que o `pandas` lê como `float64` —, o perfil
+# propunha `1.0|2.0`, a dica mandava escrever `1.0=Feminino`, e a descritiva, que
+# escreve `1`, saía com `Feminino 0` e `1 15` na mesma tabela.
+
+
+def texto_de_numero(valor: float | None, casas: int) -> str:
+    """
+    Número no formato brasileiro, sem separador de milhar e sem zero à toa.
+
+    É a conta do `descritiva.numero`, que desceu para cá junto com a
+    `serie_de_texto`: as duas escrevem o mesmo número, e uma conta só é o que
+    impede o `0,5` da tabela de virar `0.5` no dicionário.
+    """
+    if valor is None:
+        return "—"
+    valor = float(valor)
+    if not math.isfinite(valor):
+        return "—"
+
+    texto = f"{round(valor, casas):.{casas}f}"
+    if "." in texto:
+        texto = texto.rstrip("0").rstrip(".")
+    return texto.replace(".", ",")
+
+
+def serie_de_texto(serie: pd.Series) -> pd.Series:
+    """
+    Os valores preenchidos como texto, do jeito que eles devem aparecer na tabela.
+
+    Um código lido como número (`1`, `2`) viraria `"1.0"` e `"2.0"` num
+    `astype(str)` cru — e código como categórica é justamente o que o perfil
+    sugere para essas colunas. Lógico vira Sim/Não, e data vira `dd/mm/aaaa`:
+    os dois são o que se escreve em uma tabela em português, e o dicionário é
+    quem decidiu que a coluna é categórica.
+
+    Pública desde a 1.4.0, quando morava no `descritiva.py`, que continua a
+    exportá-la com o mesmo nome. O `cruzamento.py` escreve a mesma categoria na
+    tabela dele, e uma segunda conversão é como o `1` da tabela de frequência
+    vira `1.0` no cruzamento da página seguinte — o `1.0` que o `pd.crosstab`
+    imprime quando a coluna de código tem uma célula vazia. Desceu para cá na
+    1.13.1, para o perfil propor as categorias com a mesma escrita.
+    """
+    preenchidos = serie.dropna()
+    if preenchidos.empty:
+        return preenchidos.astype("object")
+
+    if pd.api.types.is_bool_dtype(preenchidos):
+        return preenchidos.map(lambda valor: "Sim" if valor else "Não")
+
+    if pd.api.types.is_datetime64_any_dtype(preenchidos):
+        return preenchidos.dt.strftime("%d/%m/%Y")
+
+    if pd.api.types.is_numeric_dtype(preenchidos):
+        valores = preenchidos.astype("float64")
+        if bool((valores % 1 == 0).all()):
+            return valores.astype("int64").astype(str)
+        return valores.map(lambda valor: texto_de_numero(valor, 4))
+
+    return preenchidos.astype(str)
 
 
 def _mensagem_ilegivel(caminho: Path, erro: Exception) -> str:
