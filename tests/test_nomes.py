@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Nomes de pasta e a busca no disco — Fase 2 (antecipada na Fase 1).
 
@@ -78,8 +80,10 @@ class TestNomePasta:
 
     @pytest.mark.parametrize("matricula", ["", "  ", "///"])
     def test_sem_matricula_recusa(self, matricula):
-        with pytest.raises(NomeInvalidoError):
+        with pytest.raises(NomeInvalidoError) as erro:
             nome_pasta(matricula, "Ana")
+        # REGRESSÃO da 1.13.0: as duas frases saíam coladas, `''Ver REDCap`.
+        assert f"Recebido: {matricula!r}\n" in str(erro.value)
 
     def test_o_separador_e_o_do_modulo(self):
         assert SEPARADOR in nome_pasta("1", "Ana")

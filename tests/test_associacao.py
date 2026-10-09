@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os testes do `associacao.py`.
 
@@ -174,7 +176,7 @@ def _fisher_forca_bruta(tabela: list[list[int]]) -> float:
 def _tabela_aleatoria(gerador: random.Random, linhas: int, colunas: int, teto: int):
     while True:
         tabela = [[gerador.randint(0, teto) for _ in range(colunas)] for _ in range(linhas)]
-        if all(sum(linha) for linha in tabela) and all(sum(c) for c in zip(*tabela)):
+        if all(sum(linha) for linha in tabela) and all(sum(c) for c in zip(*tabela, strict=True)):
             return tabela
 
 

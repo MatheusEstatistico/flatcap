@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `.docx` — Fase 6.
 
@@ -9,6 +11,8 @@ aqui, e a que não dá está escrita no fim do arquivo, como lembrete.
 
 from __future__ import annotations
 
+import os
+import stat
 from datetime import datetime
 
 import pytest
@@ -555,6 +559,23 @@ class TestGravacao:
             executar_relatorio(plano)
         assert not plano.destino.exists()
         assert not list(plano.raiz.glob("*.tmp"))
+
+    @pytest.mark.skipif(os.name != "posix", reason="no Windows, quem decide é a pasta")
+    def test_o_docx_sai_com_a_permissao_do_umask(self, projeto_com_rodada):
+        """
+        REGRESSÃO da 1.13.0: o `.docx` saía `0o600`, legível só pelo dono — o
+        modo do temporário do `tempfile`. Ver o `ficha.temporario_ao_lado`.
+        """
+        raiz = projeto_com_rodada()
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+
+        anterior = os.umask(0o022)
+        try:
+            executar_relatorio(plano)
+        finally:
+            os.umask(anterior)
+
+        assert stat.S_IMODE(plano.destino.stat().st_mode) == 0o644
 
     def test_o_arquivo_gerado_abre(self, documento):
         doc, plano = documento()

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `projeto.yaml` — Fase 3.
 
@@ -14,6 +16,8 @@ unidade de rede que cai, OneDrive sincronizando — deixaria a ficha perdida.
 
 from __future__ import annotations
 
+import os
+import stat
 from datetime import date
 
 import pytest
@@ -267,20 +271,60 @@ class TestEscritaAtomica:
         temporário em `/tmp` poderia estar em outro disco, e aí a troca vira
         cópia, que pode falhar pela metade.
         """
-        import tempfile as modulo
+        import flatcap.ficha as modulo
 
         pastas: list = []
-        original = modulo.NamedTemporaryFile
+        original = modulo.temporario_ao_lado
 
-        def espiar(*args, **kwargs):
-            pastas.append(kwargs.get("dir"))
-            return original(*args, **kwargs)
+        def espiar(destino):
+            descritor, temporario = original(destino)
+            pastas.append(temporario.parent)
+            return descritor, temporario
 
-        monkeypatch.setattr("flatcap.ficha.tempfile.NamedTemporaryFile", espiar)
+        monkeypatch.setattr(modulo, "temporario_ao_lado", espiar)
         alvo = tmp_path / "sub" / "a.txt"
         alvo.parent.mkdir()
         escrever_atomico(alvo, "x")
         assert pastas == [alvo.parent]
+
+    @pytest.mark.skipif(os.name != "posix", reason="no Windows, quem decide é a pasta")
+    @pytest.mark.parametrize(
+        ("umask", "esperado"), [(0o022, 0o644), (0o002, 0o664)], ids=["022", "002"]
+    )
+    def test_o_arquivo_sai_com_a_permissao_do_umask(self, tmp_path, umask, esperado):
+        """
+        REGRESSÃO da 1.13.0. O `tempfile.NamedTemporaryFile` cria o temporário
+        com `0o600`, e o `os.replace` levava esse modo para o destino: num
+        `FLATCAP_ROOT` dividido pela equipe, ninguém além do dono abria a ficha,
+        o dicionário, as tabelas ou o relatório. A substituição de um arquivo que
+        já existe também volta ao `umask` — é o que conserta os `0o600` antigos.
+        """
+        alvo = tmp_path / "a.txt"
+        alvo.write_text("antigo", encoding="utf-8")
+        alvo.chmod(0o600)
+
+        anterior = os.umask(umask)
+        try:
+            escrever_atomico(alvo, "novo")
+            escrever_atomico(tmp_path / "b.txt", "novo")
+        finally:
+            os.umask(anterior)
+
+        assert stat.S_IMODE(alvo.stat().st_mode) == esperado
+        assert stat.S_IMODE((tmp_path / "b.txt").stat().st_mode) == esperado
+
+    def test_a_interrupcao_tambem_nao_deixa_lixo(self, tmp_path, monkeypatch):
+        """
+        O Ctrl+C não é `Exception`: a limpeza do temporário pega `BaseException`.
+        """
+
+        def interromper(*_a, **_k):
+            raise KeyboardInterrupt
+
+        monkeypatch.setattr("flatcap.ficha.os.replace", interromper)
+        with pytest.raises(KeyboardInterrupt):
+            escrever_atomico(tmp_path / "a.txt", "novo")
+        assert not list(tmp_path.glob("*.tmp"))
 
     def test_falha_no_meio_nao_deixa_lixo(self, tmp_path, monkeypatch):
         alvo = tmp_path / "a.txt"

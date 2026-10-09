@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O `dicionario.csv` — Fase 4.
 
@@ -137,6 +139,49 @@ class TestLeitura:
         )
         assert ler_arquivo(caminho)[0].rotulo == "Sexo"
 
+    def test_a_mensagem_aponta_a_linha_do_arquivo(self, tmp_path):
+        """
+        REGRESSÃO da 1.13.0. A linha da mensagem é a que o Excel e o editor
+        mostram, contando o cabeçalho explicativo: no arquivo que o FlatCap
+        escreve, a primeira variável fica na linha 17, e não na 2.
+        """
+        texto = texto_do_dicionario(
+            (Linha(variavel="sexo", tipo=CATEGORICA), Linha(variavel="idade", tipo=NUMERICA))
+        )
+        texto += "sexo;;numerica;;;sim\n"
+        caminho = _escrever(tmp_path, texto)
+        linhas = caminho.read_text(encoding="utf-8-sig").splitlines()
+        primeira = linhas.index(next(x for x in linhas if x.startswith("sexo;"))) + 1
+        ultima = len(linhas)
+
+        with pytest.raises(DicionarioInvalidoError) as erro:
+            ler_arquivo(caminho)
+
+        assert f"linhas {primeira} e {ultima}" in str(erro.value)
+        assert primeira > 2, "o cabeçalho explicativo conta"
+
+
+class TestCerquilhaDepoisDoCabecalho:
+    """
+    REGRESSÃO da 1.13.0. O `#` só é comentário no cabeçalho explicativo, antes da
+    linha com os nomes das colunas. Depois dela, é dado: `#` e `#id` são nomes de
+    coluna que existem em banco de verdade, e eram descartados a cada leitura — o
+    perfil os acrescentava de novo a cada rodada, e a descritiva recusava o banco.
+    """
+
+    @pytest.mark.parametrize("nome", ["#", "#id", "# paciente"])
+    def test_a_variavel_comecada_por_cerquilha_sobrevive_a_ida_e_volta(self, tmp_path, nome):
+        linhas = (Linha(variavel=nome, tipo=IGNORAR), Linha(variavel="sexo", tipo=CATEGORICA))
+        caminho = _escrever(tmp_path, texto_do_dicionario(linhas))
+
+        assert [linha.variavel for linha in ler_arquivo(caminho)] == [nome, "sexo"]
+
+    def test_o_cabecalho_explicativo_continua_fora(self, tmp_path):
+        caminho = _escrever(
+            tmp_path, "# um comentário\n\n#\n" + CABECALHO + "sexo;;categorica;;;sim\n"
+        )
+        assert [linha.variavel for linha in ler_arquivo(caminho)] == ["sexo"]
+
 
 class TestFaixas:
     """
@@ -227,7 +272,7 @@ class TestIdaEVolta:
         mão.
         """
         texto = texto_do_dicionario((Linha(variavel="condicao", rotulo="Condição"),))
-        assert texto.startswith("﻿")
+        assert texto.startswith("\ufeff")
 
     def test_duas_gravacoes_identicas_produzem_o_mesmo_texto(self, tmp_path):
         linhas = (Linha(variavel="a"), Linha(variavel="b"))
@@ -343,7 +388,7 @@ class TestFusao:
         caminho = escrever(tmp_path, fusao)
         assert caminho.read_text(encoding="utf-8-sig") == texto_do_dicionario(
             fusao.linhas, fusao.colunas
-        ).lstrip("﻿")
+        ).lstrip("\ufeff")
 
 
 class TestLinhaAnalisavel:

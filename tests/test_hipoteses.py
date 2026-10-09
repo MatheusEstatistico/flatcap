@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os testes do `hipoteses.py` — a aritmética, sem projeto, banco nem ficha.
 

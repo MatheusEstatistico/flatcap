@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 Os `.png` — Fase 5.
 
@@ -200,6 +202,40 @@ class TestDesenho:
 
         with pytest.raises(ValueError, match="dispersao"):
             desenhar(replace(DISPERSAO, especie="dispercao"), tmp_path / "d.png")
+
+    @pytest.mark.parametrize("especie", [BARRAS, COLUNAS])
+    def test_o_cifrao_do_banco_nao_vira_formula(self, tmp_path, monkeypatch, especie):
+        """
+        REGRESSÃO da 1.13.0. Para o matplotlib, dois `$` na mesma etiqueta são uma
+        fórmula: a faixa `R$ 1.000 a R$ 2.000` saía desenhada `R1.000aR 2.000`,
+        em itálico. O que se confere é o que o matplotlib decide na hora de
+        desenhar cada texto — fórmula ou texto —, e não a configuração.
+        """
+        from dataclasses import replace
+
+        from matplotlib.text import Text
+
+        decisoes: list[tuple[str, object]] = []
+        original = Text.draw
+
+        def espiar(texto, renderer):
+            conteudo = texto.get_text()
+            if "$" in conteudo:
+                decisoes.append((conteudo, texto._preprocess_math(conteudo)[1]))
+            return original(texto, renderer)
+
+        monkeypatch.setattr(Text, "draw", espiar)
+        grafico = replace(
+            especie,
+            titulo="Renda (R$)",
+            categorias=("Até R$ 1.000", "R$ 1.000 a R$ 2.000", "Mais de R$ 2.000"),
+            valores=(8.0, 9.0, 7.0),
+            rotulos=("8", "9", "7"),
+        )
+        desenhar(grafico, tmp_path / "renda.png")
+
+        assert decisoes, "nenhum texto com `$` chegou a ser desenhado"
+        assert all(e_formula is False for _, e_formula in decisoes), decisoes
 
     def test_a_versao_e_informavel(self):
         assert versao_do_matplotlib()[0].isdigit()

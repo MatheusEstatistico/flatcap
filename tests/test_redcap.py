@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A camada sobre a API — Fase 1.
 
@@ -98,7 +100,7 @@ class TestFalhasDeRede:
 
     def test_o_connectionerror_e_tratado_depois_das_subclasses(self, cfg, responder):
         """
-        No `requests`, `SSLError` e `Timeout` são subclasses de
+        No `requests`, `SSLError` e `ConnectTimeout` são subclasses de
         `ConnectionError`. Sem a ordem certa, máquina sem rede e certificado
         inválido dariam a mesma mensagem — e ela seria a errada.
         """
@@ -113,6 +115,70 @@ class TestFalhasDeRede:
         with pytest.raises(RedcapError) as erro:
             exportar_projeto(cfg)
         assert pista in str(erro.value)
+
+    @pytest.mark.parametrize(
+        "excecao",
+        [
+            requests.exceptions.ChunkedEncodingError("a conexão caiu no meio"),
+            requests.exceptions.TooManyRedirects("redireciona em círculo"),
+            requests.exceptions.InvalidURL("url que o requests não aceita"),
+        ],
+        ids=["download-interrompido", "redirecionamento", "url-invalida"],
+    )
+    def test_o_resto_da_familia_do_requests_tambem_vira_mensagem(
+        self, cfg, responder, excecao
+    ):
+        """
+        REGRESSÃO da 1.13.0. Só três exceções do `requests` eram traduzidas; a
+        conexão que cai no meio do download de um anexo grande subia como
+        traceback.
+        """
+        responder(excecao)
+        with pytest.raises(RedcapError) as erro:
+            exportar_arquivo(cfg, "40", "database")
+        assert type(excecao).__name__ in str(erro.value)
+
+
+class TestErroDoServidor:
+    """
+    REGRESSÃO da 1.13.0. O erro HTTP sem o `{"error": ...}` do REDCap passava pelo
+    `raise_for_status()` do `requests`, e o `requests.HTTPError` não é
+    `RedcapError`: o `novo` e o `listar --conferir-anexos` caíam com o traceback.
+    """
+
+    def test_o_502_do_proxy_no_download_do_anexo(self, cfg, responder):
+        responder(
+            RespostaFalsa(conteudo=b"<html>502 Bad Gateway</html>", status=502, tipo="text/html")
+        )
+        with pytest.raises(RedcapError) as erro:
+            exportar_arquivo(cfg, "40", "database")
+        mensagem = str(erro.value)
+        assert "502" in mensagem and "registro 40" in mensagem
+        assert "manutenção" in mensagem
+
+    def test_o_500_em_html_nao_e_confundido_com_url_errada(self, cfg, responder):
+        """
+        A página de erro do servidor também não é JSON, e a mensagem de "URL
+        errada" mandaria o usuário mexer no `.env` que está certo.
+        """
+        responder(
+            RespostaFalsa(conteudo=b"<html>Erro interno</html>", status=500, tipo="text/html")
+        )
+        with pytest.raises(RedcapError) as erro:
+            exportar_projeto(cfg)
+        assert "500" in str(erro.value)
+        assert "endpoint da API" not in str(erro.value)
+
+    def test_o_erro_http_com_json_sem_a_chave_error(self, cfg, responder):
+        responder(RespostaFalsa(corpo={"message": "indisponível"}, status=503))
+        with pytest.raises(RedcapError) as erro:
+            exportar_registros(cfg)
+        assert "503" in str(erro.value)
+
+    def test_o_listar_conferindo_anexos_nao_cai(self, cfg, responder):
+        responder(RespostaFalsa(conteudo=b"<html>500</html>", status=500, tipo="text/html"))
+        with pytest.raises(RedcapError):
+            tem_arquivo(cfg, "40", "database")
 
 
 class TestErroDeAplicacao:

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A pasta do projeto — Fase 2.
 
@@ -162,6 +164,8 @@ class TestPreparar:
         with pytest.raises(ClienteIncompletoError) as erro:
             preparar(cfg, "42", agora=AGORA)
         assert falta in str(erro.value)
+        # REGRESSÃO da 1.13.0: as duas últimas frases saíam coladas.
+        assert "rode de novo.\nO `flatcap listar`" in str(erro.value)
 
     def test_pasta_ja_existente_carrega_o_caminho_no_erro(self, cfg, redcap, root):
         # A pasta do PROJETO. A do cliente, sozinha, é reaproveitada desde a
@@ -221,7 +225,12 @@ class TestExecutar:
             encoding="utf-8"
         ) == plano.projeto_yaml
 
-    @pytest.mark.skipif(os.geteuid() == 0, reason="o root do POSIX ignora bit de permissão")
+    @pytest.mark.skipif(
+        # `os.geteuid` só existe no POSIX: chamado direto, derrubava a coleta do
+        # arquivo inteiro no Windows.
+        getattr(os, "geteuid", lambda: -1)() == 0,
+        reason="o root do POSIX ignora bit de permissão",
+    )
     def test_o_redcap_nasce_somente_leitura(self, cfg, redcap):
         redcap([REGISTRO])
         plano = preparar(cfg, "42", agora=AGORA)
