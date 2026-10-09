@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A comparação — a média de uma variável contra um valor de referência ou entre os
 grupos de outra, e o lugar onde os outros testes de comparação vão entrar.
@@ -3274,7 +3276,7 @@ def _acao_do_historico(plano: PlanoComparacao) -> str:
     for variavel in comparacao.variaveis:
         if variavel.metodo and variavel.metodo not in metodos:
             metodos.append(variavel.metodo)
-    contagem = [(comparacao.quantos(metodo), f"com o {metodo}") for metodo in metodos]
+    contagem = [(comparacao.quantos(metodo), f"com {_com_artigo(metodo)}") for metodo in metodos]
     contagem.append((len(comparacao.sem_teste), "sem teste"))
     resumo = ", ".join(f"{quantos} {nome}" for quantos, nome in contagem if quantos)
     partes = [
