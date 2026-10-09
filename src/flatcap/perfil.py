@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 O perfil do banco — o que você leva para a reunião.
 
@@ -70,7 +72,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, Leitura, abrir, formato_de_data
+from .banco import Banco, Leitura, abrir, formato_de_data, serie_de_texto
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -1199,8 +1201,15 @@ def _contagem(preenchidos: pd.Series) -> tuple[tuple[str, int], ...]:
     Empate em ordem alfabética, e não na ordem que o `value_counts` devolver: o
     `dicionario.csv` é gerado a partir daqui, e um arquivo que muda de ordem
     entre duas execuções idênticas é um arquivo que produz diff falso.
+
+    Os valores são escritos pela `serie_de_texto` do `banco.py`, a mesma das
+    análises: o que o perfil propõe em `categorias_ordem` é o que a descritiva
+    vai procurar no banco. Com `str()`, uma coluna de código com uma célula
+    vazia — `float64` para o `pandas` — saía como `1.0|2.0`, e a dica do
+    `categoria_sem_rotulo` ensinava a escrever `1.0=Feminino`, um rótulo que a
+    tabela nunca encontrava.
     """
-    contagem = preenchidos.value_counts()
+    contagem = serie_de_texto(preenchidos).value_counts()
     pares = [(str(valor), int(quantos)) for valor, quantos in contagem.items()]
     return tuple(sorted(pares, key=lambda par: (-par[1], par[0])))
 
@@ -1563,8 +1572,8 @@ def _md_numericas(perfil: Perfil) -> str:
 
     linhas += [
         "",
-        "> As faixas ficam em branco no dicionário: sem elas, a Fase 5 usa a regra "
-        "padrão. Preencha `faixas` quando o cliente pedir cortes específicos — os "
+        "> As faixas ficam em branco no dicionário: sem elas, a descritiva corta "
+        "pelos quartis. Preencha `faixas` quando o cliente pedir cortes específicos — os "
         "quartis acima são o ponto de partida da conversa.",
         "",
     ]
@@ -1584,7 +1593,7 @@ def _md_dicionario(perfil: Perfil, fusao: Fusao) -> str:
     if not fusao.existia:
         linhas.append(
             "Foi criado agora, com uma sugestão por variável. **Revise a coluna `tipo`** "
-            "antes da Fase 5: a automação propõe e você decide. `ignorar` é o tipo das "
+            "antes das análises: a automação propõe e você decide. `ignorar` é o tipo das "
             "colunas que não entram na descritiva — identificador, texto livre, coluna "
             "auxiliar; marcar é melhor do que deixar de fora, porque fica registrado que "
             "a decisão foi consciente."
