@@ -46,7 +46,7 @@ jobs:
           "$RUNNER_TEMP/limpo/bin/python" -m pip install dist/*.whl pytest
           "$RUNNER_TEMP/limpo/bin/flatcap" --version
           PATH="$RUNNER_TEMP/limpo/bin:$PATH" "$RUNNER_TEMP/limpo/bin/python" -m pytest -m e2e -p no:cacheprovider
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: dist
           path: dist/
