@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A pasta do projeto no disco: decidir o que criar e depois criar.
 
@@ -8,8 +10,8 @@ solicitação nova. A separação interna é a regra da casa:
     plano = preparar(cfg, record_id)   # lê o REDCap, decide tudo, não toca no disco
     executar(plano)                    # só escreve; não decide mais nada
 
-É o que faz o `--dry-run` valer alguma coisa: os dois modos percorrem o mesmo
-`Plano`, o modo simulação apenas não chama `executar`.
+É o que faz a simulação valer alguma coisa: sem `--sim` e com `--sim` o
+comando percorre o mesmo `Plano`, e a simulação apenas não chama `executar`.
 
 ## O que mudou na 1.1.0: a pasta do cliente deixou de ser a pasta do projeto
 
@@ -240,11 +242,11 @@ class ProjetoExistenteError(ProjetoError):
 
 
 @dataclass(frozen = True)
-class ArquivoPlanejado: 
+class ArquivoPlanejado:
     """
-    Um arquivo já baixado com destino e o recibo pronto -> ainda na memória. 
+    Um arquivo já baixado com destino e o recibo pronto -> ainda na memória.
 
-    O `sha256` é calculado aqui. É a diferença entre o recibo e uma anotação.  
+    O `sha256` é calculado aqui. É a diferença entre o recibo e uma anotação.
     """
     caminho: Path
     conteudo: bytes
@@ -267,7 +269,7 @@ class Plano:
     """
     Tudo o que será criado, decidido e pronto para escrever.
 
-    Imutável como `Config` e `Cliente`: entre a simulação e a execução ningué, altera um caminho em
+    Imutável como `Config` e `Cliente`: entre a simulação e a execução ninguém altera um caminho em
     trânsito.
     O conteúdo dos dois arquivos de texto já vem montado, para que `executar` não precise tomar
     nenhuma decisão.
@@ -316,13 +318,13 @@ def preparar(
         agora: datetime | None = None,
 ) -> Plano:
     """
-    Lê o REDCap e devolve o plano completo na pasta. Nada de novo. 
+    Lê o REDCap e devolve o plano completo da pasta. Não escreve nada no disco.
 
-    Args; 
+    Args:
         agora: relógio injetável. Sem ele, os testes não teriam como comparar o nome do arquivo, que
         carrega a data.
 
-    Raises: 
+    Raises:
         RegistroNaoEncontradoError, ClienteIncompletoError, ProjetoExistenteError
         RedcapError: falha de rede, token ou permissão.
     """
@@ -384,7 +386,7 @@ def executar(plano: Plano) -> Resultado:
 
 def anotar(raiz: Path, acao: str, agora: datetime | None = None) -> None:
     """
-    Acrescenta uma linha para o `historico.md`. 
+    Acrescenta uma linha para o `historico.md`.
     """
     with (raiz / ARQUIVO_HISTORICO).open("a", encoding="utf-8", newline="\n") as arquivo:
         arquivo.write(_linha_historico(acao, agora or datetime.now()))
@@ -469,7 +471,7 @@ def _conferir_identificacao(cliente: Cliente) -> None:
         f"O registro {cliente.record_id} não tem {' nem '.join(faltando)}.\n"
         "Sem isso, a pasta sairia com um nome que você teria de corrigir à mão\n"
         "depois — e o `flatcap listar` deixaria de reencontrá-la.\n"
-        "Complete o registro no REDCap e rode de novo."
+        "Complete o registro no REDCap e rode de novo.\n"
         "O `flatcap listar` marca em amarelo os cadastros incompletos."
     )
 
@@ -626,12 +628,12 @@ def _montar_plano(
     )
 
 
-# Conteúdo de arquivos de texto 
+# Conteúdo de arquivos de texto
 
 class _SemAncoras(yaml.SafeDumper):
     """
     Dumper que nunca cria âncora nem alias.
-    
+
     O PyYAML deduplica valores repetidos: como `criado_em` e a `data` do banco são a mesma data, o
     arquivo saía com `criado_em: &id001 2026-08-29` e `data: *id001`.
     Subclasse de `SafeDumper`, então a garantia de não instanciar objeto arbitrário na leitura
@@ -772,7 +774,7 @@ def _linha_historico(acao: str, quando: datetime) -> str:
     return f"- **{quando:%Y-%m-%d %H:%M}** — {acao}\n"
 
 
-# Funções auxiliares 
+# Funções auxiliares
 
 def _escrever_texto(caminho: Path, conteudo: str) -> None:
     """
@@ -802,7 +804,3 @@ def tamanho_legivel(bytes_: int) -> str:
             return f"{tamanho:.1f} {unidade}".replace(".", ",")
         tamanho /= 1024
     return f"{bytes_} B"
-
-
-
-
