@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-FileCopyrightText: 1995-2024 The R Core Team
+# SPDX-FileCopyrightText: 2003-2024 The R Foundation
+# SPDX-FileCopyrightText: 1975 Royal Statistical Society
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A correlação — Pearson, Spearman ou Kendall, escolhido pelos pressupostos de cada par.
 
@@ -229,7 +234,8 @@ CASAS_COEFICIENTE = 2
 # da associação.
 SINAL = " × "
 
-# Os coeficientes da série de Edgeworth do AS 89, como estão no `prho.c` do R.
+# Os coeficientes da série de Edgeworth do AS 89, como estão no `prho.c` do R —
+# (C) 2000-2024 The R Core Team; ver o `NOTICE.md`.
 _EDGEWORTH = (
     0.2274, 0.2531, 0.1745, 0.0758, 0.1033, 0.3932,
     0.0879, 0.0151, 0.0072, 0.0831, 0.0131, 4.6e-4,
@@ -1186,6 +1192,10 @@ def spearman(x: Sequence[float], y: Sequence[float]) -> Coeficiente:
 
     O `+ 2*lower.tail` não é enfeite: sem empate o S é sempre par, e é ele que
     transforma o "menor que" do AS 89 no "menor ou igual" da cauda inferior.
+
+    Derivado de `src/library/stats/R/cor.test.R`, do R — (C) 1995-2022 The R Core
+    Team, GPL-2.0-or-later. Origem, e os direitos autorais do original: ver o
+    `NOTICE.md`.
     """
     from scipy import stats
 
@@ -1244,6 +1254,10 @@ def kendall(x: Sequence[float], y: Sequence[float]) -> Coeficiente:
 
     O `scipy` sabe fazer os dois; o critério automático dele é que é outro — ele
     passa para a aproximação acima de n = 33. Quem escolhe aqui é o critério do R.
+
+    Derivado de `src/library/stats/R/cor.test.R`, do R — (C) 1995-2022 The R Core
+    Team, GPL-2.0-or-later. Origem, e os direitos autorais do original: ver o
+    `NOTICE.md`.
     """
     from scipy import stats
 
@@ -1298,6 +1312,11 @@ def prho(n: int, s: float, inferior: bool) -> float:
 
     Transcrito linha por linha, inclusive nas duas saídas do começo — `s ≤ 0` e `s`
     acima do máximo — e no corte do fim em [0, 1], e conferido contra o R.
+
+    Derivado de `src/library/stats/src/prho.c`, do R — (C) 2000-2024 The R Core
+    Team e (C) 2003-2024 The R Foundation, GPL-2.0-or-later —, que se baseia no
+    AS 89, (C) 1975 Royal Statistical Society. Origem, e os direitos autorais
+    do original: ver o `NOTICE.md`.
     """
     from scipy import stats
 
