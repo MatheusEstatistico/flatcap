@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Matheus Fernandes
+# SPDX-License-Identifier: GPL-3.0-or-later
 """
 A normalidade — a primeira análise da Fase 7.
 
@@ -1298,7 +1300,7 @@ def _mensagem_nada_a_analisar(linhas: Sequence[Linha]) -> str:
         f"Nenhuma das {total} variáveis do {ARQUIVO_DICIONARIO} é `numerica`, e "
         "normalidade só se pergunta de variável numérica.\n\n"
         "Abra o dicionário e reveja a coluna `tipo`. Se uma coluna de números ficou "
-        "marcada `categorica` — o que a Fase 4 sugere para código de 0/1 e para "
+        "marcada `categorica` — o que o perfil sugere para código de 0/1 e para "
         "escala de 1 a 5, e costuma estar certo —, ela continua não tendo "
         "normalidade a testar: o teste é sobre variável contínua."
     )
