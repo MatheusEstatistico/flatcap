@@ -27,6 +27,11 @@ o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R` e o
 `oneway.test(y ~ escolaridade)`, o de Welch, em `ANOVA_DE_WELCH_DO_R`. Nas medidas
 repetidas, o `bancos.para_comparar_repetidas()`, com o `aov` e o ε de Greenhouse-Geisser
 do R em `REPETIDAS_DO_R`.
+
+Os testes de postos sobre os mesmos bancos: o `wilcox.test(x, mu = mu, conf.int = TRUE)`
+em `WILCOXON_DO_R`, o `wilcox.test(x ~ sexo, conf.int = TRUE)` em `MANN_WHITNEY_DO_R`, o
+`kruskal.test` em `KRUSKAL_DO_R` e o `friedman.test` em `FRIEDMAN_DO_R` — com a mediana e
+os quartis do `quantile` do R, o tipo 7, que é o do `pandas`.
 """
 
 from __future__ import annotations
@@ -53,6 +58,15 @@ from flatcap.comparacao import (
     ARQUIVO_K_GRUPOS,
     ARQUIVO_REPETIDAS,
     ARQUIVO_TABELA,
+    COLUNA_DA_MEDIA,
+    COLUNA_DA_MEDIANA,
+    COLUNA_DA_DIFERENCA,
+    COLUNA_DA_DIFERENCA_DE_LOCACAO,
+    COLUNA_DAS_DUAS,
+    COLUNA_DAS_DUAS_DIFERENCAS,
+    COLUNA_DO_IC,
+    COLUNA_DO_IC_DA_MEDIA,
+    COLUNA_DO_IC_DA_PSEUDOMEDIANA,
     DOIS_GRUPOS,
     FRIEDMAN,
     K_GRUPOS,
@@ -240,6 +254,80 @@ REPETIDAS_DO_R = [
 ]
 
 
+# `wilcox.test(x, mu = mu, conf.int = TRUE)` e os quartis do `quantile` no R 4.3.3, sobre
+# os valores preenchidos de cada coluna do `bancos.para_comparar()`. Os quatro saem pelo
+# caminho aproximado: o `imc`, a `pas` e a `dor` têm empates, e a `renda` tem 60 valores.
+#
+#     (variável, referência, n, V, p, intervalo, pseudomediana, (Q1, mediana, Q3))
+WILCOXON_DO_R = [
+    ("imc", 25, 57, 1045, 0.04434606447362853, (25.049954259748258, 26.850055606284094),
+     25.949974346305162, (23.800000000000001, 25.899999999999999, 28.100000000000001)),
+    ("renda", 2500, 60, 1080, 0.22590165422430941, (2294.1549745390657, 3571.2350523829291),
+     2859.9133692828482, (1472.8099999999999, 2500.3500000000004, 4245.0025000000005)),
+    ("renda", 3000, 60, 857, 0.67208210447232886, (2294.1549745390657, 3571.2350523829291),
+     2859.9133692828482, (1472.8099999999999, 2500.3500000000004, 4245.0025000000005)),
+    ("pas", 120, 12, 53.5, 0.075224005505574107, (118.00001225906372, 139.00004409673397),
+     128.98295551117241, (119.25, 128, 136.75)),
+    ("dor", 2, 60, 676.5, 0.0036106760940327327, (2.0000324580139814, 3.0000592965142925),
+     2.9999702707384235, (2, 2.5, 3)),
+]
+
+# `wilcox.test(y ~ sexo, conf.int = TRUE)` no R 4.3.3, sobre os casos com as duas
+# respostas de `bancos.para_comparar_grupos()` — a `renda`, sem empates, pelo caminho
+# exato —, e a mediana e os quartis de cada grupo:
+#
+#     (variável, W, p, intervalo, diferença de locação, p exato,
+#      (n, mediana, Q1, Q3) de Feminino, e de Masculino)
+MANN_WHITNEY_DO_R = [
+    ("imc", 262, 0.021968988265092266, (-4.2999906773165968, -0.30004771234261629),
+     -2.3000693220893584, False,
+     (29, 25.100000000000001, 23.300000000000001, 27),
+     (28, 27.399999999999999, 24.900000000000002, 30.200000000000003)),
+    ("renda", 331, 0.1697319562818404, (-2414.4799999999996, 406.9699999999998),
+     -921.57000000000005, True,
+     (30, 2982.625, 1774.6175000000001, 5013.5425000000005),
+     (28, 4026.1199999999999, 2445.7425000000003, 7059.4100000000008)),
+    ("pas", 313, 0.097252628477293851, (-11.000003542479366, 1.0000082369992551), -5, False,
+     (30, 120, 117, 123), (28, 125, 115.25, 135.5)),
+]
+
+# `kruskal.test(y ~ escolaridade)` no R 4.3.3, e a mediana e os quartis de cada grupo:
+#
+#     (variável, qui-quadrado, gl, p, ((n, mediana, Q1, Q3) de cada escolaridade))
+KRUSKAL_DO_R = [
+    ("nota", 10.593673894912445, 2, 0.0050074075772655784, (
+        (20, 6, 5.3500000000000005, 6.6499999999999995),
+        (20, 7, 6.0499999999999989, 7.9500000000000011),
+        (20, 8, 6.4000000000000004, 9.5999999999999996),
+    )),
+    ("imc", 0.16688558031346395, 2, 0.91994371500154348, (
+        (20, 25.899999999999999, 23.525000000000002, 28.149999999999999),
+        (19, 26.399999999999999, 24.200000000000003, 28.600000000000001),
+        (20, 26.199999999999999, 23.800000000000001, 28.474999999999998),
+    )),
+    ("renda", 0.13114754098361914, 2, 0.93652995593578336, (
+        (20, 3360.6599999999999, 1965.4549999999999, 5641.915),
+        (20, 3463.96, 2083.6849999999999, 5775.3400000000001),
+        (20, 3593.8900000000003, 2131.23, 6127.8599999999997),
+    )),
+]
+
+# `friedman.test` no R 4.3.3, sobre os casos completos de
+# `bancos.para_comparar_repetidas()`, e a mediana e os quartis de cada medida. O `peso`
+# é o caso em que a ANOVA não pode: cada caso ganha um quilo por medida, e o Friedman tem
+# os mesmos postos em todo caso — o qui-quadrado é n(k − 1), o maior que existe.
+#
+#     (base, n, qui-quadrado, gl, p, ((mediana, Q1, Q3) de cada medida))
+FRIEDMAN_DO_R = [
+    ("pas", 38, 40.013888888888886, 2, 2.0468896406542972e-09,
+     ((130, 124, 136.75), (126.5, 119.25, 135), (124.5, 116.5, 131.75))),
+    ("dor", 40, 2.0808080808080809, 2, 0.35331190083288583,
+     ((1, 0, 1.25), (0, 0, 1), (0, 0, 1))),
+    ("peso", 40, 80, 2, 4.2483542552915889e-18,
+     ((70, 64.125, 75.875), (71, 65.125, 76.875), (72, 66.125, 77.875))),
+]
+
+
 def _repetidas(itens, quadro=None, linhas=DICIONARIO_DAS_REPETIDAS):
     quadro = bancos.para_comparar_repetidas() if quadro is None else quadro
     return comparar(banco_em_memoria(quadro), ficha_em_memoria(), linhas, itens, AGORA)
@@ -267,6 +355,30 @@ def _como_a_descritiva(valor: float) -> str:
 def _duas_casas(valor: float) -> str:
     texto = f"{valor:.2f}"
     return ("0.00" if float(texto) == 0 else texto).replace(".", ",")
+
+
+def _mediana_quartis(mediana: float, q1: float, q3: float) -> str:
+    """`25,9 [23,8 a 28,1]`, com cada número como a descritiva o escreve."""
+    return (
+        f"{_como_a_descritiva(mediana)} [{_como_a_descritiva(q1)} a "
+        f"{_como_a_descritiva(q3)}]"
+    )
+
+
+def _quartis_conferidos(resumo: dict[str, float], mediana: float, q1: float, q3: float) -> str:
+    """
+    Confere a mediana e os quartis do resumo com os do R e devolve a célula esperada.
+
+    O `quantile` do R e o do numpy chegam ao mesmo número por contas diferentes, e às
+    vezes a um bit um do outro: o Q3 de 28,475 é 28,474999999999998 no R e
+    28,475000000000001 aqui — e as duas casas de cada um são 28,47 e 28,48. Os números
+    conferem com o R; a célula, com a descritiva escrevendo os números do próprio
+    resumo, que é o que a descritiva escreveria no relatório.
+    """
+    assert (resumo["mediana"], resumo["q1"], resumo["q3"]) == pytest.approx(
+        (mediana, q1, q3), rel=1e-14
+    )
+    return _mediana_quartis(resumo["mediana"], resumo["q1"], resumo["q3"])
 
 
 def _uma(nome: str, valores: list) -> tuple[pd.DataFrame, tuple[Linha, ...]]:
@@ -350,12 +462,19 @@ class TestRegra:
         assert linha.escolha.motivo == "o Shapiro-Wilk não rejeita a normal (p = 1,000)"
         assert not linha.escolha.pela_ficha
 
-    def test_a_normal_rejeitada_escolhe_o_wilcoxon_e_a_linha_sai_sem_teste(self):
+    def test_a_normal_rejeitada_vai_para_o_wilcoxon(self):
+        """
+        `wilcox.test(renda, mu = 2500)`: V = 1080, p = 0,2259 — pela aproximação normal,
+        porque são 60 valores. O t da mesma linha daria p = 0,023: a renda é assimétrica,
+        e a mediana dela é a referência.
+        """
         linha = _linha(_comparar(), "renda")
-        assert linha.resultado is None
-        assert (linha.escolha.metodo, linha.escolha.da_regra) == ("", WILCOXON)
+        assert linha.metodo == WILCOXON
+        assert (linha.escolha.metodo, linha.escolha.da_regra) == (WILCOXON, WILCOXON)
         assert linha.escolha.motivo == "o Shapiro-Wilk rejeita a normal (p < 0,001)"
-        assert linha.celula_do_teste == "não testado: normal rejeitada"
+        assert linha.celula_do_teste == WILCOXON
+        assert linha.resultado.estatistica == 1080
+        assert linha.resultado.p == pytest.approx(0.22590165422430941, rel=1e-12)
 
     def test_o_p_do_shapiro_fica_na_nota_e_nao_na_celula(self):
         """
@@ -364,25 +483,63 @@ class TestRegra:
         """
         comparacao = _comparar()
         linha = _linha(comparacao, "dor")
-        assert linha.celula_do_teste == "não testado: normal rejeitada"
+        assert linha.celula_do_teste == WILCOXON
         assert "o Shapiro-Wilk rejeita a normal (p = 0,005)" in linha.justificativa
         texto = comparacao.tabela_de(UMA_AMOSTRA).texto()
         assert "o Shapiro-Wilk rejeita a normal (p = 0,005)" in texto
 
-    def test_a_linha_sem_teste_ensina_a_escrever_t_no_item(self):
-        avisos = _comparar().avisos
+    def test_o_teste_de_postos_que_falta_no_registro(self, monkeypatch):
+        """
+        O caminho de quando o teste da regra ainda não tem aritmética — o de todo teste
+        novo que entra na regra antes do cálculo, e o do Wilcoxon até a 1.14.0. Tirado
+        ele do registro, a linha sai sem teste, e o aviso ensina a escrever o t.
+        """
+        import flatcap.comparacao as modulo
+
+        calculo = {k: v for k, v in modulo._CALCULO.items() if k != (UMA_AMOSTRA, WILCOXON)}
+        monkeypatch.setattr(modulo, "_CALCULO", calculo)
+        comparacao = _comparar()
+        linha = _linha(comparacao, "renda")
+        assert linha.celula_do_teste == "não testado: normal rejeitada"
         assert any(
             "a regra escolheria Wilcoxon, que ainda não está no FlatCap" in aviso
             and "`[renda, 2500, t]`" in aviso
-            for aviso in avisos
+            for aviso in comparacao.avisos
         )
+        tabela = comparacao.tabela_de(UMA_AMOSTRA)
+        assert "O Wilcoxon ainda não está no FlatCap" in tabela.texto()
+        # O resumo da linha é o do teste que a regra escolheu, mesmo sem ele ter rodado.
+        resumo = linha.resumo
+        celula = next(c for c in tabela.linhas if c[0] == linha.rotulo)[2]
+        assert celula == _mediana_quartis(resumo["mediana"], resumo["q1"], resumo["q3"])
+        assert tabela.colunas[2] == COLUNA_DAS_DUAS
+
+    def test_a_linha_do_wilcoxon_nao_ensina_o_t(self):
+        """Com o teste de postos na linha, não há buraco a tapar com o t."""
+        assert not any("escreva o método no item" in aviso for aviso in _comparar().avisos)
 
     def test_dois_valores_nao_verificam_a_normalidade(self):
-        """O Shapiro-Wilk precisa de três; o t, de dois. Sem o t escrito, não há teste."""
+        """
+        O Shapiro-Wilk precisa de três: com dois, a regra vai para o Wilcoxon, que o R
+        calcula — `wilcox.test(c(24, 27), mu = 25)`: V = 2, p = 1, e o intervalo de 50%.
+        Com dois valores o menor p possível é 0,5, e o aviso diz isso; o intervalo, que
+        não chega a 95%, fica fora da tabela.
+        """
         quadro, linhas = _uma("a", [24.0, 27.0, None])
-        linha = _comparar(quadro, linhas, (("a", 25),)).variaveis[0]
-        assert linha.celula_do_teste == "não testado: normalidade não verificável com 2 valores"
+        comparacao = _comparar(quadro, linhas, (("a", 25),))
+        linha = comparacao.variaveis[0]
+        assert linha.celula_do_teste == WILCOXON
         assert "a normalidade não pôde ser verificada" in linha.escolha.motivo
+        assert (linha.resultado.estatistica, linha.resultado.p) == (2.0, 1.0)
+        assert linha.resultado.confianca_do_ic == 0.5
+        assert comparacao.tabela_de(UMA_AMOSTRA).linhas[0][3] == "—"
+        assert any(
+            "`a`: Wilcoxon com 2 valores — o menor p que ele pode dar é 0,500, acima de "
+            "0,05, e o intervalo de 95% não é alcançável — o mais largo que existe tem "
+            "50%. Com tão poucos valores, o teste não rejeita a igualdade com dado "
+            "nenhum. A célula do intervalo sai com —." in aviso
+            for aviso in comparacao.avisos
+        )
 
     def test_dois_valores_com_o_t_escrito_dao_o_t_do_r(self):
         """`t.test(c(24, 27), mu = 25)`: t = 0,3333, 1 gl, p = 0,7952."""
@@ -404,17 +561,17 @@ class TestRegra:
         assert not any("`renda`: 60 valores distintos" in aviso for aviso in avisos)
 
     def test_o_registro_da_regra(self):
-        """O Wilcoxon está na regra e não no cálculo — é a próxima linha dele."""
+        """O Wilcoxon está na regra e no cálculo desde a 1.14.0."""
         assert REGRA[UMA_AMOSTRA] == (T_DE_STUDENT, WILCOXON)
         rejeitada = regra(UMA_AMOSTRA, Normal(w=0.9, p=0.01))
-        assert (rejeitada.metodo, rejeitada.da_regra) == ("", WILCOXON)
+        assert (rejeitada.metodo, rejeitada.da_regra) == (WILCOXON, WILCOXON)
         sustentada = regra(UMA_AMOSTRA, Normal(w=0.99, p=0.5))
         assert (sustentada.metodo, sustentada.da_regra) == (T_DE_STUDENT, T_DE_STUDENT)
 
     def test_o_limite_da_regra_e_o_alfa_da_normalidade(self):
         """p = 0,05 não rejeita: é o `p < ALFA` da normalidade, e não `≤`."""
         assert regra(UMA_AMOSTRA, Normal(w=0.97, p=0.05)).metodo == T_DE_STUDENT
-        assert regra(UMA_AMOSTRA, Normal(w=0.97, p=0.0499)).metodo == ""
+        assert regra(UMA_AMOSTRA, Normal(w=0.97, p=0.0499)).metodo == WILCOXON
 
     def test_a_escolha_de_cada_linha_esta_escrita_na_nota(self):
         texto = _comparar().tabela_de(UMA_AMOSTRA).texto()
@@ -423,8 +580,9 @@ class TestRegra:
             "t de Student (t = 2,16; 56 gl)." in texto
         )
         assert (
-            "Renda: n = 60; o Shapiro-Wilk rejeita a normal (p < 0,001) → Wilcoxon, que "
-            "ainda não está no FlatCap: a linha sai sem teste." in texto
+            "Renda: n = 60; o Shapiro-Wilk rejeita a normal (p < 0,001) → Wilcoxon (V = 1080; "
+            "p aproximado pela normal, com correção de continuidade, porque há 50 valores "
+            "ou mais)." in texto
         )
         assert "Serviço: não testado — um valor só em todas as linhas." in texto
 
@@ -440,8 +598,7 @@ class TestMetodoNaFicha:
         assert linha.escolha.contra_a_regra
         assert (
             "t de Student escrito na ficha (t = 1,05; 59 gl), contra a regra — ela "
-            "escolheria Wilcoxon, que ainda não está no FlatCap: o Shapiro-Wilk rejeita "
-            "a normal (p < 0,001)."
+            "escolheria Wilcoxon: o Shapiro-Wilk rejeita a normal (p < 0,001)."
         ) in linha.justificativa
         assert any("contra a regra" in aviso for aviso in resultado.avisos)
         assert not any("escreva o método no item" in aviso for aviso in resultado.avisos)
@@ -463,7 +620,8 @@ class TestMetodoNaFicha:
         assert metodo_escrito("t") == T_DE_STUDENT
         assert metodo_escrito(" T ") == T_DE_STUDENT
         assert metodo_escrito("Student") == T_DE_STUDENT
-        assert metodo_escrito("wilcoxon") == ""
+        assert metodo_escrito("wilcoxon") == WILCOXON
+        assert metodo_escrito("Wilcox") == WILCOXON
         assert metodo_escrito("tt") == ""
 
 
@@ -497,10 +655,14 @@ class TestSemTeste:
         linha = _comparar(quadro, linhas, (("a", 25, "t"),)).tabela_de(UMA_AMOSTRA).linhas[0]
         assert linha[5] == "não testado: os valores praticamente não variam"
 
-    def test_a_media_sai_mesmo_sem_teste(self):
-        """A média e o desvio descrevem a variável, e não dependem de pressuposto."""
-        linha = _comparar().tabela_de(UMA_AMOSTRA).linhas[1]
-        assert linha[:3] == ("Renda", "60", "3406,12 (3005,93)")
+    def test_o_resumo_sai_mesmo_sem_teste(self):
+        """
+        O resumo descreve a variável, e não depende de pressuposto: um valor só não tem
+        teste, e tem a média — sem teste escolhido, o resumo é o de sempre.
+        """
+        quadro, linhas = _uma("a", [None, 30.0, None])
+        linha = _comparar(quadro, linhas, (("a", 25),)).tabela_de(UMA_AMOSTRA).linhas[0]
+        assert linha[:3] == ("A", "1", "30 (0)")
         assert (linha[3], linha[6]) == ("—", "—")
 
 
@@ -633,10 +795,65 @@ class TestFicha:
     def test_falta_a_referencia(self, projeto_vazio):
         assert "falta o valor de referência" in _recusa(projeto_vazio, "  - [imc]\n")
 
+    def test_o_wilcoxon_escrito(self, projeto_vazio):
+        itens = _itens(projeto_vazio, "  - [imc, 25, Wilcoxon]\n  - [pas, 120, wilcox]\n")
+        assert [(i.variavel, i.metodo) for i in itens] == [
+            ("imc", "wilcoxon"),
+            ("pas", "wilcoxon"),
+        ]
 
-    def test_o_wilcoxon_escrito_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, 25, Wilcoxon]\n")
-        assert "o Wilcoxon ainda não está no FlatCap" in mensagem
+    @pytest.mark.parametrize(
+        ("escrito", "delineamento", "teste"),
+        [
+            ("wilcox", UMA_AMOSTRA, WILCOXON),
+            ("wilcox", DOIS_GRUPOS, MANN_WHITNEY),
+            ("Mann-Whitney U", DOIS_GRUPOS, MANN_WHITNEY),
+            ("U de Mann-Whitney", DOIS_GRUPOS, MANN_WHITNEY),
+            ("Mann-Whitney-Wilcoxon", DOIS_GRUPOS, MANN_WHITNEY),
+            ("Wilcoxon rank sum", DOIS_GRUPOS, MANN_WHITNEY),
+            ("Wilcoxon rank sum", UMA_AMOSTRA, ""),
+            ("Kruskal-Wallis", K_GRUPOS, KRUSKAL_WALLIS),
+            ("Friedmann", REPETIDAS, FRIEDMAN),
+        ],
+    )
+    def test_as_outras_grafias_dos_testes_de_postos(self, escrito, delineamento, teste):
+        """
+        Os nomes dos livros e do R, como se escrevem — e a soma de postos é dos grupos: na
+        uma amostra ela não quer dizer nada.
+        """
+        assert metodo_escrito(escrito, delineamento) == teste
+
+    @pytest.mark.parametrize("delineamento", [UMA_AMOSTRA, DOIS_GRUPOS])
+    def test_o_posto_sinalizado_nao_vira_o_mann_whitney(self, delineamento):
+        """
+        `wilcoxon` entre dois grupos é o Mann-Whitney, como no R; o posto sinalizado
+        escrito por extenso não é sinônimo dele, para não chegar à soma de postos sem
+        ninguém pedir. Recusa, e a recusa ensina o `wilcoxon`.
+        """
+        assert metodo_escrito("Wilcoxon signed rank", delineamento) == ""
+
+    def test_o_posto_sinalizado_por_extenso_recusa_e_ensina(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, 25, wilcoxon signed rank]\n")
+        assert (
+            "`wilcoxon signed rank` não é um método. O terceiro item, quando vem, é o "
+            "método: `t`, `student` ou `wilcoxon`."
+        ) in mensagem
+
+    def test_o_item_montado_fora_da_ficha_recusa_com_os_metodos(self):
+        """
+        O item que chega pronto — de quem chama a comparação sem a ficha — passa pela
+        mesma porta, e a recusa diz os métodos da uma amostra.
+        """
+        with pytest.raises(ItemInvalidoError) as erro:
+            _comparar(itens=(("imc", 25, "mediana"),))
+        assert str(erro.value) == (
+            "`mediana` não é um método contra uma referência: `t`, `student` ou `wilcoxon`."
+        )
+
+    def test_o_metodo_de_grupos_contra_uma_referencia(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, 25, mann-whitney]\n")
+        assert "não se aplica à comparação com um valor de referência" in mensagem
+        assert "`t`, `student` ou `wilcoxon`" in mensagem
 
     def test_o_terceiro_nome_que_nao_e_metodo(self, projeto_vazio):
         assert "`mediana` não é um método" in _recusa(projeto_vazio, "  - [imc, 25, mediana]\n")
@@ -689,15 +906,34 @@ class TestFicha:
 
 class TestATabela:
     def test_as_sete_colunas(self):
+        """O banco de referência mistura o t e o Wilcoxon: o cabeçalho diz os dois."""
         assert _comparar().tabela_de(UMA_AMOSTRA).colunas == (
             "variável",
             "n",
-            "média (DP)",
-            "IC 95% da média",
+            "média (DP) ou mediana [Q1 a Q3]",
+            "IC 95%",
             "referência",
             "teste",
             "p-valor",
         )
+
+    def test_so_o_t_tem_o_cabecalho_de_sempre(self):
+        """Uma tabela só de t sai como saía antes dos testes de postos, letra por letra."""
+        colunas = _comparar(itens=(("imc", 25), ("pas", 120))).tabela_de(UMA_AMOSTRA).colunas
+        assert colunas[2:4] == (COLUNA_DA_MEDIA, COLUNA_DO_IC_DA_MEDIA)
+        assert colunas[2:4] == ("média (DP)", "IC 95% da média")
+
+    def test_so_o_wilcoxon_tem_o_cabecalho_dele(self):
+        colunas = _comparar(itens=(("renda", 2500), ("dor", 2))).tabela_de(UMA_AMOSTRA).colunas
+        assert colunas[2:4] == (COLUNA_DA_MEDIANA, COLUNA_DO_IC_DA_PSEUDOMEDIANA)
+        assert (COLUNA_DAS_DUAS, COLUNA_DO_IC) == ("média (DP) ou mediana [Q1 a Q3]", "IC 95%")
+
+    def test_a_linha_sem_resumo_nao_decide_o_cabecalho(self):
+        """O traço de quem não tem valor não é média nem mediana."""
+        quadro = bancos.para_comparar().assign(vazia=None)
+        linhas = (*DICIONARIO, Linha("vazia", "Vazia", NUMERICA))
+        comparacao = _comparar(quadro, linhas, (("renda", 2500), ("vazia", 1)))
+        assert comparacao.tabela_de(UMA_AMOSTRA).colunas[2] == COLUNA_DA_MEDIANA
 
     def test_a_tabela_do_banco_de_referencia(self):
         """
@@ -706,11 +942,15 @@ class TestATabela:
         """
         imc = REFERENCIAS_DO_R[0]
         pas = REFERENCIAS_DO_R[1]
-        renda = REFERENCIAS_DO_R[2]
-        dor = REFERENCIAS_DO_R[4]
+        renda = next(r for r in WILCOXON_DO_R if r[:2] == ("renda", 2500))
+        dor = next(r for r in WILCOXON_DO_R if r[0] == "dor")
 
         def media_dp(referencia):
             return f"{_como_a_descritiva(referencia[7])} ({_como_a_descritiva(referencia[8])})"
+
+        def mediana(referencia):
+            q1, meio, q3 = referencia[7]
+            return _mediana_quartis(meio, q1, q3)
 
         def faixa(ic):
             return f"{_duas_casas(ic[0])} a {_duas_casas(ic[1])}"
@@ -718,31 +958,40 @@ class TestATabela:
         assert _comparar().tabela_de(UMA_AMOSTRA).linhas == (
             ("IMC (kg/m²)", "57", media_dp(imc), faixa(imc[6]), "25", T_DE_STUDENT,
              valor_p(imc[5])),
-            ("Renda", "60", media_dp(renda), "—", "2500", "não testado: normal rejeitada",
-             "—"),
+            ("Renda", "60", mediana(renda), faixa(renda[5]), "2500", WILCOXON,
+             valor_p(renda[4])),
             ("PAS (mmHg)", "12", media_dp(pas), faixa(pas[6]), "120", T_DE_STUDENT,
              valor_p(pas[5])),
-            ("Dor", "60", media_dp(dor), "—", "2", "não testado: normal rejeitada", "—"),
+            ("Dor", "60", mediana(dor), faixa(dor[5]), "2", WILCOXON, valor_p(dor[4])),
             ("Serviço", "60", "1 (0)", "—", "1", "não testado: um valor só em todas as linhas",
              "—"),
         )
+        assert _comparar().tabela_de(UMA_AMOSTRA).linhas[1][2:4] == (
+            "2500,35 [1472,81 a 4245]",
+            "2294,15 a 3571,24",
+        )
 
-    def test_a_media_e_letra_por_letra_a_do_resumo_da_descritiva(self):
+    def test_o_resumo_e_letra_por_letra_o_da_descritiva(self):
         """
-        A média e o desvio saem pela função e pelo formatador da descritiva: a célula
-        `média (DP)` é, letra por letra, o que o `resumo_<variável>.csv` imprime.
+        A média e o desvio — e a mediana e os quartis — saem pela função e pelo
+        formatador da descritiva: a célula do resumo é, letra por letra, o que o
+        `resumo_<variável>.csv` imprime, na forma do teste da linha.
         """
         from flatcap.descritiva import descrever
 
         quadro = bancos.para_comparar()
         descritiva = descrever(banco_em_memoria(quadro), ficha_em_memoria(), DICIONARIO, AGORA)
         comparacao = _comparar(quadro)
+        de_postos = {"renda", "dor"}
         for nome in ("imc", "renda", "pas", "dor", "servico"):
             resumo = next(v for v in descritiva.variaveis if v.variavel == nome).tabelas[0]
             celulas = dict(resumo.linhas)
             posicao = [v.variavel for v in comparacao.variaveis].index(nome)
             linha = comparacao.tabela_de(UMA_AMOSTRA).linhas[posicao]
-            assert linha[2] == f"{celulas['média']} ({celulas['desvio padrão']})"
+            if nome in de_postos:
+                assert linha[2] == f"{celulas['mediana']} [{celulas['q1']} a {celulas['q3']}]"
+            else:
+                assert linha[2] == f"{celulas['média']} ({celulas['desvio padrão']})"
 
     def test_o_intervalo_tem_casas_fixas_e_nunca_menos_zero(self):
         from flatcap.comparacao import _fixo, _intervalo
@@ -776,7 +1025,9 @@ class TestATabela:
         texto = tabela.texto()
         assert "# variável:" not in texto
         assert "t.test do R" in texto
-        assert "o Wilcoxon, que ainda não está no FlatCap" in texto
+        assert "wilcox.test do R" in texto
+        assert "pseudomediana de Hodges-Lehmann" in texto
+        assert "ainda não está no FlatCap" not in texto
         assert "não há correção para comparações múltiplas" in texto
 
 
@@ -798,10 +1049,16 @@ class TestManifesto:
         assert imc["shapiro"]["rejeita"] is False
         assert imc["estatistica"] == {"nome": "t", "valor": 2.15895, "gl": [56.0]}
         assert imc["ic_95"] == [25.067061, 26.792588]
-        assert (renda["teste"], renda["teste_da_regra"]) == (None, WILCOXON)
+        assert (imc["exato"], imc["ic_alcancavel"]) == (None, None)
+        assert (renda["teste"], renda["teste_da_regra"]) == (WILCOXON, WILCOXON)
         assert renda["shapiro"]["rejeita"] is True
+        assert renda["estatistica"] == {"nome": "V", "valor": 1080.0, "gl": []}
+        assert renda["estimativa"] == {"nome": "pseudomediana", "valor": 2859.913369}
+        assert renda["ic_95"] == [2294.154975, 3571.235052]
+        assert renda["exato"] is False
+        assert "50 valores ou mais" in renda["calculo_do_p"]
         assert (servico["shapiro"], servico["motivo"]) == (None, "um valor só em todas as linhas")
-        assert (detalhes["testadas"], detalhes["sem_teste"]) == (2, 3)
+        assert (detalhes["testadas"], detalhes["sem_teste"]) == (4, 1)
 
     def test_o_p_pequeno_nao_vira_zero_no_manifesto(self):
         """Seis algarismos significativos, e não seis casas."""
@@ -818,7 +1075,12 @@ class TestManifesto:
         regras = montar_manifesto(_comparar(), DICIONARIO).regras
         assert "t.test do R" in regras["t_de_student"]
         escolha = regras["escolha_do_teste"][UMA_AMOSTRA]
-        assert "Wilcoxon, que ainda não está no FlatCap" in escolha
+        assert escolha == (
+            "t de Student se o Shapiro-Wilk não rejeita a normal (p ≥ 0.05) sobre os valores "
+            "preenchidos; senão Wilcoxon. O método escrito na ficha tem precedência."
+        )
+        assert "wilcox.test do R com conf.int = TRUE" in regras["wilcoxon"]
+        assert "mediana [Q1 a Q3]" in regras["resumo"]
         assert regras["hipotese"] == "bilateral"
 
     def test_fora_lista_quem_nao_esta_em_item(self):
@@ -915,8 +1177,17 @@ class TestRegraEntreGrupos:
         assert comparada.celula_do_teste == T_DE_WELCH
         assert comparada.resultado.p == pytest.approx(WELCH_DO_R[0][3], rel=1e-10)
 
-    def test_a_linha_sem_teste_ensina_a_escrever_t(self):
-        """Com o Mann-Whitney fora, o aviso ensina o t — que entre grupos é o de Welch."""
+    def test_a_linha_sem_teste_ensina_a_escrever_t(self, monkeypatch):
+        """
+        Com o Mann-Whitney fora do registro — o caminho de um teste da regra sem
+        aritmética —, o aviso ensina o t, que entre grupos é o de Welch.
+        """
+        import flatcap.comparacao as modulo
+
+        calculo = {
+            k: v for k, v in modulo._CALCULO.items() if k != (DOIS_GRUPOS, MANN_WHITNEY)
+        }
+        monkeypatch.setattr(modulo, "_CALCULO", calculo)
         avisos = _grupos((("renda", "sexo"),)).avisos
         assert any(
             "a regra escolheria Mann-Whitney, que ainda não está no FlatCap" in aviso
@@ -927,11 +1198,15 @@ class TestRegraEntreGrupos:
 
     def test_a_normal_rejeitada_em_algum_grupo_escolhe_o_mann_whitney(self):
         comparada = _grupos((("renda", "sexo"),)).variaveis[0]
-        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", MANN_WHITNEY)
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == (
+            MANN_WHITNEY,
+            MANN_WHITNEY,
+        )
         assert comparada.escolha.motivo == (
             "o Shapiro-Wilk rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001)"
         )
-        assert comparada.celula_do_teste == "não testado: normal rejeitada"
+        assert comparada.celula_do_teste == MANN_WHITNEY
+        assert comparada.resultado.p == pytest.approx(0.1697319562818404, rel=1e-12)
 
     def test_basta_um_grupo_rejeitar(self):
         rejeita = regra(
@@ -955,13 +1230,25 @@ class TestRegraEntreGrupos:
         assert regra(DOIS_GRUPOS, com(0.0499)).da_regra == MANN_WHITNEY
 
     def test_um_grupo_com_dois_valores_nao_verifica_a_normalidade(self):
+        """
+        A regra vai para o Mann-Whitney, que o R calcula com dois valores num grupo —
+        `wilcox.test(c(24, 27), c(25, 26.5, 28, 30.1, 27.2))`: W = 2, p = 0,381 —, e o
+        aviso diz que, com dois e cinco valores, o menor p possível é 0,095.
+        """
         quadro, linhas = _dois([24.0, 27.0], [25.0, 26.5, 28.0, 30.1, 27.2])
         comparada = _grupos((("y", "g"),), quadro, linhas).variaveis[0]
         assert comparada.escolha.da_regra == MANN_WHITNEY
         assert "a normalidade não pôde ser verificada em A (2 valor(es)" in (
             comparada.escolha.motivo
         )
-        assert comparada.celula_do_teste == "não testado: normalidade não verificável em A"
+        assert comparada.celula_do_teste == MANN_WHITNEY
+        assert comparada.resultado.estatistica == 2
+        assert comparada.resultado.p == pytest.approx(0.38095238095238093, rel=1e-12)
+        assert any(
+            "Mann-Whitney com 2 valores em A e 5 valores em B — o menor p que ele pode dar é "
+            "0,095, acima de 0,05" in aviso
+            for aviso in comparada.avisos
+        )
 
     def test_um_grupo_que_nao_varia_nao_verifica_a_normalidade(self):
         """A frase é do grupo, e não a da coluna que o `normalidade.shapiro` escreveria."""
@@ -981,9 +1268,8 @@ class TestRegraEntreGrupos:
         )
         assert comparada.justificativa == (
             "Renda por Sexo: n = 58 (30 em Feminino e 28 em Masculino); t de Student escrito "
-            "na ficha (t = -1,36; 56 gl), contra a regra — ela escolheria Mann-Whitney, que "
-            "ainda não está no FlatCap: o Shapiro-Wilk rejeita a normal em Feminino "
-            "(p < 0,001) e Masculino (p < 0,001)."
+            "na ficha (t = -1,36; 56 gl), contra a regra — ela escolheria Mann-Whitney: o "
+            "Shapiro-Wilk rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001)."
         )
 
     def test_o_student_no_lugar_do_welch_tambem_e_contra_a_regra(self):
@@ -1082,8 +1368,8 @@ class TestAvisosEntreGrupos:
         ) in texto
         assert (
             "Renda por Sexo: n = 58 (30 em Feminino e 28 em Masculino); o Shapiro-Wilk "
-            "rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001) → Mann-Whitney, "
-            "que ainda não está no FlatCap: a linha sai sem teste."
+            "rejeita a normal em Feminino (p < 0,001) e Masculino (p < 0,001) → Mann-Whitney "
+            "(W = 331; p exato)."
         ) in texto
 
 
@@ -1259,9 +1545,28 @@ class TestTabelaDoisGrupos:
         )
 
     def test_sem_teste_a_diferenca_e_o_p_saem_com_o_traco(self):
-        cabeca, *grupos = linhas_da_tabela(_grupos((("renda", "sexo"),)).variaveis[0])
-        assert (cabeca[4], cabeca[5], cabeca[6]) == ("—", "não testado: normal rejeitada", "—")
-        assert [linha[3] for linha in grupos] == ["4027,27 (3446,69)", "5513,49 (4780,99)"]
+        """Um grupo só: sem teste nenhum escolhido, e o resumo de sempre, a média."""
+        cabeca, *grupos = linhas_da_tabela(_grupos((("imc", "unico"),)).variaveis[0])
+        assert (cabeca[4], cabeca[5], cabeca[6]) == ("—", "não testado: um grupo só", "—")
+        assert [linha[3] for linha in grupos] == ["26,27 (3,68)"]
+
+    def test_o_bloco_do_mann_whitney(self):
+        """
+        A diferença de locação e o intervalo do R, com duas casas fixas, e a mediana e os
+        quartis de cada grupo como a descritiva os escreve — e o cabeçalho que diz isso.
+        """
+        _, w, p, ic, diferenca, _, feminino, masculino = MANN_WHITNEY_DO_R[1]
+        tabela = _grupos((("renda", "sexo"),)).tabela_de(DOIS_GRUPOS)
+        assert tabela.colunas[3] == COLUNA_DA_MEDIANA
+        assert tabela.linhas == (
+            ("Renda", "Sexo", "58", "",
+             f"{_duas_casas(diferenca)} ({_duas_casas(ic[0])} a {_duas_casas(ic[1])})",
+             MANN_WHITNEY, valor_p(p)),
+            ("", "Feminino", "30", _mediana_quartis(*feminino[1:]), "", "", ""),
+            ("", "Masculino", "28", _mediana_quartis(*masculino[1:]), "", "", ""),
+        )
+        assert tabela.linhas[0][4] == "-921,57 (-2414,48 a 406,97)"
+        assert tabela.linhas[1][3] == "2982,62 [1774,62 a 5013,54]"
 
     def test_a_tabela_e_as_linhas_do_terminal_sao_as_mesmas(self):
         comparacao = _grupos((("imc", "sexo"), ("pas", "sexo", "student")))
@@ -1275,7 +1580,9 @@ class TestTabelaDoisGrupos:
         assert "var.equal = TRUE" in texto
         assert "graus de liberdade de Welch-Satterthwaite" in texto
         assert "a média do primeiro grupo menos a do segundo" in texto
-        assert "O Mann-Whitney ainda não está no FlatCap" in texto
+        assert "wilcox.test do R para duas amostras" in texto
+        assert "que não é a diferença das medianas" in texto
+        assert "ainda não está no FlatCap" not in texto
         assert "os faltantes são por comparação" in texto
 
     def test_uma_tabela_por_delineamento_na_ordem(self):
@@ -1356,14 +1663,25 @@ class TestFichaEntreGrupos:
         itens = _itens(projeto_vazio, "  - [imc, sexo, t]\n  - [pas, sexo, welsh]\n")
         assert [(i.variavel, i.metodo) for i in itens] == [("imc", "t"), ("pas", "welch")]
 
-    def test_o_mann_whitney_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, mann-whitney]\n")
-        assert "`mann-whitney` entre grupos é o Mann-Whitney, que ainda não está" in mensagem
-        assert "`t`, `student`, `welch` ou `anova`" in mensagem
+    def test_o_mann_whitney_escrito(self, projeto_vazio):
+        itens = _itens(
+            projeto_vazio, "  - [imc, sexo, mann-whitney]\n  - [pas, sexo, U de Mann-Whitney]\n"
+        )
+        assert [(i.variavel, i.metodo) for i in itens] == [
+            ("imc", "mannwhitney"),
+            ("pas", "mannwhitney"),
+        ]
 
-    def test_o_kruskal_wallis_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, escolaridade, Kruskal-Wallis]\n")
-        assert "entre grupos é o Kruskal-Wallis, que ainda não está no FlatCap" in mensagem
+    def test_o_metodo_que_nao_existe_lista_os_que_existem(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, mediana]\n")
+        assert (
+            "`t`, `student`, `welch`, `anova`, `wilcoxon`, `mannwhitney` ou `kruskal`"
+            in mensagem
+        )
+
+    def test_o_kruskal_wallis_escrito(self, projeto_vazio):
+        itens = _itens(projeto_vazio, "  - [imc, escolaridade, Kruskal-Wallis]\n")
+        assert itens == (Pedido("imc", metodo="kruskal", grupos="escolaridade"),)
 
     def test_o_friedman_nao_e_de_grupos(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, friedman]\n")
@@ -1373,9 +1691,12 @@ class TestFichaEntreGrupos:
         itens = _itens(projeto_vazio, "  - [imc, escolaridade, ANOVA]\n")
         assert itens == (Pedido("imc", metodo="anova", grupos="escolaridade"),)
 
-    def test_o_wilcoxon_nao_se_aplica_a_grupos(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - [imc, sexo, wilcoxon]\n")
-        assert "`wilcoxon` não se aplica à comparação entre grupos" in mensagem
+    def test_o_wilcoxon_entre_grupos_e_o_mann_whitney(self, projeto_vazio):
+        """O `wilcox.test` de duas amostras do R é o Mann-Whitney — e a ficha lê assim."""
+        itens = _itens(projeto_vazio, "  - [imc, sexo, wilcoxon]\n")
+        assert itens == (Pedido("imc", metodo="wilcoxon", grupos="sexo"),)
+        assert metodo_escrito("wilcoxon", DOIS_GRUPOS) == MANN_WHITNEY
+        assert metodo_escrito("wilcoxon", K_GRUPOS) == ""
 
     def test_uma_terceira_variavel_ensina_a_forma_uma_contra_varias(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - [imc, sexo, idade]\n")
@@ -1462,15 +1783,21 @@ class TestKGruposRegra:
         )
 
     def test_a_normal_rejeitada_escolhe_o_kruskal_wallis(self):
+        """
+        A renda rejeita a normal nos três grupos (p = 0,006, 0,002 e < 0,001, no R), e o
+        `kruskal.test` dá qui-quadrado = 0,131, 2 gl, p = 0,937.
+        """
         comparacao = _grupos((("renda", "escolaridade"),))
         comparada = comparacao.variaveis[0]
-        assert comparada.escolha.da_regra == KRUSKAL_WALLIS
-        assert comparada.celula_do_teste == "não testado: normal rejeitada"
-        assert any(
-            "Se a ANOVA de Welch vale aqui" in aviso
-            and "`[renda, escolaridade, welch]`" in aviso
-            for aviso in comparacao.avisos
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == (
+            KRUSKAL_WALLIS,
+            KRUSKAL_WALLIS,
         )
+        assert comparada.celula_do_teste == KRUSKAL_WALLIS
+        assert comparada.resultado.estatistica == pytest.approx(0.13114754098361914, rel=1e-12)
+        assert comparada.resultado.p == pytest.approx(0.93652995593578336, rel=1e-12)
+        assert comparada.justificativa.endswith("→ Kruskal-Wallis (χ² = 0,13; 2 gl).")
+        assert not any("escreva o método no item" in aviso for aviso in comparacao.avisos)
 
     def test_a_anova_com_desvios_muito_diferentes_avisa(self):
         avisos = _grupos((("nota", "escolaridade", "anova"),)).avisos
@@ -1537,7 +1864,10 @@ class TestKGruposRegra:
             "item: `[nota, escolaridade, anova]`" in aviso
             for aviso in comparacao.avisos
         )
-        assert "Os dois ainda não estão no FlatCap" in comparacao.tabela_de(K_GRUPOS).texto()
+        assert (
+            "A ANOVA de Welch ainda não está no FlatCap, e onde a regra a escolhe a linha sai "
+            "sem teste." in comparacao.tabela_de(K_GRUPOS).texto()
+        )
 
     def test_a_troca_que_falta_no_registro_cai_na_que_existe(self, monkeypatch):
         """Sem a ANOVA de Welch, o `t` numa variável de três grupos ensina a `anova`."""
@@ -1634,7 +1964,8 @@ class TestKGruposTabela:
         texto = _grupos((("nota", "escolaridade"),)).tabela_de(K_GRUPOS).texto()
         assert "oneway.test do R com var.equal = TRUE" in texto
         assert "os graus de liberdade de Welch no denominador" in texto
-        assert "O Kruskal-Wallis ainda não está no FlatCap" in texto
+        assert "Kruskal-Wallis, como o kruskal.test do R" in texto
+        assert "Kruskal-Wallis ainda não está" not in texto
         assert "o pós-teste — ainda não está no FlatCap" in texto
         assert (
             "Nota por Escolaridade: n = 60 (20 em Fundamental, 20 em Médio e 20 em "
@@ -1717,16 +2048,26 @@ class TestRepetidasRegra:
         )
 
     def test_a_normal_rejeitada_escolhe_o_friedman(self):
+        """
+        A escala de dor rejeita a normal nas três medidas, e o `friedman.test` dá
+        qui-quadrado = 2,081, 2 gl, p = 0,353 — com a mediana e os quartis de cada medida.
+        """
+        _, n, qui, gl, p, medidas = next(r for r in FRIEDMAN_DO_R if r[0] == "dor")
         comparacao = _repetidas((ITEM_DOR,))
         comparada = comparacao.variaveis[0]
-        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == ("", FRIEDMAN)
-        assert comparada.celula_do_teste == "não testado: normal rejeitada"
-        assert any(
-            "a regra escolheria Friedman, que ainda não está no FlatCap" in aviso
-            and "Se a ANOVA de medidas repetidas vale aqui" in aviso
-            and "`{repetidas: [dor_0, dor_1, dor_2], metodo: anova}`" in aviso
-            for aviso in comparacao.avisos
-        )
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == (FRIEDMAN, FRIEDMAN)
+        assert comparada.celula_do_teste == FRIEDMAN
+        assert comparada.validos == n
+        assert comparada.resultado.estatistica == pytest.approx(qui, rel=1e-12)
+        assert comparada.resultado.gl == (gl,)
+        assert comparada.resultado.p == pytest.approx(p, rel=1e-12)
+        tabela = comparacao.tabela_de(REPETIDAS)
+        assert tabela.colunas[2] == COLUNA_DA_MEDIANA
+        assert [linha[2] for linha in tabela.linhas] == [
+            _mediana_quartis(*medida) for medida in medidas
+        ]
+        assert [linha[2] for linha in tabela.linhas] == ["1 [0 a 1,25]", "0 [0 a 1]", "0 [0 a 1]"]
+        assert not any("escreva o método no item" in aviso for aviso in comparacao.avisos)
 
     def test_a_anova_pela_regra_com_poucos_casos_avisa(self):
         """
@@ -1761,15 +2102,15 @@ class TestRepetidasRegra:
         assert comparada.escolha.contra_a_regra
         assert (
             "ANOVA de medidas repetidas escrita na ficha (F = 1,94; 1,95 e 76,19 gl; "
-            "ε = 0,977), contra a regra — ela escolheria Friedman, que ainda não está no "
-            "FlatCap"
+            "ε = 0,977), contra a regra — ela escolheria Friedman: o Shapiro-Wilk rejeita"
         ) in comparada.justificativa
         assert any("escrita na ficha, contra a regra" in a for a in comparacao.avisos)
 
     def test_o_registro_da_regra_das_medidas_repetidas(self):
         assert REGRA[REPETIDAS] == (ANOVA_DE_MEDIDAS_REPETIDAS, FRIEDMAN)
         assert metodo_escrito("anova", REPETIDAS) == ANOVA_DE_MEDIDAS_REPETIDAS
-        assert metodo_escrito("friedman", REPETIDAS) == ""
+        assert metodo_escrito("friedman", REPETIDAS) == FRIEDMAN
+        assert metodo_escrito("Friedmann", REPETIDAS) == FRIEDMAN
         assert metodo_escrito("welch", REPETIDAS) == ""
 
 
@@ -1835,7 +2176,9 @@ class TestRepetidasTabela:
         texto = _repetidas((ITEM_PAS, ITEM_DOR)).tabela_de(REPETIDAS).texto()
         assert "sempre com a correção de Greenhouse-Geisser" in texto
         assert "Sem o teste de Mauchly antes" in texto
-        assert "O Friedman ainda não está no FlatCap" in texto
+        assert "Friedman, como o friedman.test do R" in texto
+        assert "`metodo: anova` ou `metodo: friedman`" in texto
+        assert "Friedman ainda não está" not in texto
         assert "um caso com uma medida faltando sai do item inteiro" in texto
 
     def test_as_quatro_tabelas_na_ordem(self):
@@ -1945,12 +2288,20 @@ class TestRepetidasFicha:
         )
         assert "`metodos` não é uma chave do item de medidas repetidas" in mensagem
 
-    def test_o_friedman_ainda_nao_existe(self, projeto_vazio):
-        mensagem = _recusa(
-            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: friedman\n"
+    def test_o_friedman_escrito(self, projeto_vazio):
+        itens = _itens(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: Friedman\n"
         )
-        assert "o Friedman ainda não está no FlatCap" in mensagem
-        assert "o método que se escreve é `anova`" in mensagem
+        assert itens == (
+            Pedido("pas_0", metodo="friedman", medidas=("pas_0", "pas_1", "pas_2")),
+        )
+
+    def test_o_metodo_que_nao_e_das_repetidas_lista_os_que_sao(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: kruskal\n"
+        )
+        assert "`kruskal` não é um método das medidas repetidas" in mensagem
+        assert "o método que se escreve é `anova` ou `friedman`" in mensagem
 
     def test_o_welch_nao_e_das_repetidas(self, projeto_vazio):
         mensagem = _recusa(
@@ -1961,6 +2312,465 @@ class TestRepetidasFicha:
     def test_numero_na_lista(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, 120, pas_2]\n")
         assert "depois de `repetidas:` vem a lista das medidas" in mensagem
+
+
+# ── Os testes de postos: o R sobre os bancos ───────────────────────────────
+
+
+class TestWilcoxonNoBanco:
+    @pytest.mark.parametrize(
+        ("variavel", "mu", "n", "v", "p", "ic", "estimativa", "quartis"),
+        WILCOXON_DO_R,
+        ids=[f"{variavel}-mu{mu}" for variavel, mu, *_ in WILCOXON_DO_R],
+    )
+    def test_o_wilcox_test_do_r(self, variavel, mu, n, v, p, ic, estimativa, quartis):
+        """
+        Com `wilcoxon` escrito no item, o Wilcoxon sai em todas as colunas — mesmo onde a
+        regra escolheria o t —, e cada número confere com o R: o V, o p, o intervalo, a
+        pseudomediana e os quartis do resumo da linha.
+        """
+        comparacao = _comparar(itens=((variavel, mu, "wilcoxon"),))
+        linha = comparacao.variaveis[0]
+        resultado = linha.resultado
+        assert linha.validos == n
+        assert resultado.metodo == WILCOXON
+        assert resultado.estatistica == v
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert resultado.estimativa == pytest.approx(estimativa, rel=1e-12)
+        q1, mediana, q3 = quartis
+        celulas = comparacao.tabela_de(UMA_AMOSTRA).linhas[0]
+        assert celulas[2] == _quartis_conferidos(linha.resumo, mediana, q1, q3)
+        assert celulas[3] == f"{_duas_casas(ic[0])} a {_duas_casas(ic[1])}"
+
+    def test_o_wilcoxon_escrito_contra_a_regra(self):
+        """O IMC não rejeita a normal: a regra escolheria o t, e a nota diz isso."""
+        comparacao = _comparar(itens=(("imc", 25, "wilcoxon"),))
+        linha = comparacao.variaveis[0]
+        assert linha.escolha.contra_a_regra
+        assert (
+            "Wilcoxon escrito na ficha (V = 1045; p aproximado pela normal, com correção de "
+            "continuidade, porque há 50 valores ou mais, empates e valores iguais à "
+            "referência), contra a regra — ela escolheria t de Student: o Shapiro-Wilk não "
+            "rejeita a normal (p = 1,000)."
+        ) in linha.justificativa
+        assert any("Wilcoxon escrito na ficha, contra a regra" in a for a in comparacao.avisos)
+
+    def test_o_mesmo_item_pelo_t_e_pelo_wilcoxon_repete(self):
+        """A mesma pergunta por dois testes é ficar com o p que convier."""
+        with pytest.raises(ItemInvalidoError, match=r"repete \[renda, 2500\]"):
+            _comparar(itens=(("renda", 2500), ("renda", 2500, "wilcoxon")))
+
+    def test_o_caminho_exato_com_poucos_valores(self):
+        """
+        `wilcox.test(c(1.2, 3.4, 2.2, 5.1, -0.7), mu = 0, conf.int = TRUE)`: V = 14,
+        p = 0,125, exato, e o intervalo de 95% do menor ao maior valor. Com cinco valores
+        o menor p possível é 0,0625 — acima de 0,05 —, e o aviso diz isso; o intervalo
+        sai, porque o R o dá como de 95%.
+        """
+        quadro, linhas = _uma("a", [1.2, 3.4, 2.2, 5.1, -0.7])
+        comparacao = _comparar(quadro, linhas, (("a", 0, "wilcoxon"),))
+        resultado = comparacao.variaveis[0].resultado
+        assert (resultado.estatistica, resultado.p, resultado.exato) == (14, 0.125, True)
+        assert resultado.ic == (-0.69999999999999996, 5.0999999999999996)
+        assert comparacao.tabela_de(UMA_AMOSTRA).linhas[0][3] == "-0,70 a 5,10"
+        assert "V = 14; p exato" in comparacao.variaveis[0].justificativa
+        assert any(
+            aviso == (
+                f"`a`: Wilcoxon com 5 valores — o menor p que ele pode dar é "
+                f"{valor_p(0.0625)}, acima de 0,05. Com tão poucos valores, o teste não "
+                "rejeita a igualdade com dado nenhum."
+            )
+            for aviso in comparacao.avisos
+        )
+
+    def test_o_intervalo_que_nao_chega_a_95_fica_fora_da_tabela(self):
+        """
+        Com quatro valores, o intervalo mais largo tem 88% — o R o devolve com esse
+        nível, e avisa. A tabela promete 95%: a célula sai com o traço, debaixo do nome
+        do intervalo que faltou, e o intervalo do R vai para o manifesto, com o nível.
+        """
+        quadro, linhas = _uma("a", [1.2, 3.4, 2.2, 5.1])
+        comparacao = _comparar(quadro, linhas, (("a", 0, "wilcoxon"),))
+        assert comparacao.tabela_de(UMA_AMOSTRA).linhas[0][3] == "—"
+        assert comparacao.tabela_de(UMA_AMOSTRA).colunas[3] == COLUNA_DO_IC_DA_PSEUDOMEDIANA
+        assert any(
+            "o intervalo de 95% não é alcançável — o mais largo que existe tem 88%" in aviso
+            and "A célula do intervalo sai com —." in aviso
+            for aviso in comparacao.avisos
+        )
+        (detalhe,) = montar_manifesto(comparacao, linhas).itens[0].detalhes[UMA_AMOSTRA]
+        assert detalhe["ic_95"] is None
+        assert detalhe["ic_alcancavel"] == {"confianca": 0.88, "limites": [1.2, 5.1]}
+
+    def test_sem_os_iguais_a_referencia_os_que_sobram_nao_variam(self):
+        """
+        `wilcox.test(c(25, 27, 27, 27), mu = 25)`: V = 6, p = 0,1489 — e, sem o 25, o
+        intervalo não existe: o R devolve `NaN`. A linha sai com o p, e o intervalo, com o
+        traço e o aviso.
+        """
+        quadro, linhas = _uma("a", [25.0, 27.0, 27.0, 27.0])
+        comparacao = _comparar(quadro, linhas, (("a", 25, "wilcoxon"),))
+        resultado = comparacao.variaveis[0].resultado
+        assert resultado.p == pytest.approx(0.14891467317876567, rel=1e-12)
+        assert comparacao.tabela_de(UMA_AMOSTRA).linhas[0][3] == "—"
+        assert any(
+            "sem os valores iguais à referência, os que sobram são todos iguais" in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_os_intervalos_aproximados_que_nao_chegam_a_95(self):
+        """
+        Com empates, o R acha o intervalo pela aproximação normal e, quando nem os
+        extremos alcançam os quantis, dobra o α até alcançar: `wilcox.test(c(3, 3, 3, 4,
+        1), conf.int = TRUE)` fica com 90%, e `wilcox.test(c(1, 2, 2), conf.int = TRUE)`,
+        com o α passando de 1, com nível zero — intervalo nenhum. Os dois p saem, as duas
+        células do intervalo saem com o traço, e os avisos dizem o que faltou. No caminho
+        aproximado não há menor p possível, e ele não entra na frase.
+        """
+        quadro = pd.DataFrame(
+            {"a": [1.0, 2.0, 2.0, None, None], "b": [3.0, 3.0, 3.0, 4.0, 1.0]}
+        )
+        linhas = (Linha("a", "A", NUMERICA), Linha("b", "B", NUMERICA))
+        comparacao = _comparar(quadro, linhas, (("a", 0, "wilcoxon"), ("b", 0, "wilcoxon")))
+        a, b = (v.resultado for v in comparacao.variaveis)
+        assert (a.p, a.confianca_do_ic) == (pytest.approx(0.17356816655592155, rel=1e-12), 0)
+        assert (b.p, b.confianca_do_ic) == (
+            pytest.approx(0.054474035106195577, rel=1e-12),
+            pytest.approx(0.9, rel=1e-12),
+        )
+        tabela = comparacao.tabela_de(UMA_AMOSTRA)
+        assert [linha[3] for linha in tabela.linhas] == ["—", "—"]
+        assert tabela.colunas[3] == COLUNA_DO_IC_DA_PSEUDOMEDIANA
+        assert (
+            "`a`: Wilcoxon com 3 valores — o intervalo de 95% não é alcançável — não há "
+            "intervalo nenhum. A célula do intervalo sai com —."
+        ) in comparacao.avisos
+        assert (
+            "`b`: Wilcoxon com 5 valores — o intervalo de 95% não é alcançável — o mais "
+            "largo que existe tem 90%. A célula do intervalo sai com —."
+        ) in comparacao.avisos
+
+    def test_o_cabecalho_do_intervalo_ignora_a_linha_sem_teste(self):
+        """
+        A linha que não chegou a teste nenhum — um valor só em todas — é resumida pela
+        média, e o cabeçalho do resumo diz as duas formas; intervalo ela não tem, e o
+        cabeçalho do intervalo fica o da pseudomediana, o da outra linha.
+        """
+        quadro = pd.DataFrame({"a": [1.2, 3.4, 2.2, 5.1, -0.7, 4.4], "s": [1.0] * 6})
+        linhas = (Linha("a", "A", NUMERICA), Linha("s", "S", NUMERICA))
+        comparacao = _comparar(quadro, linhas, (("a", 0, "wilcoxon"), ("s", 1)))
+        tabela = comparacao.tabela_de(UMA_AMOSTRA)
+        assert tabela.linhas[1][2:6] == (
+            "1 (0)", "—", "1", "não testado: um valor só em todas as linhas",
+        )
+        assert tabela.colunas[2:4] == (COLUNA_DAS_DUAS, COLUNA_DO_IC_DA_PSEUDOMEDIANA)
+
+
+class TestMannWhitneyNoBanco:
+    @pytest.mark.parametrize(
+        ("variavel", "w", "p", "ic", "diferenca", "exato", "feminino", "masculino"),
+        MANN_WHITNEY_DO_R,
+        ids=[variavel for variavel, *_ in MANN_WHITNEY_DO_R],
+    )
+    def test_o_wilcox_test_do_r(self, variavel, w, p, ic, diferenca, exato, feminino, masculino):
+        """
+        Com `mannwhitney` escrito, o Mann-Whitney sai em todas as colunas, e cada número
+        confere com o R: o W, o p, o caminho, o intervalo e a diferença de locação — e
+        de cada grupo o n, a mediana e os quartis.
+        """
+        comparacao = _grupos(((variavel, "sexo", "mannwhitney"),))
+        comparada = comparacao.variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == MANN_WHITNEY
+        assert resultado.estatistica == w
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert resultado.exato is exato
+        assert resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert resultado.estimativa == pytest.approx(diferenca, rel=1e-12)
+        assert [grupo.n for grupo in comparada.grupos] == [feminino[0], masculino[0]]
+        tabela = comparacao.tabela_de(DOIS_GRUPOS)
+        assert tabela.colunas[3:5] == (COLUNA_DA_MEDIANA, COLUNA_DA_DIFERENCA_DE_LOCACAO)
+        cabeca, *linhas = tabela.linhas
+        assert cabeca[4] == (
+            f"{_duas_casas(diferenca)} ({_duas_casas(ic[0])} a {_duas_casas(ic[1])})"
+        )
+        assert [linha[3] for linha in linhas] == [
+            _quartis_conferidos(grupo.resumo, *do_r[1:])
+            for grupo, do_r in zip(comparada.grupos, (feminino, masculino), strict=True)
+        ]
+
+    def test_o_wilcoxon_escrito_entre_dois_grupos_e_o_mann_whitney(self):
+        """O `wilcox.test` de duas amostras: o nome do R, e o teste que a regra escolhe."""
+        comparada = _grupos((("renda", "sexo", "wilcoxon"),)).variaveis[0]
+        assert comparada.metodo == MANN_WHITNEY
+        assert comparada.escolha.pela_ficha and not comparada.escolha.contra_a_regra
+
+    def test_a_tabela_mistura_os_dois_resumos(self):
+        """
+        O IMC pelo t de Welch, a renda pelo Mann-Whitney: cada bloco no seu resumo, e os
+        dois cabeçalhos dizendo as duas formas — a da diferença também, porque a de
+        locação ao lado das medianas seria lida como a diferença delas.
+        """
+        tabela = _grupos((("imc", "sexo"), ("renda", "sexo"))).tabela_de(DOIS_GRUPOS)
+        assert tabela.colunas[3:5] == (COLUNA_DAS_DUAS, COLUNA_DAS_DUAS_DIFERENCAS)
+        assert COLUNA_DA_DIFERENCA == "diferença (IC 95%)"
+        assert [linha[3] for linha in tabela.linhas] == [
+            "", "25,09 (2,99)", "27,41 (4,06)",
+            "", "2982,62 [1774,62 a 5013,54]", "4026,12 [2445,74 a 7059,41]",
+        ]
+
+    def test_o_cabecalho_da_diferenca_ignora_o_bloco_sem_teste(self):
+        """
+        O bloco sem teste — um grupo só — é resumido pela média, e o cabeçalho do resumo
+        diz as duas formas; diferença ele não tem, e o cabeçalho dela fica o da locação.
+        """
+        tabela = _grupos((("renda", "sexo"), ("imc", "unico"))).tabela_de(DOIS_GRUPOS)
+        assert tabela.colunas[3:5] == (COLUNA_DAS_DUAS, COLUNA_DA_DIFERENCA_DE_LOCACAO)
+
+    def test_a_ordem_dos_grupos_decide_o_sinal_da_diferenca_de_locacao(self):
+        invertido = Linha(
+            "sexo",
+            "Sexo",
+            CATEGORICA,
+            ("2", "1"),
+            rotulos_das_categorias=(("1", "Feminino"), ("2", "Masculino")),
+        )
+        linhas = (IMC, RENDA, PAS, NOTA, invertido, ESCOLARIDADE, UNICO)
+        comparada = _grupos((("renda", "sexo"),), linhas=linhas).variaveis[0]
+        assert [g.rotulo for g in comparada.grupos] == ["Masculino", "Feminino"]
+        assert comparada.resultado.estimativa == pytest.approx(921.57000000000005, rel=1e-12)
+        assert comparada.resultado.p == pytest.approx(0.1697319562818404, rel=1e-12)
+
+    def test_dois_grupos_que_nao_variam_por_dentro(self):
+        """
+        Cada grupo com o seu valor: a normalidade não se verifica, a regra vai para o
+        Mann-Whitney, e o R calcula — `wilcox.test(c(5, 5, 5), c(6, 6, 6))`: W = 0,
+        p = 0,04685. A diferença de locação não tem intervalo, e o R para com erro com
+        `conf.int = TRUE`: a célula sai com o traço, e o aviso diz por quê.
+        """
+        quadro, linhas = _dois([5.0, 5.0, 5.0], [6.0, 6.0, 6.0])
+        comparacao = _grupos((("y", "g"),), quadro, linhas)
+        comparada = comparacao.variaveis[0]
+        assert comparada.metodo == MANN_WHITNEY
+        assert comparada.resultado.p == pytest.approx(0.046854177603873753, rel=1e-12)
+        assert linhas_da_tabela(comparada)[0][4] == "—"
+        assert any("os grupos não variam por dentro" in aviso for aviso in comparacao.avisos)
+
+    def test_o_intervalo_que_nao_chega_a_95(self):
+        """
+        Dois e cinco valores: o mais largo tem 90,5% — `wilcox.test(c(24, 27), c(25,
+        26.5, 28, 30.1, 27.2), conf.int = TRUE)` —, e a célula sai com o traço.
+        """
+        quadro, linhas = _dois([24.0, 27.0], [25.0, 26.5, 28.0, 30.1, 27.2])
+        comparacao = _grupos((("y", "g"),), quadro, linhas)
+        comparada = comparacao.variaveis[0]
+        assert comparada.resultado.ic == (-6.1000000000000014, 2.0)
+        assert comparada.resultado.confianca_do_ic == pytest.approx(0.90476190476190477)
+        assert linhas_da_tabela(comparada)[0][4] == "—"
+        (detalhe,) = montar_manifesto(comparacao, linhas).itens[0].detalhes[DOIS_GRUPOS]
+        assert detalhe["ic_alcancavel"] == {"confianca": 0.904762, "limites": [-6.1, 2.0]}
+        assert detalhe["estimativa"] == {"nome": "diferença de locação", "valor": -1.75}
+
+    def test_os_metodos_do_numero_errado_de_grupos(self):
+        """Só o banco sabe quantos grupos há, e a recusa ensina a troca."""
+        with pytest.raises(ItemInvalidoError) as erro:
+            _grupos(
+                (
+                    ("imc", "escolaridade", "mannwhitney"),
+                    ("pas", "escolaridade", "wilcoxon"),
+                    ("imc", "sexo", "kruskal"),
+                )
+            )
+        mensagem = str(erro.value)
+        assert "3 item(ns) que este banco não deixa comparar" in mensagem
+        assert "o Mann-Whitney compara dois grupos; escreva `kruskal`" in mensagem
+        assert (
+            "o Wilcoxon entre grupos é o Mann-Whitney, que compara dois; escreva `kruskal`"
+            in mensagem
+        )
+        assert "com dois grupos, o teste é o Mann-Whitney; escreva `mannwhitney`" in mensagem
+
+
+class TestKruskalWallisNoBanco:
+    @pytest.mark.parametrize(
+        ("variavel", "qui", "gl", "p", "grupos"), KRUSKAL_DO_R, ids=[v for v, *_ in KRUSKAL_DO_R]
+    )
+    def test_o_kruskal_test_do_r(self, variavel, qui, gl, p, grupos):
+        comparacao = _grupos(((variavel, "escolaridade", "kruskal"),))
+        comparada = comparacao.variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == KRUSKAL_WALLIS
+        assert resultado.estatistica == pytest.approx(qui, rel=1e-12)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert [g.n for g in comparada.grupos] == [grupo[0] for grupo in grupos]
+        _, *linhas = comparacao.tabela_de(K_GRUPOS).linhas
+        assert [linha[3] for linha in linhas] == [
+            _quartis_conferidos(g.resumo, *do_r[1:])
+            for g, do_r in zip(comparada.grupos, grupos, strict=True)
+        ]
+
+    def test_o_kruskal_escrito_contra_a_regra(self):
+        """
+        A frase da escolha, e um aviso só — o de contra a regra: os avisos do intervalo
+        são do Wilcoxon e do Mann-Whitney, e um teste sem intervalo não é um intervalo
+        que falta.
+        """
+        comparacao = _grupos((("nota", "escolaridade", "kruskal"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert (
+            "Kruskal-Wallis escrito na ficha (χ² = 10,59; 2 gl), contra a regra — ela "
+            "escolheria ANOVA de Welch: o Shapiro-Wilk não rejeita a normal em nenhum dos 3 "
+            "grupos"
+        ) in comparada.justificativa
+        (aviso,) = comparacao.avisos
+        assert aviso.startswith(
+            "`nota` por `escolaridade`: Kruskal-Wallis escrito na ficha, contra a regra"
+        )
+
+    def test_um_grupo_de_um_valor_vai_para_o_kruskal_wallis(self):
+        """
+        A normalidade não se verifica no grupo de um valor, e o Kruskal-Wallis, como no
+        R, aceita o grupo — `kruskal.test(list(30, c(24.1, 27.3, 22.8), c(26.5, 29.9,
+        31.2)))`: qui-quadrado = 3,286, 2 gl, p = 0,1934. A ANOVA de Welch, a paramétrica
+        da regra, pediria dois valores em cada grupo.
+        """
+        quadro, linhas = _tres([30.0], [24.1, 27.3, 22.8], [26.5, 29.9, 31.2])
+        comparada = _grupos((("y", "g"),), quadro, linhas).variaveis[0]
+        assert comparada.metodo == KRUSKAL_WALLIS
+        assert comparada.resultado.estatistica == pytest.approx(3.2857142857142847, rel=1e-12)
+        assert comparada.resultado.p == pytest.approx(0.19342660460039263, rel=1e-12)
+
+
+class TestFriedmanNoBanco:
+    @pytest.mark.parametrize(
+        ("base", "n", "qui", "gl", "p", "medidas"),
+        FRIEDMAN_DO_R,
+        ids=[base for base, *_ in FRIEDMAN_DO_R],
+    )
+    def test_o_friedman_test_do_r(self, base, n, qui, gl, p, medidas):
+        """
+        Com `metodo: friedman`, o Friedman sai nas três bases — e no `peso`, em que a
+        ANOVA não pode, ele dá o qui-quadrado mais alto que existe, n(k − 1) = 80.
+        """
+        nomes = [f"{base}_{j}" for j in range(3)]
+        comparacao = _repetidas((("repetidas", nomes, "friedman"),))
+        comparada = comparacao.variaveis[0]
+        resultado = comparada.resultado
+        assert resultado.metodo == FRIEDMAN
+        assert comparada.validos == n
+        assert resultado.estatistica == pytest.approx(qui, rel=1e-12)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert [linha[2] for linha in comparacao.tabela_de(REPETIDAS).linhas] == [
+            _quartis_conferidos(medida.resumo, *do_r)
+            for medida, do_r in zip(comparada.grupos, medidas, strict=True)
+        ]
+
+    def test_a_anova_que_nao_pode_ensina_o_friedman(self):
+        """
+        O peso é normal em cada medida, e a regra escolhe a ANOVA — que não pode: cada
+        caso ganha o mesmo quilo. O aviso ensina a escrever o Friedman.
+        """
+        comparacao = _repetidas((("repetidas", ["peso_0", "peso_1", "peso_2"]),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.celula_do_teste == "não testado: as medidas não variam dentro dos casos"
+        assert any(
+            "O Friedman, que olha só a ordem das medidas dentro de cada caso, roda com o "
+            "método escrito no item: `{repetidas: [peso_0, peso_1, peso_2], metodo: "
+            "friedman}`." in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_cada_caso_com_o_mesmo_valor_em_todas_as_medidas(self):
+        """Não há o que ordenar: o qui-quadrado é 0/0, o R devolve `NaN`, e aqui, sem teste."""
+        quadro = bancos.para_comparar_repetidas().assign(
+            pas_1=lambda q: q["pas_0"], pas_2=lambda q: q["pas_0"]
+        )
+        comparacao = _repetidas((("repetidas", ["pas_0", "pas_1", "pas_2"], "friedman"),), quadro)
+        comparada = comparacao.variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: cada caso tem o mesmo valor em todas as medidas"
+        )
+        assert any("o qui-quadrado de Friedman é 0/0" in aviso for aviso in comparacao.avisos)
+
+    def test_o_friedman_escrito_contra_a_regra(self):
+        """A frase da escolha, e só o aviso de contra a regra — como no Kruskal-Wallis."""
+        comparacao = _repetidas((("repetidas", ["pas_0", "pas_1", "pas_2"], "friedman"),))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert (
+            "Friedman escrito na ficha (χ² = 40,01; 2 gl), contra a regra — ela escolheria "
+            "ANOVA de medidas repetidas"
+        ) in comparada.justificativa
+        (aviso,) = comparacao.avisos
+        assert "Friedman escrito na ficha, contra a regra" in aviso
+
+
+class TestPostosNoManifestoENoDocumento:
+    def test_os_detalhes_do_mann_whitney(self):
+        comparacao = _grupos((("renda", "sexo"),))
+        (renda,) = montar_manifesto(comparacao, DICIONARIO_DOS_GRUPOS).itens[0].detalhes[
+            DOIS_GRUPOS
+        ]
+        assert (renda["teste"], renda["teste_da_regra"], renda["exato"]) == (
+            MANN_WHITNEY,
+            MANN_WHITNEY,
+            True,
+        )
+        assert renda["estatistica"] == {"nome": "W", "valor": 331.0, "gl": []}
+        assert renda["estimativa"] == {"nome": "diferença de locação", "valor": -921.57}
+        assert renda["ic_95"] == [-2414.48, 406.97]
+        assert renda["calculo_do_p"] == "exato"
+        # A mediana e os quartis de cada grupo — os da célula —, que a descritiva não
+        # tem, ao lado da média e do desvio, que a célula não mostra.
+        feminino = renda["por_grupo"][0]
+        assert (feminino["mediana"], feminino["q1"], feminino["q3"]) == (
+            2982.625,
+            1774.6175,
+            5013.5425,
+        )
+        assert (feminino["media"], feminino["desvio"]) == (
+            pytest.approx(comparacao.variaveis[0].grupos[0].resumo["media"], abs=1e-6),
+            pytest.approx(comparacao.variaveis[0].grupos[0].resumo["desvio"], abs=1e-6),
+        )
+
+    def test_a_mediana_da_uma_amostra_e_das_medidas_no_manifesto(self):
+        quadro, linhas = _uma("a", [1.2, 3.4, 2.2, 5.1])
+        comparacao = _comparar(quadro, linhas, (("a", 0, "wilcoxon"),))
+        (detalhe,) = montar_manifesto(comparacao, linhas).itens[0].detalhes[UMA_AMOSTRA]
+        assert (detalhe["mediana"], detalhe["q1"], detalhe["q3"]) == (2.8, 1.95, 3.825)
+        comparacao = _repetidas((("repetidas", ["dor_0", "dor_1", "dor_2"]),))
+        (dor,) = montar_manifesto(comparacao, DICIONARIO_DAS_REPETIDAS).itens[0].detalhes[
+            REPETIDAS
+        ]
+        assert [(m["mediana"], m["q1"], m["q3"]) for m in dor["por_medida"]] == [
+            (1, 0, 1.25), (0, 0, 1), (0, 0, 1),
+        ]
+
+    def test_o_relatorio_le_as_tabelas_dos_postos(self, projeto_com_rodada):
+        """
+        Pelo disco, com o banco dos grupos: o Mann-Whitney e o Kruskal-Wallis chegam à
+        seção com a mediana nas células e o cabeçalho que diz isso, sem alerta — e o
+        `relatorio.py` não sabe que eles existem.
+        """
+        from flatcap.relatorio import preparar_relatorio
+
+        raiz = projeto_com_rodada(bancos.para_comparar_grupos())
+        acrescentar_a_ficha(
+            raiz, "comparacao:\n  - [renda, sexo]\n  - [renda, escolaridade]\n"
+        )
+        executar_comparacao(preparar_comparacao(raiz, agora=AGORA))
+        relatorio = preparar_relatorio(raiz, agora=AGORA).relatorio
+        assert relatorio.alertas == ()
+        secao = next(s for s in relatorio.secoes if s.rotulo == "Comparação")
+        dois, k = secao.tabelas
+        assert (dois.colunas[3], k.colunas[3]) == (COLUNA_DA_MEDIANA, COLUNA_DA_MEDIANA)
+        assert dois.linhas[0][5] == MANN_WHITNEY
+        assert dois.linhas[1][3] == "2982,62 [1774,62 a 5013,54]"
+        assert k.linhas[0][4] == KRUSKAL_WALLIS
 
 
 # ── Entre dois grupos: o manifesto ──────────────────────────────────────────
@@ -2001,10 +2811,16 @@ class TestManifestoEntreGrupos:
 
     def test_as_regras_de_dois_grupos(self):
         regras = montar_manifesto(_grupos((("imc", "sexo"),)), DICIONARIO_DOS_GRUPOS).regras
-        assert "t de Welch" in regras["escolha_do_teste"][DOIS_GRUPOS]
-        assert "O Mann-Whitney ainda não está" in regras["escolha_do_teste"][DOIS_GRUPOS]
+        assert regras["escolha_do_teste"][DOIS_GRUPOS] == (
+            "t de Welch se o Shapiro-Wilk não rejeita a normal (p ≥ 0.05) em nenhum dos dois "
+            "grupos; senão Mann-Whitney. O t de Student roda quando está escrito no item; o "
+            "método escrito na ficha tem precedência."
+        )
         assert "var.equal = TRUE" in regras["t_de_student"]
         assert "Welch-Satterthwaite" in regras["t_de_welch"]
+        assert "não é a diferença das medianas" in regras["mann_whitney"]
+        assert "kruskal.test do R" in regras["kruskal_wallis"]
+        assert "friedman.test do R" in regras["friedman"]
         assert regras["minimo"] == {
             "t_uma_amostra": 2,
             "t_de_welch": "2 em cada grupo",
@@ -2012,6 +2828,10 @@ class TestManifestoEntreGrupos:
             "anova": "2 em cada grupo",
             "anova_de_welch": "2 em cada grupo",
             "anova_de_medidas_repetidas": "3 medidas e 2 casos com todas elas",
+            "wilcoxon": 2,
+            "mann_whitney": "1 em cada grupo",
+            "kruskal_wallis": "1 em cada grupo",
+            "friedman": "3 medidas e 2 casos com todas elas",
         }
 
 
