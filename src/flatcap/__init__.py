@@ -21,7 +21,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
-    comparacao.py  compara médias: contra uma referência, entre grupos e entre medidas
+    comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
@@ -435,6 +435,53 @@ para quem instala o FlatCap com o `pipx` ou o `uv` e roda o comando de qualquer 
 
 **A abertura.** `LICENSE` com a GPL-3.0, `NOTICE.md` com os trechos derivados do R, o
 cabeçalho SPDX em todo arquivo de código, e o `flatcap --version` dizendo a licença.
+
+## 1.14.0 — os testes de postos
+
+**Onde a normal não se sustenta, a comparação passa a ter teste.** O Wilcoxon contra uma
+referência, o Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou mais e o
+Friedman nas medidas repetidas — os quatro que a regra já nomeava desde a 1.7.0, e que
+deixavam a linha sem teste. A regra não mudou: o Shapiro-Wilk em cada vetor do
+delineamento, o paramétrico quando ele não rejeita, o de postos quando rejeita ou não pode
+ser verificado, e o método escrito no item por cima dos dois — `wilcoxon`, `mannwhitney`,
+`kruskal`, `metodo: friedman`.
+
+**Os quatro são os do R, com a escolha do R escrita.** O `wilcox.test` decide o p exato com
+menos de 50 valores, sem empate e sem zero, e a aproximação normal com as correções de
+empate e de continuidade nos outros casos; o `scipy` decide por outro critério, e por isso
+a aritmética do Wilcoxon e do Mann-Whitney está no `hipoteses.py` — as distribuições exatas
+contadas em inteiros, servindo ao p e ao intervalo. O Kruskal-Wallis é o `kruskal` do
+`scipy`, igual ao do R; o Friedman é escrito, como a ANOVA, porque o `scipy` recusa duas
+medidas, que o R aceita.
+
+**O Wilcoxon e o Mann-Whitney saem com a estimativa de Hodges-Lehmann e o intervalo de 95%
+dela** — o `conf.int = TRUE` do R: a pseudomediana na uma amostra, a diferença de locação
+entre dois grupos, que não é a diferença das medianas. No caminho aproximado, o R acha os
+limites com o `uniroot`, e ele está transcrito — o `R_zeroin2` —, para os limites saírem
+os do R, e não outros a menos de 1e-4 deles. Com poucos valores, o intervalo de 95% pode
+não existir na distribuição exata, e o menor p possível pode passar de 0,05: os dois saem
+com aviso, e o intervalo que não chega a 95% fica fora da tabela.
+
+**O resumo, linha a linha.** `média (DP)` nas linhas do t e da ANOVA, `mediana [Q1 a Q3]`
+nas dos testes de postos, como o `compareGroups` — o cabeçalho diz o que a coluna tem, e
+uma tabela só de paramétricos sai como antes. O mesmo no intervalo da uma amostra (`IC 95%
+da média`, `da pseudomediana`, ou `IC 95%` quando a tabela tem os dois) e na diferença
+entre dois grupos: `diferença de locação (IC 95%)` no Mann-Whitney, porque o documento não
+leva as notas do `.csv`, e a de locação, ao lado da mediana de cada grupo, seria lida como
+a diferença das duas. O manifesto guarda as duas formas do resumo de cada linha, de cada
+grupo e de cada medida.
+
+**Cada teste com a sua barreira.** O Friedman roda onde a ANOVA de medidas repetidas não
+pode — cada caso mudando o mesmo tanto entre as medidas —, e o aviso da ANOVA ensina a
+escrevê-lo; e recusa o caso em que cada caso tem o mesmo valor em todas as medidas, onde o
+R devolve `NaN`.
+
+**Os nomes.** `wilcoxon` é o `wilcox.test` do R: o do posto sinalizado contra uma
+referência, e o Mann-Whitney entre dois grupos. O `signed rank` escrito por extenso recusa,
+em vez de levar ao Mann-Whitney quem pediu o posto sinalizado; as outras grafias dos livros
+— `U de Mann-Whitney`, `Wilcoxon rank sum`, `Kruskal-Wallis` — valem.
+
+O `relatorio.py` não mudou uma linha.
 """
 
-__version__ = "1.13.1"
+__version__ = "1.14.0"
