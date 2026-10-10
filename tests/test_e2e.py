@@ -27,7 +27,7 @@ import pytest
 
 import bancos
 import servidor_falso
-from conftest import acrescentar_a_ficha, escrever_analises
+from conftest import acrescentar_a_ficha, escrever_analises, marcar_numericas
 from servidor_falso import ERRO_FIELDS_INDEXADOS
 
 pytestmark = pytest.mark.e2e
@@ -490,10 +490,14 @@ class TestFluxoCompleto:
             acrescentar_a_ficha(
                 raiz,
                 "comparacao:\n  - repetidas: [pas_0, pas_1, pas_2]\n"
-                "  - repetidas: [peso_0, peso_1, peso_2]\n",
+                "  - repetidas: [peso_0, peso_1, peso_2]\n"
+                "  - repetidas: [dor_0, dor_1, dor_2]\n",
             )
+            resultado = flatcap("perfil", "40", "--sim", env=env)
+            assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+            # O `perfil` propõe a dor de 0 a 4 como código, e a reunião a marca escala.
+            marcar_numericas(raiz, "dor_0", "dor_1", "dor_2")
             for comando in (
-                ("perfil", "40", "--sim"),
                 ("descritiva", "40", "--sim"),
                 ("comparacao", "40", "--sim"),
                 ("relatorio", "40", "--sim"),
@@ -507,11 +511,17 @@ class TestFluxoCompleto:
             for linha in csv.read_text(encoding="utf-8-sig").splitlines()
             if linha and not linha.startswith("#")
         ]
-        assert do_csv[0] == ["medida", "n", "média (DP)", "teste", "p-valor"]
+        # A dor rejeita a normal e vai para o Friedman: a tabela mistura a média e a
+        # mediana, e o cabeçalho diz as duas — no `.csv` e, letra por letra, no `.docx`.
+        assert do_csv[0] == [
+            "medida", "n", "média (DP) ou mediana [Q1 a Q3]", "teste", "p-valor",
+        ]
         assert [linha[3] for linha in do_csv[1:]] == [
             "ANOVA de medidas repetidas", "", "",
             "não testado: as medidas não variam dentro dos casos", "", "",
+            "Friedman", "", "",
         ]
+        assert [linha[2] for linha in do_csv[7:]] == ["1 [0 a 1,25]", "0 [0 a 1]", "0 [0 a 1]"]
         documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
         quadro = next(
             t for t in documento.tables
