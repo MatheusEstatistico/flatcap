@@ -28,7 +28,13 @@ import pytest
 from typer.testing import CliRunner
 
 import bancos
-from conftest import MATRICULA, RECORD_ID, acrescentar_a_ficha, escrever_analises
+from conftest import (
+    MATRICULA,
+    RECORD_ID,
+    acrescentar_a_ficha,
+    escrever_analises,
+    marcar_numericas,
+)
 from flatcap import __version__
 from flatcap.cli import app
 from flatcap.projeto import (
@@ -748,19 +754,66 @@ class TestComparacao:
         assert resultado.exit_code == 1
         assert "a média de um código não é uma média" in _sem_moldura(resultado)
 
-    def test_a_linha_sem_teste_e_o_t_contra_a_regra_aparecem_na_simulacao(
+    def test_o_wilcoxon_e_o_t_contra_a_regra_aparecem_na_simulacao(
         self, rodar, projeto_com_rodada
     ):
+        """
+        A renda rejeita a normal: a regra vai para o Wilcoxon, e o t escrito no item
+        roda contra ela, com a frase que diz o que ela faria.
+        """
         raiz = projeto_com_rodada(bancos.para_comparar())
         acrescentar_a_ficha(raiz, "comparacao:\n  - [renda, 2500]\n  - [renda, 3000, t]\n")
         saida = _saida(rodar("comparacao", RECORD_ID))
         assert (
-            "o Shapiro-Wilk rejeita a normal (p < 0,001) → Wilcoxon, que ainda não está "
-            "no FlatCap: a linha sai sem teste."
+            "o Shapiro-Wilk rejeita a normal (p < 0,001) → Wilcoxon (V = 1080; p aproximado "
+            "pela normal, com correção de continuidade, porque há 50 valores ou mais)."
         ) in saida
         assert "contra a regra — ela escolheria Wilcoxon" in saida
-        assert "1 item sem teste" in saida
-        assert "1 com o método escrito na ficha" in saida
+        assert "sem teste" not in saida
+        assert "2 testes; 1 com o método escrito na ficha" in saida
+
+    def test_os_testes_de_postos_escritos_entre_grupos(self, rodar, projeto_com_rodada):
+        """
+        O Mann-Whitney e o Kruskal-Wallis escritos no item: a simulação diz o W e o
+        qui-quadrado, e com `--sim` as duas tabelas saem com a mediana e os quartis.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(
+            raiz,
+            "comparacao:\n  - [imc, sexo, mannwhitney]\n  - [idade, escolaridade, kruskal]\n",
+        )
+        saida = _saida(rodar("comparacao", RECORD_ID))
+        assert "Mann-Whitney escrito na ficha (W =" in saida
+        assert "Kruskal-Wallis escrito na ficha (χ² =" in saida
+        assert "2 testes; 2 com o método escrito na ficha" in saida
+        assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        for nome in ("dois_grupos.csv", "k_grupos.csv"):
+            cabecalho = next(
+                linha
+                for linha in (pasta / nome).read_text(encoding="utf-8-sig").splitlines()
+                if linha and not linha.startswith("#")
+            )
+            assert ";mediana [Q1 a Q3];" in cabecalho
+
+    def test_o_friedman_pela_regra_e_escrito_nas_repetidas(self, rodar, projeto_com_rodada):
+        """
+        A dor de 0 a 4 chega do `perfil` como código; marcada `numerica` na reunião,
+        ela rejeita a normal e vai para o Friedman pela regra. O peso, em que a ANOVA
+        não pode, vai pelo Friedman escrito no item.
+        """
+        raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
+        marcar_numericas(raiz, "dor_0", "dor_1", "dor_2")
+        acrescentar_a_ficha(
+            raiz,
+            "comparacao:\n  - repetidas: [dor_0, dor_1, dor_2]\n"
+            "  - repetidas: [peso_0, peso_1, peso_2]\n    metodo: friedman\n",
+        )
+        saida = _saida(rodar("comparacao", RECORD_ID))
+        assert "→ Friedman (χ² = 2,08; 2 gl)." in saida
+        assert "Friedman escrito na ficha (χ² = 80; 2 gl)" in saida
+        assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
+        assert (raiz / PASTA_ANALISES / PASTA_COMPARACAO / "repetidas.csv").is_file()
 
     def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()

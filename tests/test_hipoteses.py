@@ -14,19 +14,31 @@ e independentes dele:
   `aov(y ~ t + Error(id / t))` e o ε de Greenhouse-Geisser do `anova.mlm`, em
   `REFERENCIAS_DO_R_REPETIDAS` — a estatística, os graus de
   liberdade, o p, os dois limites do intervalo e a estimativa, quando há. O
-  `PlantGrowth` e o `InsectSprays` são os bancos dos exemplos da documentação do R;
+  `PlantGrowth` e o `InsectSprays` são os bancos dos exemplos da documentação do R.
+  Os testes de postos, com `wilcox.test(x, mu = mu, conf.int = TRUE)`,
+  `wilcox.test(x, y, conf.int = TRUE)`, `kruskal.test` e `friedman.test`, em
+  `REFERENCIAS_DO_R_WILCOXON`, `REFERENCIAS_DO_R_MANN_WHITNEY`,
+  `REFERENCIAS_DO_R_KRUSKAL` e `REFERENCIAS_DO_R_FRIEDMAN`, com dezessete algarismos —
+  o intervalo e a estimativa inclusive, e o nível do intervalo quando o R o baixa;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
   `sleep` do R. O t pareado que a documentação imprime — t = 4,0621, 9 gl,
   p = 0,002833 — é o t de uma amostra sobre as diferenças, que é a razão de o motor
-  morar fora da análise;
+  morar fora da análise. E os exemplos das documentações do `wilcox.test`, do
+  `kruskal.test` e do `friedman.test`, de Hollander e Wolfe (1973);
 * as **fórmulas**, escritas aqui de novo com a biblioteca padrão: a média, o desvio e
-  o erro-padrão pelo `statistics`, e só o quantil e a cauda da t pelo `scipy`.
+  o erro-padrão pelo `statistics`, e só o quantil e a cauda da t pelo `scipy`. E a
+  **força bruta**: as distribuições exatas dos postos contadas permutação por
+  permutação, e a estimativa de Hodges-Lehmann pela definição;
+* o **`scipy`**, como conferência: o `wilcoxon` e o `mannwhitneyu` dão o p do R quando
+  recebem a escolha do R, e o `friedmanchisquare` dá o mesmo qui-quadrado.
 """
 
 from __future__ import annotations
 
+import itertools
 import math
 import statistics
+import sys
 from dataclasses import FrozenInstanceError
 
 import pytest
@@ -38,14 +50,23 @@ from flatcap.hipoteses import (
     ANOVA_DE_MEDIDAS_REPETIDAS,
     ANOVA_DE_WELCH,
     CONFIANCA,
+    FRIEDMAN,
+    KRUSKAL_WALLIS,
+    LIMITE_DO_EXATO,
+    MANN_WHITNEY,
     MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
     T_DE_WELCH,
+    WILCOXON,
     Resultado,
     anova_de_medidas_repetidas,
     anova_de_um_fator,
     anova_de_welch,
+    friedman,
+    kruskal_wallis,
+    mann_whitney,
+    medidas_iguais_em_cada_caso,
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_entre_medidas,
@@ -53,6 +74,7 @@ from flatcap.hipoteses import (
     t_de_student,
     t_de_welch,
     t_uma_amostra,
+    wilcoxon_uma_amostra,
 )
 
 # O `sleep` do R: o sono a mais, em horas, de dez pacientes com dois soníferos.
@@ -264,6 +286,197 @@ REFERENCIAS_DO_R_REPETIDAS = [
      1.4538577912254025, 0.019901211578070056),
     ("vinte", 130.61587708066605, 0.48050003558028331, 1.4415001067408499,
      2.0847458777942073e-13),
+]
+
+
+# ── Os testes de postos: os dados ────────────────────────────────────────────
+
+# O exemplo da documentação do `wilcox.test`: a escala de depressão de Hamilton antes e
+# depois de um tranquilizante, em nove pacientes (Hollander e Wolfe, 1973, p. 29).
+DEPRESSAO_X = [1.83, 0.50, 1.62, 2.48, 1.68, 1.88, 1.55, 3.06, 1.30]
+DEPRESSAO_Y = [0.878, 0.647, 0.598, 2.05, 1.06, 1.29, 1.06, 3.14, 1.29]
+
+
+def _irracionais(n: int, inicio: int = 1) -> list[float]:
+    """
+    Valores sem empate, gerados como no R: a parte fracionária de i vezes a razão áurea,
+    vezes dez, com seis casas. A rotação irracional não repete valor — é o que deixa o
+    caminho exato aberto até n = 49 e o fecha em 50 só pelo tamanho.
+    """
+    return [round((i * 0.6180339887498949) % 1 * 10, 6) for i in range(inicio, inicio + n)]
+
+
+# Os vetores de `REFERENCIAS_DO_R_WILCOXON`, com a referência de cada um. O `sono` tem um
+# zero e um empate; o `quarenta`, empates e um valor igual à referência; o `grande`, mil
+# valores; o `quarenta_e_nove` e o `cinquenta` são o limite do caminho exato; o `quatro`
+# não alcança o intervalo de 95%; os três de empates fazem o R dobrar o α do intervalo
+# aproximado até ele caber — uma vez no `trinca`, duas no `empates_poucos`, até passar de
+# 1 nos outros dois; o `zero_sem_empate` vai para a aproximação só pelo valor igual à
+# referência; e o `no_centro` tem o V no centro da distribuição, onde a cauda dobrada
+# passa de 1 e o R corta.
+UMA_AMOSTRA_DE_POSTOS: dict[str, tuple[list[float], float]] = {
+    "depressao": ([a - b for a, b in zip(DEPRESSAO_X, DEPRESSAO_Y, strict=True)], 0),
+    "imc15": (_dados("imc15"), 25),
+    "sono": (_dados("sleep_dif"), 0),
+    "quarenta": (_dados("quarenta"), 55),
+    "grande": (_dados("grande"), 148),
+    "quarenta_e_nove": (_irracionais(49), 5),
+    "cinquenta": (_irracionais(50), 5),
+    "quatro": ([1.2, 3.4, 2.2, 5.1], 0),
+    "cinco": ([1.2, 3.4, 2.2, 5.1, -0.7], 0),
+    "empates_poucos": ([1.0, 2.0, 2.0, 3.0], 0),
+    "empates_tres": ([1.0, 2.0, 2.0], 0),
+    "zero_e_empate": ([0.0, 1.0, 2.0, 2.0], 0),
+    "trinca": ([3.0, 3.0, 3.0, 4.0, 1.0], 0),
+    "zero_sem_empate": ([25.0, 26.1, 23.4, 27.9, 28.3, 22.6, 29.9, 24.2], 25),
+    "no_centro": ([1.0, 2.0, 3.0, 4.0, -5.0, -6.0, -7.0, 8.0], 0),
+}
+
+# `wilcox.test(x, mu = mu, conf.int = TRUE)` no R 4.3.3:
+#
+#     (caso, V, p, intervalo, pseudomediana, nível do intervalo, p exato)
+REFERENCIAS_DO_R_WILCOXON = [
+    ("depressao", 40, 0.0390625, (0.010000000000000009, 0.78600000000000003),
+     0.46000000000000008, 0.94999999999999996, True),
+    ("imc15", 70, 0.59948730468750011, (23.699999999999999, 27.5), 25.524999999999999,
+     0.94999999999999996, True),
+    ("sono", 45, 0.0090906980159250559, (1.0500179906645428, 2.9499207995407808),
+     1.4000208422698908, 0.94999999999999996, False),
+    ("quarenta", 405.5, 0.83415676157638485, (54.124971776907202, 56.125073797247353),
+     55.124964247527465, 0.94999999999999996, False),
+    ("grande", 268860, 0.036178756251472863, (148.14996384845051, 151.79994860273732),
+     149.95009987422648, 0.94999999999999996, False),
+    ("quarenta_e_nove", 590, 0.82830691812031543, (4.0576474999999999, 5.7952684999999997),
+     4.8935690000000003, 0.94999999999999996, True),
+    ("cinquenta", 635, 0.98459655289653825, (4.1234499896960068, 5.861089624506068),
+     4.9594214090413296, 0.94999999999999996, False),
+    ("quatro", 10, 0.125, (1.2, 5.0999999999999996), 2.9749999999999996, 0.88, True),
+    ("cinco", 14, 0.125, (-0.69999999999999996, 5.0999999999999996), 2.2000000000000002,
+     0.94999999999999996, True),
+    ("empates_poucos", 10, 0.097512538178109592, (1.4999754447981466, 2.5000245552018527),
+     2, 0.79999999999999982, False),
+    ("empates_tres", 6, 0.17356816655592155, (2, 2), 1.5857864376269051, 0, False),
+    ("zero_e_empate", 6, 0.17356816655592155, (2, 2), 1.5857864376269051, 0, False),
+    ("trinca", 15, 0.054474035106195577, (1.9999422942695482, 3.5000494567817499),
+     2.9999467856054207, 0.89999999999999991, False),
+    ("zero_sem_empate", 20, 0.35254213749971297, (23.000031910335082, 29.099999499036411),
+     26.069609142576144, 0.94999999999999996, False),
+    ("no_centro", 18, 1, (-6, 5), 0, 0.94999999999999996, True),
+]
+
+
+# Os pares de `REFERENCIAS_DO_R_MANN_WHITNEY`. O `documentacao` é o exemplo do
+# `wilcox.test`; o `sono` tem empates; o `um_so` e o `dois_e_tres` não alcançam o
+# intervalo de 95%; o `um_contra_59` é o caso extremo que o código do R cita, em que o
+# limite é o próprio extremo; o `quarenta_e_nove` e o `cinquenta`, o limite do exato; e o
+# `no_centro` tem o W no centro, onde a cauda dobrada passa de 1 e o R corta.
+DUAS_DE_POSTOS: dict[str, tuple[list[float], list[float]]] = {
+    "documentacao": (
+        [0.80, 0.83, 1.89, 1.04, 1.45, 1.38, 1.91, 1.64, 0.73, 1.46],
+        [1.15, 0.88, 0.90, 0.74, 1.21],
+    ),
+    "grupos": DUAS_AMOSTRAS["grupos"],
+    "sono": DUAS_AMOSTRAS["sleep"],
+    "desiguais": DUAS_AMOSTRAS["desiguais"],
+    "um_so": DUAS_AMOSTRAS["um_so"],
+    "dois_e_tres": ([1.5, 2.7], [3.1, 4.4, 2.0]),
+    "um_contra_59": ([1.0], [float(v) for v in range(2, 61)]),
+    "quarenta_e_nove": (_irracionais(49), [v + 0.7 for v in _irracionais(49, 200)]),
+    "cinquenta": (_irracionais(50), [v + 0.7 for v in _irracionais(49, 200)]),
+    "no_centro": ([1.0, 4.0, 5.0, 8.0], [2.0, 3.0, 6.0, 7.0]),
+}
+
+# `wilcox.test(x, y, conf.int = TRUE)` no R 4.3.3:
+#
+#     (caso, W, p, intervalo, diferença de locação, nível do intervalo, p exato)
+REFERENCIAS_DO_R_MANN_WHITNEY = [
+    ("documentacao", 35, 0.2544122544122544, (-0.15000000000000002, 0.7599999999999999),
+     0.30500000000000005, 0.94999999999999996, True),
+    ("grupos", 24, 0.016899509159571079, (-6.1999999999999993, -0.80000000000000071),
+     -3.3000000000000007, 0.94999999999999996, True),
+    ("sono", 25.5, 0.069327575433626581, (-3.5999470910369937, 0.099953559880887527),
+     -1.3463884924878704, 0.94999999999999996, False),
+    ("desiguais", 0, 0.0040404040404040404, (-28.999999999999996, -9), -16.899999999999999,
+     0.94999999999999996, True),
+    ("um_so", 7, 0.92307692307692291, (-5.2000000000000028, 5.1999999999999993),
+     0.15000000000000036, 0.84615384615384615, True),
+    ("dois_e_tres", 1, 0.40000000000000002, (-2.9000000000000004, 0.70000000000000018),
+     -1.05, 0.80000000000000004, True),
+    ("um_contra_59", 0, 0.094022875902539105, (-59, -1), -30, 0.94999999999999996, False),
+    ("quarenta_e_nove", 1050, 0.28791601404352413, (-1.833755, 0.65847999999999995),
+     -0.58763799999999833, 0.94999999999999996, True),
+    ("cinquenta", 1092, 0.35376724854756586, (-1.7022115387818326, 0.65853209440451477),
+     -0.58761110383173853, 0.94999999999999996, False),
+    ("no_centro", 8, 1, (-6, 6), 0, 0.94999999999999996, True),
+]
+
+
+# Os grupos de `REFERENCIAS_DO_R_KRUSKAL`: o exemplo da documentação do `kruskal.test` —
+# a eficiência mucociliar de sujeitos normais, com doença obstrutiva e com asbestose
+# (Hollander e Wolfe, 1973, p. 116) —, o `PlantGrowth` e o `InsectSprays`, com empates,
+# um grupo de um valor só, que o R aceita, e dois grupos.
+KRUSKAL: dict[str, list[list[float]]] = {
+    "documentacao": [
+        [2.9, 3.0, 2.5, 2.6, 3.2],
+        [3.8, 2.7, 4.0, 2.4],
+        [2.8, 3.4, 3.7, 2.2, 2.0],
+    ],
+    "plantas": VARIOS_GRUPOS["plantas"],
+    "insetos": VARIOS_GRUPOS["insetos"],
+    "um_valor": [[30.0], [1.0, 2.0], [3.0, 4.0]],
+    "dois": [[24.1, 27.3, 22.8, 30.2, 25.5], [26.5, 29.9, 31.2, 24.8, 33.0, 28.1]],
+}
+
+# `kruskal.test(lista)` no R 4.3.3:
+#
+#     (caso, qui-quadrado, gl, p)
+REFERENCIAS_DO_R_KRUSKAL = [
+    ("documentacao", 0.77142857142857224, 2, 0.67996477357889362),
+    ("plantas", 7.9882287494437154, 2, 0.01842375573147197),
+    ("insetos", 54.691344622371446, 5, 1.5108444394185103e-10),
+    ("um_valor", 3.6000000000000014, 2, 0.16529888822158642),
+    ("dois", 2.1333333333333329, 1, 0.14412703481601624),
+]
+
+
+# O exemplo da documentação do `friedman.test`: o tempo de três métodos de contornar a
+# base no beisebol, em 22 jogadores (Hollander e Wolfe, 1973, p. 140), com empates
+# dentro dos casos. As linhas são os jogadores.
+CONTORNO_DA_BASE = [
+    [5.40, 5.50, 5.55], [5.85, 5.70, 5.75], [5.20, 5.60, 5.50], [5.55, 5.50, 5.40],
+    [5.90, 5.85, 5.70], [5.45, 5.55, 5.60], [5.40, 5.40, 5.35], [5.45, 5.50, 5.35],
+    [5.25, 5.15, 5.00], [5.85, 5.80, 5.70], [5.25, 5.20, 5.10], [5.65, 5.55, 5.45],
+    [5.60, 5.35, 5.45], [5.05, 5.00, 4.95], [5.50, 5.50, 5.40], [5.45, 5.55, 5.50],
+    [5.55, 5.55, 5.35], [5.45, 5.50, 5.55], [5.50, 5.45, 5.25], [5.65, 5.60, 5.40],
+    [5.70, 5.65, 5.55], [6.30, 6.30, 6.25],
+]
+
+# Cada caso muda o mesmo tanto de uma medida para a seguinte: a ANOVA de medidas
+# repetidas fica sem variação de erro, e o Friedman tem os mesmos postos em todo caso.
+ADITIVAS = [[10.0, 12.0, 15.0, 11.0], [11.0, 13.0, 16.0, 12.0], [13.0, 15.0, 18.0, 14.0]]
+
+
+def _friedman(caso: str) -> list[list[float]]:
+    """As medidas de `REFERENCIAS_DO_R_FRIEDMAN`, uma lista por medida."""
+    if caso == "contorno_da_base":
+        return [[linha[j] for linha in CONTORNO_DA_BASE] for j in range(3)]
+    if caso == "aditivas":
+        return ADITIVAS
+    if caso == "duas_medidas":
+        return _medidas("pas")[:2]
+    return _medidas(caso)
+
+
+# `friedman.test(matriz)` no R 4.3.3, com os casos nas linhas:
+#
+#     (caso, qui-quadrado, gl, p)
+REFERENCIAS_DO_R_FRIEDMAN = [
+    ("pas", 16.800000000000001, 2, 0.00022486732417884819),
+    ("quatro", 28.079999999999998, 3, 3.4942815908612314e-06),
+    ("duas_medidas", 10, 1, 0.0015654022580025519),
+    ("contorno_da_base", 11.142857142857142, 2, 0.003805040775511363),
+    ("aditivas", 8, 2, 0.018315638888734179),
+    ("vinte", 59.223350253807105, 3, 8.6130169000145924e-13),
 ]
 
 
@@ -497,6 +710,217 @@ class TestRepetidasDoR:
             assert 1 / (len(medidas) - 1) - 1e-12 <= epsilon <= 1 + 1e-12
 
 
+class TestWilcoxonDoR:
+    @pytest.mark.parametrize(
+        ("caso", "v", "p", "ic", "estimativa", "nivel", "exato"),
+        REFERENCIAS_DO_R_WILCOXON,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_WILCOXON],
+    )
+    def test_o_wilcox_test_do_r(self, caso, v, p, ic, estimativa, nivel, exato):
+        """
+        O V, o p, o caminho do p, a pseudomediana, o intervalo e o nível dele. No caminho
+        exato, o intervalo e a estimativa são médias de Walsh, e saem iguais ao R até o
+        último bit; no aproximado, a busca é o `uniroot` dele, e a diferença que sobra é
+        a do quantil da normal do `scipy`, que difere do `qnorm` em um ou dois bits.
+        """
+        x, mu = UMA_AMOSTRA_DE_POSTOS[caso]
+        resultado = wilcoxon_uma_amostra(x, mu)
+        assert resultado.estatistica == v
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert resultado.exato is exato
+        assert resultado.confianca_do_ic == pytest.approx(nivel, abs=1e-15)
+        if exato:
+            assert resultado.ic == ic
+            assert resultado.estimativa == estimativa
+        else:
+            assert resultado.ic == pytest.approx(ic, rel=1e-12)
+            assert resultado.estimativa == pytest.approx(estimativa, rel=1e-12)
+        assert resultado.referencia == mu
+
+    def test_o_exemplo_da_documentacao(self):
+        """
+        `wilcox.test(x, y, paired = TRUE, alternative = "greater")`: V = 40, p = 0,01953 —
+        o de uma amostra sobre as diferenças, com metade do p bilateral.
+        """
+        diferencas = [a - b for a, b in zip(DEPRESSAO_X, DEPRESSAO_Y, strict=True)]
+        resultado = wilcoxon_uma_amostra(diferencas, 0)
+        assert resultado.estatistica == 40
+        assert round(resultado.p / 2, 5) == 0.01953
+
+    def test_os_valores_iguais_a_referencia_saem_do_intervalo_tambem(self):
+        """
+        `wilcox.test(c(25, 27, 27, 27), mu = 25, conf.int = TRUE)`: sem o 25, os valores
+        são todos iguais, e o R devolve o p — V = 6, p = 0,1489 —, `NaN` no intervalo e o
+        ponto médio no lugar da pseudomediana. Aqui o intervalo e a estimativa saem
+        `None`: o ponto médio não é a pseudomediana, e não se imprime com o nome dela.
+        """
+        resultado = wilcoxon_uma_amostra([25.0, 27.0, 27.0, 27.0], 25)
+        assert resultado.estatistica == 6
+        assert resultado.p == pytest.approx(0.14891467317876567, rel=1e-12)
+        assert (resultado.ic, resultado.estimativa, resultado.confianca_do_ic) == (
+            None,
+            None,
+            None,
+        )
+
+    @pytest.mark.parametrize("caso", list(UMA_AMOSTRA_DE_POSTOS))
+    def test_o_wilcoxon_do_scipy_confere_com_a_escolha_do_r(self, caso):
+        """
+        O `wilcoxon` do `scipy` dá o p do R quando recebe a escolha do R — e só então: o
+        critério dele para o exato é outro, e ele não corrige a continuidade por padrão.
+        """
+        x, mu = UMA_AMOSTRA_DE_POSTOS[caso]
+        resultado = wilcoxon_uma_amostra(x, mu)
+        esperado = stats.wilcoxon(
+            [valor - mu for valor in x],
+            zero_method="wilcox",
+            correction=not resultado.exato,
+            method="exact" if resultado.exato else "approx",
+        )
+        assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
+
+
+class TestMannWhitneyDoR:
+    @pytest.mark.parametrize(
+        ("caso", "w", "p", "ic", "estimativa", "nivel", "exato"),
+        REFERENCIAS_DO_R_MANN_WHITNEY,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_MANN_WHITNEY],
+    )
+    def test_o_wilcox_test_do_r(self, caso, w, p, ic, estimativa, nivel, exato):
+        x, y = DUAS_DE_POSTOS[caso]
+        resultado = mann_whitney(x, y)
+        assert resultado.estatistica == w
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert resultado.exato is exato
+        assert resultado.confianca_do_ic == pytest.approx(nivel, abs=1e-15)
+        if exato:
+            assert resultado.ic == ic
+            assert resultado.estimativa == estimativa
+        else:
+            assert resultado.ic == pytest.approx(ic, rel=1e-12)
+            assert resultado.estimativa == pytest.approx(estimativa, rel=1e-12)
+        assert resultado.referencia == 0.0
+
+    def test_o_exemplo_da_documentacao(self):
+        """`wilcox.test(x, y, alternative = "g")`: W = 35, p = 0,1272."""
+        resultado = mann_whitney(*DUAS_DE_POSTOS["documentacao"])
+        assert resultado.estatistica == 35
+        assert round(resultado.p / 2, 4) == 0.1272
+
+    def test_dois_grupos_que_nao_variam_por_dentro(self):
+        """
+        `wilcox.test(c(5, 5, 5), c(6, 6, 6))`: W = 0, p = 0,04685 — o R calcula o p; com
+        `conf.int = TRUE` ele para com erro, porque todo valor empata com todo valor no
+        extremo da busca. Aqui o p sai, e o intervalo e a estimativa saem `None`.
+        """
+        resultado = mann_whitney([5.0, 5.0, 5.0], [6.0, 6.0, 6.0])
+        assert resultado.estatistica == 0
+        assert resultado.p == pytest.approx(0.046854177603873753, rel=1e-12)
+        assert (resultado.ic, resultado.estimativa, resultado.confianca_do_ic) == (
+            None,
+            None,
+            None,
+        )
+
+    @pytest.mark.parametrize("caso", list(DUAS_DE_POSTOS))
+    def test_o_mannwhitneyu_do_scipy_confere_com_a_escolha_do_r(self, caso):
+        """O U do primeiro grupo é o W do R, e o p é o mesmo com a escolha do R."""
+        x, y = DUAS_DE_POSTOS[caso]
+        resultado = mann_whitney(x, y)
+        esperado = stats.mannwhitneyu(
+            x,
+            y,
+            use_continuity=not resultado.exato,
+            method="exact" if resultado.exato else "asymptotic",
+        )
+        assert resultado.estatistica == float(esperado.statistic)
+        assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
+
+
+class TestKruskalWallisDoR:
+    @pytest.mark.parametrize(
+        ("caso", "qui", "gl", "p"),
+        REFERENCIAS_DO_R_KRUSKAL,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_KRUSKAL],
+    )
+    def test_o_kruskal_test_do_r(self, caso, qui, gl, p):
+        resultado = kruskal_wallis(KRUSKAL[caso])
+        assert resultado.estatistica == pytest.approx(qui, rel=1e-13)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+
+    def test_o_exemplo_da_documentacao(self):
+        """`kruskal.test(list(x, y, z))`: qui-quadrado = 0,77143, 2 gl, p = 0,68."""
+        resultado = kruskal_wallis(KRUSKAL["documentacao"])
+        assert round(resultado.estatistica, 5) == 0.77143
+        assert round(resultado.p, 2) == 0.68
+
+
+class TestFriedmanDoR:
+    @pytest.mark.parametrize(
+        ("caso", "qui", "gl", "p"),
+        REFERENCIAS_DO_R_FRIEDMAN,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_FRIEDMAN],
+    )
+    def test_o_friedman_test_do_r(self, caso, qui, gl, p):
+        resultado = friedman(_friedman(caso))
+        assert resultado.estatistica == pytest.approx(qui, rel=1e-13)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+
+    def test_o_exemplo_da_documentacao(self):
+        """`friedman.test(RoundingTimes)`: qui-quadrado = 11,143, 2 gl, p = 0,003805."""
+        resultado = friedman(_friedman("contorno_da_base"))
+        assert round(resultado.estatistica, 3) == 11.143
+        assert round(resultado.p, 6) == 0.003805
+
+    @pytest.mark.parametrize("caso", ["pas", "quatro", "contorno_da_base", "aditivas", "vinte"])
+    def test_o_friedmanchisquare_do_scipy_confere(self, caso):
+        """O mesmo qui-quadrado — o `scipy` só não aceita duas medidas, que o R aceita."""
+        medidas = _friedman(caso)
+        esperado = stats.friedmanchisquare(*medidas)
+        resultado = friedman(medidas)
+        assert resultado.estatistica == pytest.approx(float(esperado.statistic), rel=1e-12)
+        assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
+
+    def test_o_scipy_recusa_as_duas_medidas_que_o_r_aceita(self):
+        """É a razão de o Friedman estar escrito aqui, e não importado."""
+        with pytest.raises(ValueError):
+            stats.friedmanchisquare(*_friedman("duas_medidas"))
+        assert friedman(_friedman("duas_medidas")).gl == (1.0,)
+
+
+class TestRaizDoR:
+    """
+    O `uniroot` do R transcrito, conferido sozinho: `uniroot(f, c(a, b), tol = tol)$root`
+    no R 4.3.3, com dezessete algarismos, e a raiz daqui igual até o último bit — os
+    mesmos passos, as mesmas comparações.
+    """
+
+    def test_o_exemplo_de_forsythe_malcolm_e_moler(self):
+        """x³ − 2x − 5 entre 2 e 3, com a tolerância do `wilcox.test` e com uma apertada."""
+
+        def f(x):
+            return x * x * x - 2 * x - 5
+
+        assert hipoteses._raiz(f, 2.0, 3.0, f(2.0), f(3.0)) == 2.0945512665841388
+        assert (
+            hipoteses._raiz(f, 2.0, 3.0, f(2.0), f(3.0), tolerancia=1e-10)
+            == 2.0945514815361843
+        )
+
+    def test_o_cosseno(self):
+        def f(x):
+            return math.cos(x) - x
+
+        assert hipoteses._raiz(f, 0.0, 1.0, f(0.0), f(1.0)) == 0.73909105828536981
+
+    def test_a_raiz_num_extremo(self):
+        """O `R_zeroin2` devolve o extremo em que a função já é zero, sem procurar."""
+        assert hipoteses._raiz(lambda x: x, 0.0, 1.0, 0.0, 1.0) == 0.0
+        assert hipoteses._raiz(lambda x: x - 1, 0.0, 1.0, -1.0, 0.0) == 1.0
+
+
 # ── As fórmulas, escritas de novo ───────────────────────────────────────────
 
 
@@ -599,6 +1023,134 @@ class TestFormula:
         assert resultado.ic == pytest.approx(
             (diferenca - quantil * erro, diferenca + quantil * erro), rel=1e-12
         )
+
+
+class TestPostosPelaDefinicao:
+    """
+    As distribuições exatas e as estimativas pela definição, permutação por permutação,
+    em inteiros — sem a recursão do módulo, sem o R e sem o `scipy`.
+    """
+
+    @pytest.mark.parametrize("n", range(1, 13))
+    def test_a_distribuicao_do_posto_sinalizado(self, n):
+        """Cada um dos 2ⁿ sinais, e a soma dos postos dos positivos."""
+        contagens = [0] * (n * (n + 1) // 2 + 1)
+        for sinais in itertools.product((0, 1), repeat=n):
+            contagens[sum(posto * sinal for posto, sinal in enumerate(sinais, start=1))] += 1
+        assert hipoteses._contagens_do_posto_sinalizado(n) == tuple(contagens)
+
+    @pytest.mark.parametrize(("m", "n"), [(1, 1), (1, 4), (2, 3), (3, 3), (3, 5), (4, 6), (6, 6)])
+    def test_a_distribuicao_da_soma_dos_postos(self, m, n):
+        """Cada escolha dos m postos do primeiro grupo entre os m + n, e o W dela."""
+        contagens = [0] * (m * n + 1)
+        for escolhidos in itertools.combinations(range(1, m + n + 1), m):
+            contagens[sum(escolhidos) - m * (m + 1) // 2] += 1
+        assert hipoteses._contagens_da_soma_dos_postos(m, n) == tuple(contagens)
+        assert sum(contagens) == math.comb(m + n, m)
+
+    def test_o_quantil_e_o_menor_com_a_acumulada_ate_o_alvo_inclusive(self):
+        """
+        O `qsignrank` e o `qwilcox` do R: o menor q com P(S ≤ q) ≥ p — com o igual. Com
+        dois postos, S vai de 0 a 3, um jeito cada, e P(S ≤ 1) é ½ exato: o quantil de ½
+        é 1, e não 2. A folga de dez épsilons sai do p dentro da função — somada aqui, o
+        alvo fica em ½ exato.
+        """
+        contagens = hipoteses._contagens_do_posto_sinalizado(2)
+        assert contagens == (1, 1, 1, 1)
+        meio = 0.5 + 10 * sys.float_info.epsilon
+        assert hipoteses._quantil(contagens, 4, meio) == 1
+
+    def test_o_quantil_com_a_folga_do_r(self):
+        """
+        `qwilcox((1 - 0.95)/2, 1, 39)` é 0 no R: P(W ≤ 0) é 1/40, que em `double` dá o
+        próprio 0,025. Aqui a acumulada é a fração exata — um tico abaixo do `double`
+        0,025 —, e é a folga de dez épsilons do R que deixa o quantil igual ao dele. No
+        intervalo, o `qu == 0` vira 1 do mesmo jeito; o quantil é que precisa ser o do R.
+        """
+        contagens = hipoteses._contagens_da_soma_dos_postos(1, 39)
+        assert hipoteses._quantil(contagens, 40, (1 - 0.95) / 2) == 0
+        assert hipoteses._quantil(contagens, 40, 0.025) == 0
+
+    def test_o_p_exato_do_wilcoxon_pela_permutacao(self):
+        """
+        Os 2⁹ sinais trocados nas diferenças da depressão: o p é a fração dos que dão um
+        V tão longe do centro quanto o observado, dos dois lados.
+        """
+        diferencas = [a - b for a, b in zip(DEPRESSAO_X, DEPRESSAO_Y, strict=True)]
+        ordem = sorted(range(9), key=lambda i: abs(diferencas[i]))
+        postos = {i: posto for posto, i in enumerate(ordem, start=1)}
+        observado = sum(postos[i] for i in range(9) if diferencas[i] > 0)
+        centro = 9 * 10 / 4
+        distancia = abs(observado - centro)
+        extremos = sum(
+            1
+            for sinais in itertools.product((0, 1), repeat=9)
+            if abs(sum(postos[i] for i in range(9) if sinais[i]) - centro) >= distancia
+        )
+        assert wilcoxon_uma_amostra(diferencas, 0).p == pytest.approx(extremos / 2**9, rel=1e-15)
+
+    def test_a_pseudomediana_e_a_mediana_das_medias_de_walsh(self):
+        x = _dados("imc15")
+        walsh = [(a + b) / 2 for a, b in itertools.combinations_with_replacement(x, 2)]
+        assert wilcoxon_uma_amostra(x, 25).estimativa == statistics.median(walsh)
+
+    def test_a_diferenca_de_locacao_e_a_mediana_das_diferencas(self):
+        """E não a diferença das medianas dos dois grupos — que aqui é outro número."""
+        x, y = DUAS_DE_POSTOS["grupos"]
+        diferencas = [a - b for a in x for b in y]
+        resultado = mann_whitney(x, y)
+        assert resultado.estimativa == statistics.median(diferencas)
+        assert resultado.estimativa != statistics.median(x) - statistics.median(y)
+
+    def test_o_intervalo_exato_contem_a_estimativa_e_cobre_95(self):
+        """
+        Os limites são dois valores da lista ordenada, e o p da referência num limite é
+        o maior que o intervalo ainda deixa de fora: abaixo de 0,05, por pouco.
+        """
+        x = _dados("imc15")
+        resultado = wilcoxon_uma_amostra(x, 25)
+        baixo, alto = resultado.ic
+        walsh = sorted((a + b) / 2 for a, b in itertools.combinations_with_replacement(x, 2))
+        assert baixo in walsh and alto in walsh
+        assert baixo < resultado.estimativa < alto
+
+    def test_o_v_dos_dois_lados_soma_o_total(self):
+        """V de x − mu mais V de mu − x é n(n + 1)/2, e o p é o mesmo."""
+        x = _dados("imc15")
+        ida = wilcoxon_uma_amostra(x, 25)
+        volta = wilcoxon_uma_amostra([50 - valor for valor in x], 25)
+        assert ida.estatistica + volta.estatistica == 15 * 16 / 2
+        assert ida.p == pytest.approx(volta.p, rel=1e-15)
+
+    def test_trocar_os_grupos_troca_o_w_e_o_sinal(self):
+        """W vira n₁n₂ − W, a diferença troca de sinal, e o p não muda."""
+        x, y = DUAS_DE_POSTOS["grupos"]
+        ida, volta = mann_whitney(x, y), mann_whitney(y, x)
+        assert ida.estatistica + volta.estatistica == len(x) * len(y)
+        assert volta.estimativa == pytest.approx(-ida.estimativa, rel=1e-15)
+        assert volta.ic == pytest.approx((-ida.ic[1], -ida.ic[0]), rel=1e-15)
+        assert volta.p == pytest.approx(ida.p, rel=1e-15)
+
+    def test_o_kruskal_wallis_com_dois_grupos_e_o_z_do_mann_whitney_ao_quadrado(self):
+        """
+        Com dois grupos, o qui-quadrado de Kruskal-Wallis é o z do Mann-Whitney sem a
+        correção de continuidade, ao quadrado — conferido sem empates.
+        """
+        x, y = KRUSKAL["dois"]
+        n1, n2 = len(x), len(y)
+        w = mann_whitney(x, y).estatistica
+        z = (w - n1 * n2 / 2) / math.sqrt(n1 * n2 * (n1 + n2 + 1) / 12)
+        assert kruskal_wallis([x, y]).estatistica == pytest.approx(z**2, rel=1e-12)
+
+    def test_o_friedman_das_aditivas_e_o_maior_que_existe(self):
+        """
+        Todos os casos com os mesmos postos: o qui-quadrado é n(k − 1), o máximo — onde a
+        ANOVA de medidas repetidas fica sem variação de erro.
+        """
+        resultado = friedman(ADITIVAS)
+        assert resultado.estatistica == 4 * (3 - 1)
+        assert sem_variacao_entre_medidas(ADITIVAS)
+        assert not medidas_iguais_em_cada_caso(ADITIVAS)
 
 
 # ── O que ele recusa ────────────────────────────────────────────────────────
@@ -787,6 +1339,88 @@ class TestRecusas:
         assert not sem_variacao_em_duas([1.0], [1.0])
         assert not sem_variacao_em_duas([1.0], [1.0, 1.0], variancias_iguais=False)
 
+    def test_o_wilcoxon_sem_valor(self):
+        """O `not enough (non-missing) 'x' observations` do R."""
+        with pytest.raises(ValueError, match="pelo menos 1 valor"):
+            wilcoxon_uma_amostra([], 0)
+
+    def test_o_wilcoxon_com_um_valor_so_roda_como_no_r(self):
+        """`wilcox.test(30, mu = 25)`: V = 1, p = 1 — o R aceita, e aqui também."""
+        resultado = wilcoxon_uma_amostra([30.0], 25)
+        assert (resultado.estatistica, resultado.p, resultado.exato) == (1.0, 1.0, True)
+
+    def test_o_wilcoxon_com_todos_iguais_a_referencia(self):
+        """Sem diferença nenhuma, não há posto: o R devolve `NaN`, e aqui é recusa."""
+        with pytest.raises(ValueError, match="iguais à referência"):
+            wilcoxon_uma_amostra([25.0, 25.0, 25.0], 25)
+
+    def test_o_wilcoxon_com_valor_ausente_ou_referencia_infinita(self):
+        with pytest.raises(ValueError, match="ausente ou infinito"):
+            wilcoxon_uma_amostra([1.0, math.nan, 3.0], 0)
+        with pytest.raises(ValueError, match="número finito"):
+            wilcoxon_uma_amostra([1.0, 2.0, 3.0], math.inf)
+
+    def test_o_mann_whitney_com_um_grupo_vazio(self):
+        with pytest.raises(ValueError, match="pelo menos 1 valor em cada grupo"):
+            mann_whitney([], [1.0, 2.0])
+        with pytest.raises(ValueError, match="pelo menos 1 valor em cada grupo"):
+            mann_whitney([1.0, 2.0], [])
+
+    def test_o_kruskal_wallis_com_um_grupo_so(self):
+        """O `all observations are in the same group` do R."""
+        with pytest.raises(ValueError, match="pelo menos 2 grupos"):
+            kruskal_wallis([[1.0, 2.0, 3.0]])
+
+    def test_o_kruskal_wallis_com_um_grupo_vazio(self):
+        with pytest.raises(ValueError, match="pelo menos 1 valor em cada grupo"):
+            kruskal_wallis([[1.0, 2.0], [], [3.0]])
+
+    def test_o_kruskal_wallis_com_todos_os_valores_iguais(self):
+        """O R devolve `NaN`: os postos são todos o mesmo, e a correção dos empates é zero."""
+        with pytest.raises(ValueError, match="todos os valores são iguais"):
+            kruskal_wallis([[5.0, 5.0], [5.0], [5.0, 5.0, 5.0]])
+
+    def test_o_friedman_com_uma_medida(self):
+        with pytest.raises(ValueError, match="o Friedman precisa de pelo menos 2 medidas"):
+            friedman([[1.0, 2.0, 3.0]])
+
+    def test_o_friedman_com_um_caso_como_o_r(self):
+        """O `friedman.test` para com erro numa matriz de uma linha — aqui, com a frase."""
+        with pytest.raises(ValueError, match="pelo menos 2 casos"):
+            friedman([[1.0], [2.0], [3.0]])
+
+    def test_o_friedman_com_tamanhos_diferentes(self):
+        with pytest.raises(ValueError, match="os mesmos casos"):
+            friedman([[1.0, 2.0, 3.0], [1.0, 2.0], [4.0, 5.0, 6.0]])
+
+    def test_o_friedman_com_cada_caso_empatado_inteiro(self):
+        """
+        Cada caso com o mesmo valor nas três medidas — mesmo que os casos difiram entre
+        si: não há o que ordenar, o denominador é zero, e o R devolve `NaN`.
+        """
+        iguais = [[1.0, 5.0, 9.0], [1.0, 5.0, 9.0], [1.0, 5.0, 9.0]]
+        assert medidas_iguais_em_cada_caso(iguais)
+        with pytest.raises(ValueError, match="o mesmo valor em todas as medidas"):
+            friedman(iguais)
+
+    def test_um_caso_empatado_nao_basta(self):
+        """
+        Um caso empatado não ordena nada, e os outros ordenam: o Friedman roda — o
+        qui-quadrado é 4, como o do `friedman.test` sobre a mesma matriz.
+        """
+        medidas = [[1.0, 5.0, 2.0], [1.0, 6.0, 3.0], [1.0, 7.0, 4.0]]
+        assert not medidas_iguais_em_cada_caso(medidas)
+        assert friedman(medidas).estatistica == pytest.approx(4.0, rel=1e-15)
+
+    def test_as_perguntas_das_barreiras_respondem_com_um_caso_so(self):
+        """
+        Quem recusa o caso único é o teste, com a frase dele; as perguntas que vêm antes
+        respondem, para a barreira de quem chama ser a que o teste daria.
+        """
+        assert medidas_iguais_em_cada_caso([[5.0], [5.0], [5.0]])
+        assert not medidas_iguais_em_cada_caso([[5.0], [6.0], [7.0]])
+        assert not sem_variacao_entre_medidas([[5.0], [6.0], [7.0]])
+
 
 # ── O contrato ──────────────────────────────────────────────────────────────
 
@@ -851,6 +1485,62 @@ class TestContrato:
         assert resultado.metodo == T_DE_STUDENT
         assert resultado.nome_da_estimativa == "diferença de médias"
         assert resultado.calculo_do_p == "t de Student com n₁ + n₂ − 2 graus de liberdade"
+
+    def test_os_testes_de_postos_tem_a_forma_do_htest(self):
+        """
+        O nome da estatística é o do R — V, W, o qui-quadrado —, a estimativa tem o nome
+        dela, e o caminho do p está em `exato` e escrito em `calculo_do_p`.
+        """
+        wilcoxon = wilcoxon_uma_amostra(_dados("imc15"), 25)
+        assert (wilcoxon.metodo, wilcoxon.nome_da_estatistica) == (WILCOXON, "V")
+        assert wilcoxon.nome_da_estimativa == "pseudomediana"
+        assert (wilcoxon.exato, wilcoxon.calculo_do_p, wilcoxon.gl) == (True, "exato", ())
+        mann = mann_whitney(*DUAS_DE_POSTOS["grupos"])
+        assert (mann.metodo, mann.nome_da_estatistica) == (MANN_WHITNEY, "W")
+        assert mann.nome_da_estimativa == "diferença de locação"
+        for resultado, metodo in (
+            (kruskal_wallis(KRUSKAL["plantas"]), KRUSKAL_WALLIS),
+            (friedman(_friedman("pas")), FRIEDMAN),
+        ):
+            assert (resultado.metodo, resultado.nome_da_estatistica) == (metodo, "χ²")
+            assert (resultado.estimativa, resultado.ic, resultado.exato) == (None, None, None)
+            assert "correção para empates" in resultado.calculo_do_p
+
+    def test_o_calculo_do_p_diz_por_que_saiu_aproximado(self):
+        """O R escolhe o caminho em silêncio; a frase daqui diz o que o fechou."""
+        assert wilcoxon_uma_amostra(_dados("sleep_dif"), 0).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há empates e "
+            "valores iguais à referência"
+        )
+        assert wilcoxon_uma_amostra(_irracionais(50), 5).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há 50 valores "
+            "ou mais"
+        )
+        assert mann_whitney(*DUAS_DE_POSTOS["cinquenta"]).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há 50 valores "
+            "ou mais num grupo"
+        )
+        assert mann_whitney(*DUAS_DE_POSTOS["sono"]).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há empates"
+        )
+
+    def test_o_limite_do_exato_e_o_do_r(self):
+        """O `exact <- (n < 50)`: 49 valores sem empate são exatos, 50 não."""
+        assert LIMITE_DO_EXATO == 50
+        assert wilcoxon_uma_amostra(_irracionais(49), 5).exato is True
+        assert wilcoxon_uma_amostra(_irracionais(50), 5).exato is False
+
+    def test_o_nivel_do_intervalo(self):
+        """
+        O t dá sempre o de 95%. Os testes de postos também, quando a distribuição o
+        alcança; com quatro valores, o mais largo tem 88% — o R escreve o α alcançado em
+        dois algarismos, 0,12, e avisa.
+        """
+        assert t_uma_amostra(_dados("imc15"), 25).confianca_do_ic == CONFIANCA
+        assert t_de_welch(*DUAS_AMOSTRAS["grupos"]).confianca_do_ic == CONFIANCA
+        assert wilcoxon_uma_amostra(_dados("imc15"), 25).confianca_do_ic == CONFIANCA
+        assert wilcoxon_uma_amostra([1.2, 3.4, 2.2, 5.1], 0).confianca_do_ic == 0.88
+        assert anova_de_welch(VARIOS_GRUPOS["plantas"]).confianca_do_ic is None
 
     def test_nenhum_nome_publico_comeca_com_test(self):
         """

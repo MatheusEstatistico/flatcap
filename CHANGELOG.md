@@ -7,6 +7,33 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.14.0] — os testes de postos
+
+### Acrescentado
+- Os testes de postos na comparação: o Wilcoxon contra uma referência, o Mann-Whitney entre
+  dois grupos, o Kruskal-Wallis entre três ou mais e o Friedman nas medidas repetidas. A
+  regra dos pressupostos os escolhe onde o Shapiro-Wilk rejeita a normal, e essas linhas
+  deixam de sair "não testado".
+- No item: `wilcoxon` (entre dois grupos, o Mann-Whitney, como no R), `mannwhitney`,
+  `kruskal`, e `metodo: friedman` nas medidas repetidas.
+- O Wilcoxon e o Mann-Whitney com a estimativa de Hodges-Lehmann e o intervalo de 95% dela —
+  a pseudomediana e a diferença de locação —, como o `wilcox.test` do R até a 4.5 com
+  `conf.int = TRUE`. O R 4.6 passou a dar o p exato também com empates; seguir o 4.6 fica
+  para decidir.
+- Avisos para o intervalo que não chega a 95% (ele sai da tabela e fica no manifesto) e para
+  o menor p possível acima de 0,05, nas amostras pequenas.
+- No manifesto da comparação, a mediana e os quartis de cada linha, grupo e medida, e o
+  caminho do p dos testes de postos.
+
+### Mudado
+- O resumo de cada linha é o do teste dela: `média (DP)` no t e na ANOVA, `mediana [Q1 a Q3]`
+  nos testes de postos. Os cabeçalhos do resumo, do intervalo da uma amostra e da diferença
+  entre dois grupos dizem o que a coluna tem; uma tabela só de paramétricos sai como antes.
+- A ANOVA de medidas repetidas que não pode rodar — cada caso mudando o mesmo tanto entre as
+  medidas — ensina a escrever o Friedman.
+- `wilcoxon`, `mannwhitney`, `kruskal` e `friedman` escritos em `analises:` ensinam que são
+  testes da `comparacao`.
+
 ## [1.13.1] — a revisão antes da abertura do código
 
 ### Corrigido
@@ -102,4 +129,5 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 ## [0.1.0] — a fundação
 - `flatcap doctor`: a configuração e a conexão com o REDCap.
 
+[1.14.0]: https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.14.0
 [1.13.1]: https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.13.1
