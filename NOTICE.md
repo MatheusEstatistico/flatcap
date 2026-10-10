@@ -29,29 +29,46 @@ Public License, versão 2 ou (a seu critério) qualquer versão posterior, e a
 esses trechos moram trazem também a linha de direitos autorais do R no cabeçalho, e cada
 função diz no docstring de onde veio.
 
-| no FlatCap | no R (pacote `stats`) | direitos autorais do original |
+| no FlatCap | no R | direitos autorais do original |
 |---|---|---|
 | `correlacao.prho` e a tabela `_EDGEWORTH` — o p exato do Spearman | `src/library/stats/src/prho.c` | (C) 2000-2024 The R Core Team; (C) 2003-2024 The R Foundation; baseado no algoritmo AS 89, (C) 1975 Royal Statistical Society |
 | `correlacao.spearman` e `correlacao.kendall` — a escolha entre o p exato e a aproximação, e a variância do Kendall corrigida para empates | `src/library/stats/R/cor.test.R` | (C) 1995-2022 The R Core Team |
 | `associacao.qui_quadrado` — a correção de continuidade de Yates | `src/library/stats/R/chisq.test.R` | (C) 1995-2013 The R Core Team |
 | `associacao._fisher_2x2` — o Fisher exato na tabela 2×2 | `src/library/stats/R/fisher.test.R` | (C) 1995-2026 The R Core Team |
 | `hipoteses.anova_de_medidas_repetidas` — a ANOVA de medidas repetidas com a correção de Greenhouse-Geisser | `anova.mlm`, em `src/library/stats/R/mlm.R` | (C) 1998-2018 The R Core Team; (C) 1998 B. D. Ripley |
+| `hipoteses.wilcoxon_uma_amostra` e `hipoteses.mann_whitney` — a escolha entre o p exato e a aproximação normal, e o intervalo e a estimativa de Hodges-Lehmann (`_ic_exato`, `_ic_assintotico_da_pseudomediana`, `_ic_assintotico_da_diferenca`) | `wilcox.test.default`, em `src/library/stats/R/wilcox.test.R`, na versão do R até a 4.5 | (C) 1995-2019 The R Core Team |
+| `hipoteses._raiz` — a busca de raiz do `uniroot`, pelo método de Brent, com que o intervalo aproximado do Wilcoxon e do Mann-Whitney é achado | `R_zeroin2`, em `src/library/stats/src/zeroin.c` | (C) 1999-2016 The R Core Team; a partir do `zeroin` do NETLIB (`c/brent.shar`), com o número máximo de iterações de Peter Dalgaard |
+| `hipoteses._quantil` — o quantil das distribuições exatas do posto sinalizado e da soma dos postos, com a folga de dez épsilons | `qsignrank` e `qwilcox`, em `src/nmath/signrank.c` e `src/nmath/wilcox.c` | (C) 1999-2024 The R Core Team |
+| `hipoteses.friedman` — a estatística de Friedman, com a correção para empates | `src/library/stats/R/friedman.test.R` | (C) 1995-2015 The R Core Team |
 
 As linhas de direitos autorais são as dos cabeçalhos dos arquivos do R, conferidas no
-código-fonte do R em outubro de 2026.
+código-fonte do R em outubro de 2026 — menos a do `wilcox.test.R`, que é a da versão de onde
+o código veio: o R 4.6.0 reescreveu o arquivo, e o cabeçalho de hoje (1995-2026) é o do
+código novo, que o FlatCap não reproduz.
 
 O Fisher exato das tabelas maiores que 2×2 (`associacao._fisher_rede`) **não** é
 transcrição: é uma implementação do algoritmo de rede de Mehta e Patel (1983) escrita a partir
 do artigo, com limites de poda próprios. Do FEXACT que o R usa (`src/library/stats/src/fexact.c`,
 baseado no algoritmo 643 da ACM TOMS) vem só a constante de tolerância `3.45254e-7`.
 
+As distribuições exatas do posto sinalizado e da soma dos postos
+(`hipoteses._contagens_do_posto_sinalizado` e `hipoteses._contagens_da_soma_dos_postos`)
+também **não** são transcrição: são contagens em inteiros — por programação dinâmica, e
+pelo produto do binômio gaussiano —, e não a recursão do `csignrank` e do `cwilcox` do R.
+
 Os números de referência dos testes — as constantes `*_DO_R` e `REFERENCIAS_DO_R_*` — são
 saídas do R 4.3.3 e dos exemplos da documentação do R, usados para conferir o FlatCap.
 
 ### Referências
 
+- Bauer, D. F. (1972). Constructing confidence sets using rank statistics. *Journal of the
+  American Statistical Association*, 67(339), 687–690.
 - Best, D. J.; Roberts, D. E. (1975). Algorithm AS 89: The upper tail probabilities of
   Spearman's rho. *Applied Statistics*, 24(3), 377–379.
+- Forsythe, G. E.; Malcolm, M. A.; Moler, C. B. (1977). *Computer methods for mathematical
+  computations*. Englewood Cliffs: Prentice-Hall.
+- Hodges, J. L.; Lehmann, E. L. (1963). Estimates of location based on rank tests. *The
+  Annals of Mathematical Statistics*, 34(2), 598–611.
 - Mehta, C. R.; Patel, N. R. (1983). A network algorithm for performing Fisher's exact test
   in r × c contingency tables. *Journal of the American Statistical Association*, 78(382),
   427–434.
