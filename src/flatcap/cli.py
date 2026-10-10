@@ -2611,19 +2611,20 @@ def comparacao(
     ),
 ) -> None:
     """
-    Compara médias: contra um valor de referência, entre grupos ou entre medidas.
+    Compara: contra um valor de referência, entre grupos ou entre medidas.
 
     Para cada item da lista `comparacao:` do projeto.yaml, o teste que a regra dos
-    pressupostos escolhe. Contra um valor de referência, o t de Student para uma
-    amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R. Entre os
-    dois grupos de uma variável categórica, o t de Welch — o padrão do t.test — quando
-    o Shapiro-Wilk não rejeita a normal em nenhum dos grupos; o t de Student roda
-    quando está escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão
-    do oneway.test —, e a clássica quando está escrita no item. Nas medidas repetidas —
-    a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA de medidas
-    repetidas, sempre com a correção de Greenhouse-Geisser. Onde a regra escolhe um
-    teste que ainda não existe, a linha sai sem teste, com o motivo. Sai uma tabela por
-    delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
+    pressupostos escolhe: o paramétrico quando o Shapiro-Wilk não rejeita a normal, e o
+    de postos quando rejeita. Contra um valor de referência, o t de Student para uma
+    amostra, ou o Wilcoxon. Entre os dois grupos de uma variável categórica, o t de
+    Welch — o padrão do t.test —, ou o Mann-Whitney; o t de Student roda quando está
+    escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão do
+    oneway.test —, ou o Kruskal-Wallis; a clássica roda quando está escrita no item. Nas
+    medidas repetidas — a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA
+    de medidas repetidas, sempre com a correção de Greenhouse-Geisser, ou o Friedman.
+    Todos como o R os calcula; o Wilcoxon e o Mann-Whitney com o intervalo de
+    Hodges-Lehmann. Sai uma tabela por delineamento em `3. Análises/comparacao/`, com um
+    `manifesto.json`.
 
     Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
     variável e a de grupo; ou as medidas repetidas, com a marca:
@@ -2634,8 +2635,9 @@ def comparacao(
           - \\[imc, sexo]
           - repetidas: \\[pas_0, pas_1, pas_2]
 
-    O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra. Nas
-    medidas repetidas, o método vem na chave `metodo:`, na linha de baixo.
+    O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra, e
+    `wilcoxon`, `mannwhitney` ou `kruskal`, o de postos. Nas medidas repetidas, o método
+    vem na chave `metodo:`, na linha de baixo — `anova` ou `friedman`.
 
     Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
