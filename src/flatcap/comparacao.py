@@ -1,8 +1,9 @@
 # SPDX-FileCopyrightText: 2026 Matheus Fernandes
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-A comparação — a média de uma variável contra um valor de referência ou entre os
-grupos de outra, e o lugar onde os outros testes de comparação vão entrar.
+A comparação — uma variável contra um valor de referência, entre os grupos de outra,
+ou entre medidas repetidas nos mesmos casos —, com o teste que os pressupostos pedem:
+o paramétrico, ou o de postos, que dispensa a normal.
 
 Responde ao passo 2b do fluxo. Cada item da ficha é uma pergunta, e cada delineamento
 tem a sua tabela, na mesma pasta:
@@ -10,7 +11,7 @@ tem a sua tabela, na mesma pasta:
     uma_amostra.csv
     variável       n  média (DP)         IC 95% da média  referência  teste         p-valor
     IMC (kg/m²)  116  26,43 (4,59)       25,58 a 27,27    25          t de Student    0,001
-    Renda (R$)   120  3098,64 (2139,03)  —                3000        não testado*        —
+    PAS (mmHg)   120  128,4 (14,2)       125,83 a 130,97  120         t de Student  < 0,001
 
     dois_grupos.csv
     variável     grupo        n  média (DP)    diferença (IC 95%)     teste         p-valor
@@ -31,8 +32,11 @@ tem a sua tabela, na mesma pasta:
     PAS 30 dias  40  128,4 (15,1)
     PAS 90 dias  40  125,9 (14,8)
 
-    * não testado: normal rejeitada — a regra escolhe o Wilcoxon, que ainda não está no
-      FlatCap, e a linha sai com o motivo no lugar do teste.
+Nas linhas de um teste de postos — o Wilcoxon, o Mann-Whitney, o Kruskal-Wallis e o
+Friedman —, o resumo é a mediana e os quartis, `2982,62 [1774,62 a 5013,54]`, e o
+intervalo é o de Hodges-Lehmann: o da pseudomediana na uma amostra, e o da diferença de
+locação entre dois grupos, `-921,57 (-2414,48 a 406,97)`. O cabeçalho de cada coluna diz
+o que ela tem — ver "O resumo, linha a linha", abaixo.
 
 Segue o padrão das Fases 2 a 6, decidir e escrever separados:
 
@@ -57,8 +61,10 @@ o teste quando a normal se sustenta e o teste quando não; o `_CALCULO` diz quai
 já têm a aritmética no `hipoteses.py`; o `METODOS` diz o que cada nome escrito no item
 quer dizer em cada delineamento. Um teste que está na regra e não no cálculo é um
 teste que a regra sabe escolher e o FlatCap ainda não sabe fazer, e a linha dele sai
-sem teste, com o motivo escrito. Quando ele chegar, entra uma linha no `_CALCULO`, e
-as linhas "não testado" viram linhas dele.
+sem teste, com o motivo escrito; quando ele chega, entra uma linha no `_CALCULO`, e
+as linhas "não testado" viram linhas dele. Foi assim que os paramétricos e, na 1.14.0,
+os quatro testes de postos entraram, um por um; desde ela, todo teste da regra tem a
+aritmética, e o caminho fica para o próximo que entrar.
 
 ## O delineamento
 
@@ -95,12 +101,11 @@ Três passos, como na correlação:
    preenchidos da variável; entre grupos, **cada grupo**, separado — é a normalidade
    que o t supõe, e não a da coluna inteira. Não rejeitou em nenhum → o paramétrico;
 2. **rejeitou em algum, ou não pôde ser verificado em algum** (menos de três valores,
-   ou um grupo que não varia) → o que dispensa a normal: o Wilcoxon na uma amostra, o
-   Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou mais, o Friedman nas
-   medidas repetidas. Nenhum deles está no FlatCap ainda, e a linha sai **sem teste**,
-   com o motivo na coluna `teste`;
-3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, com um
-   aviso e a frase nas notas do `.csv`.
+   ou um grupo que não varia) → o teste de postos, que dispensa a normal: o Wilcoxon
+   na uma amostra, o Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou
+   mais, o Friedman nas medidas repetidas;
+3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, e
+   `[imc, 25, wilcoxon]` o Wilcoxon, com um aviso e a frase nas notas do `.csv`.
 
 **Entre dois grupos, o paramétrico da regra é o t de Welch**, e não o de Student: é o
 padrão do `t.test` do R, perde pouco quando as variâncias são iguais e protege quando
@@ -128,16 +133,50 @@ o p que decide é o mesmo da tabela de normalidade — por construção.
 
 **O Shapiro-Wilk não garante o pressuposto**, e o módulo não finge que garante: é a
 regra que o projeto adotou, com os limites dela escritos no topo do `normalidade.py`.
-Abaixo de 20 valores ele quase não rejeita, e o teste escolhido ali sai com aviso; com
-n grande ele rejeita desvio irrelevante, e a linha que sai sem teste diz como escrever
-o método no item quando você concluir que o paramétrico vale — n grande e assimetria
-pequena, por exemplo. A decisão é sua, e fica registrada contra a regra.
+Abaixo de 20 valores ele quase não rejeita, e o paramétrico escolhido ali sai com
+aviso; com n grande ele rejeita desvio irrelevante, e a linha vai para o teste de
+postos — que continua valendo, e custa pouco. Quando você concluir que o paramétrico
+vale ali — n grande e assimetria pequena, por exemplo —, o método escrito no item
+manda. A decisão é sua, e fica registrada contra a regra.
+
+## Os testes de postos
+
+São os do R, pela aritmética do `hipoteses.py`: o `wilcox.test` — de uma amostra e de
+duas, que é o Mann-Whitney —, o `kruskal.test` e o `friedman.test`. O Wilcoxon e o
+Mann-Whitney saem **com a estimativa de Hodges-Lehmann e o intervalo dela**, o
+`conf.int = TRUE` do R: a pseudomediana, lida contra a referência como o intervalo da
+média; a diferença de locação entre dois grupos, lida contra o zero como a diferença
+das médias. **A diferença de locação não é a diferença das medianas** dos grupos — é a
+mediana das diferenças entre um valor de cada grupo —, e a nota da tabela diz isso. O
+Kruskal-Wallis e o Friedman, como a ANOVA, dizem se há diferença, e não quanto.
+
+Com poucos valores, a distribuição exata pode não ter um intervalo de 95% — o mais
+largo, do menor ao maior valor, fica abaixo disso —, e o menor p que o teste consegue
+dar pode passar de 0,05: o teste não rejeita com dado nenhum. Os dois casos saem com
+aviso, e o intervalo que não chega a 95% fica fora da tabela, que promete 95%.
+
+## O resumo, linha a linha
+
+Cada linha descreve a variável na medida que o teste dela usa: **média (DP)** nas
+linhas do t e da ANOVA, **mediana [Q1 a Q3]** nas dos testes de postos — como o
+`compareGroups` do R faz. O teste é o da linha: o que rodou, ou o que a regra escolheu
+quando ele não pôde rodar; sem teste nenhum, a média. As duas formas saem pelo
+`descritiva.resumo_numerico` e pelo `numero()`, letra por letra as do
+`resumo_<variável>.csv`. Os colchetes separam os quartis do desvio padrão na leitura de
+relance, e o cabeçalho diz o que a coluna tem: `média (DP)`, `mediana [Q1 a Q3]`, ou as
+duas, quando a tabela mistura. O mesmo vale para o intervalo da uma amostra — `IC 95% da
+média`, `da pseudomediana`, ou só `IC 95%` — e para a diferença entre dois grupos:
+`diferença (IC 95%)` no t, `diferença de locação (IC 95%)` no Mann-Whitney. As notas,
+que dizem o que é a diferença de locação, ficam no `.csv`; o documento leva a tabela, e
+é o cabeçalho que impede a leitura dela como a diferença das medianas ao lado. Uma tabela
+só de paramétricos sai com os cabeçalhos de antes.
 
 ## A ficha
 
     comparacao:
       - [imc, 25]                # a média do IMC difere de 25?
       - [pas, 120, t]            # o t, mesmo que a regra discorde
+      - [renda, 3000, wilcoxon]  # o Wilcoxon, mesmo que a regra escolhesse o t
       - [imc, sexo]              # o IMC difere entre os sexos?
       - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
@@ -159,10 +198,11 @@ dois.
 
 As recusas de dicionário e de tipo são as da descritiva, com a classe de erro deste
 módulo. O Shapiro-Wilk e o formatador do p são os da normalidade. A média e o desvio
-padrão saem pelo `descritiva.resumo_numerico` e pelo `numero()`: a média da uma
-amostra é, letra por letra, a do `resumo_<variável>.csv`. Os grupos saem pela
-`serie_de_texto` da descritiva, pelo `rotulo_de` do dicionário e pela ordem da
-associação. A aritmética dos testes é a do `hipoteses.py`, que confere com o `t.test`
+padrão — e a mediana e os quartis — saem pelo `descritiva.resumo_numerico` e pelo
+`numero()`: o resumo da uma amostra é, letra por letra, o do `resumo_<variável>.csv`.
+Os grupos saem pela `serie_de_texto` da descritiva, pelo `rotulo_de` do dicionário e
+pela ordem da associação. A aritmética dos testes é a do `hipoteses.py`, que confere
+com o `t.test`, o `oneway.test`, o `wilcox.test`, o `kruskal.test` e o `friedman.test`
 do R.
 
 ## O que ele deliberadamente não faz
@@ -171,9 +211,9 @@ do R.
 destas variáveis; as caixas por grupo são uma espécie nova no `graficos.py`, e ficam
 para quando a comparação entre grupos estiver inteira.
 
-**Não imprime o d de Cohen.** O intervalo — da média, lido contra a referência; da
-diferença, lido contra o zero — já é o tamanho do efeito, na unidade que o cliente
-entende.
+**Não imprime o d de Cohen**, nem um r de efeito nos testes de postos. O intervalo —
+da média ou da pseudomediana, lido contra a referência; da diferença, lido contra o
+zero — já é o tamanho do efeito, na unidade que o cliente entende.
 
 **Não roda o Levene**, pela razão do Welch, acima.
 
@@ -214,14 +254,23 @@ from .hipoteses import (
     ANOVA_DE_MEDIDAS_REPETIDAS,
     ANOVA_DE_WELCH,
     CONFIANCA,
+    FRIEDMAN,
+    KRUSKAL_WALLIS,
+    LIMITE_DO_EXATO,
+    MANN_WHITNEY,
     MINIMO_STUDENT,
     MINIMO_T,
     T_DE_STUDENT,
     T_DE_WELCH,
+    WILCOXON,
     Resultado,
     anova_de_medidas_repetidas,
     anova_de_um_fator,
     anova_de_welch,
+    friedman,
+    kruskal_wallis,
+    mann_whitney,
+    medidas_iguais_em_cada_caso,
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_entre_medidas,
@@ -229,6 +278,7 @@ from .hipoteses import (
     t_de_student,
     t_de_welch,
     t_uma_amostra,
+    wilcoxon_uma_amostra,
 )
 from .manifesto import (
     ANALISE_COMPARACAO,
@@ -296,17 +346,9 @@ ARQUIVOS: dict[str, str] = {
     REPETIDAS: ARQUIVO_REPETIDAS,
 }
 
-# Os testes que a regra conhece pelo nome e o FlatCap ainda não calcula. Os que têm
-# aritmética vêm do `hipoteses.py`, que é quem calcula; estes são só nomes — a regra
-# os escolhe, e a linha sai sem teste, com o motivo.
-WILCOXON = "Wilcoxon"
-MANN_WHITNEY = "Mann-Whitney"
-KRUSKAL_WALLIS = "Kruskal-Wallis"
-FRIEDMAN = "Friedman"
-
 # A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
-# quando não. Entre grupos o paramétrico é o de Welch — o padrão do `t.test` e do
-# `oneway.test` do R.
+# quando não — o de postos. Entre grupos o paramétrico é o de Welch — o padrão do
+# `t.test` e do `oneway.test` do R. Os nomes, e a aritmética, vêm do `hipoteses.py`.
 REGRA: dict[str, tuple[str, str]] = {
     UMA_AMOSTRA: (T_DE_STUDENT, WILCOXON),
     DOIS_GRUPOS: (T_DE_WELCH, MANN_WHITNEY),
@@ -319,24 +361,36 @@ REGRA: dict[str, tuple[str, str]] = {
 # sem estar na regra: eles rodam quando o item os pede.
 _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
     (UMA_AMOSTRA, T_DE_STUDENT): t_uma_amostra,
+    (UMA_AMOSTRA, WILCOXON): wilcoxon_uma_amostra,
     (DOIS_GRUPOS, T_DE_WELCH): t_de_welch,
     (DOIS_GRUPOS, T_DE_STUDENT): t_de_student,
+    (DOIS_GRUPOS, MANN_WHITNEY): mann_whitney,
     (K_GRUPOS, ANOVA_DE_WELCH): anova_de_welch,
     (K_GRUPOS, ANOVA): anova_de_um_fator,
+    (K_GRUPOS, KRUSKAL_WALLIS): kruskal_wallis,
     (REPETIDAS, ANOVA_DE_MEDIDAS_REPETIDAS): anova_de_medidas_repetidas,
+    (REPETIDAS, FRIEDMAN): friedman,
 }
+
+# Os testes de postos: os que dispensam a normal, e cujas linhas resumem a variável
+# pela mediana e pelos quartis, e não pela média e pelo desvio.
+TESTES_DE_POSTOS: frozenset[str] = frozenset(
+    {WILCOXON, MANN_WHITNEY, KRUSKAL_WALLIS, FRIEDMAN}
+)
 
 # Como cada método se escreve no item — o terceiro nome —, e o teste que ele quer
 # dizer em cada delineamento. Sem acento, minúsculo e sem hífen, que é como `_chave`
 # deixa o que se digitou. `t` é o t que o R roda sem argumento: o de uma amostra, e o
 # de Welch entre dois grupos — o `var.equal = FALSE` padrão do `t.test`. `welch` é o
 # de Welch do número de grupos que o banco trouxer: o t com dois, a ANOVA com mais.
+# `wilcoxon` é o `wilcox.test` do R: o do posto sinalizado contra uma referência, e o
+# Mann-Whitney entre dois grupos — que o R chama de soma de postos de Wilcoxon.
 METODOS: dict[str, dict[str, str]] = {
     "t": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_WELCH},
     "student": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_STUDENT},
     "welch": {DOIS_GRUPOS: T_DE_WELCH, K_GRUPOS: ANOVA_DE_WELCH},
     "anova": {K_GRUPOS: ANOVA, REPETIDAS: ANOVA_DE_MEDIDAS_REPETIDAS},
-    "wilcoxon": {UMA_AMOSTRA: WILCOXON},
+    "wilcoxon": {UMA_AMOSTRA: WILCOXON, DOIS_GRUPOS: MANN_WHITNEY},
     "mannwhitney": {DOIS_GRUPOS: MANN_WHITNEY},
     "kruskal": {K_GRUPOS: KRUSKAL_WALLIS},
     "friedman": {REPETIDAS: FRIEDMAN},
@@ -357,6 +411,10 @@ _EQUIVALENTES: dict[tuple[str, str], tuple[str, str]] = {
         "com dois grupos, o F da ANOVA é o t de Student ao quadrado",
     ),
     ("mannwhitney", K_GRUPOS): ("kruskal", "o Mann-Whitney compara dois grupos"),
+    ("wilcoxon", K_GRUPOS): (
+        "kruskal",
+        "o Wilcoxon entre grupos é o Mann-Whitney, que compara dois",
+    ),
     ("kruskal", DOIS_GRUPOS): ("mannwhitney", "com dois grupos, o teste é o Mann-Whitney"),
 }
 
@@ -373,8 +431,17 @@ _SINONIMOS: dict[str, str] = {
     "anovademedidasrepetidas": "anova",
     "anovarepetidas": "anova",
     "mannwhitneyu": "mannwhitney",
+    "udemannwhitney": "mannwhitney",
+    "mannwhitneywilcoxon": "mannwhitney",
+    "wilcoxonranksum": "mannwhitney",
+    "wilcox": "wilcoxon",
     "kruskalwallis": "kruskal",
+    "friedmann": "friedman",
 }
+# O `signed rank` fica de fora de propósito: o `wilcoxon` entre dois grupos é o
+# Mann-Whitney, e um sinônimo dele levaria quem escreveu o posto sinalizado — o teste
+# de uma amostra, ou do pareado — ao da soma de postos sem aviso. Escrito, ele recusa,
+# e a recusa ensina o `wilcoxon`.
 
 # Os testes que supõem a mesma variância nos grupos. Quando um deles roda, o aviso diz
 # quanto o maior desvio padrão passa do menor — acima de duas vezes, a regra de bolso
@@ -388,6 +455,27 @@ RAZAO_DE_DESVIOS = 2.0
 # `25,8 a 27,02` — um limite com uma casa, outro com duas — não se lê de relance. A
 # média e o desvio não: eles têm de sair letra por letra como no `resumo`.
 CASAS_IC = 2
+
+# O cabeçalho da coluna do resumo, conforme o que ela tem: a média e o desvio nas
+# linhas do t e da ANOVA, a mediana e os quartis nas dos testes de postos — e as duas
+# formas no cabeçalho quando a tabela mistura. Os colchetes separam os quartis do
+# desvio padrão, que vem entre parênteses, na leitura de relance.
+COLUNA_DA_MEDIA = "média (DP)"
+COLUNA_DA_MEDIANA = "mediana [Q1 a Q3]"
+COLUNA_DAS_DUAS = f"{COLUNA_DA_MEDIA} ou {COLUNA_DA_MEDIANA}"
+
+# O cabeçalho do intervalo da uma amostra, pela mesma regra: o da média no t, o da
+# pseudomediana no Wilcoxon, e só o nível quando a tabela tem os dois.
+COLUNA_DO_IC_DA_MEDIA = "IC 95% da média"
+COLUNA_DO_IC_DA_PSEUDOMEDIANA = "IC 95% da pseudomediana"
+COLUNA_DO_IC = "IC 95%"
+
+# O cabeçalho da diferença entre dois grupos, pela mesma regra: o de sempre no t, a de
+# locação no Mann-Whitney — que não é a diferença das medianas, e que a célula ao lado
+# da mediana de cada grupo convidaria a ler como tal —, e as duas quando a tabela mistura.
+COLUNA_DA_DIFERENCA = "diferença (IC 95%)"
+COLUNA_DA_DIFERENCA_DE_LOCACAO = "diferença de locação (IC 95%)"
+COLUNA_DAS_DUAS_DIFERENCAS = "diferença de médias ou de locação (IC 95%)"
 
 # A referência sai como foi escrita, sem arredondar para duas casas: um `0,125` da
 # ficha impresso `0,12` seria uma hipótese que ninguém testou.
@@ -606,8 +694,8 @@ class VariavelComparada:
 
     `resultado` fica `None` quando não houve teste; o motivo está em `motivo`, e a
     comparação **sai assim mesmo** — um item pedido que sumisse da tabela seria a falta
-    em que ninguém repara. A média e o desvio saem mesmo sem teste: eles descrevem a
-    variável, e não dependem de pressuposto nenhum.
+    em que ninguém repara. O resumo sai mesmo sem teste: ele descreve a variável, e não
+    depende de pressuposto nenhum.
 
     Na uma amostra, `referencia`, `resumo` e `normal` são da variável inteira; entre
     grupos, `referencia` é `None`, e o resumo e o Shapiro-Wilk estão em cada `Grupo`.
@@ -746,6 +834,10 @@ class VariavelComparada:
         """
         Os números desta comparação, para o manifesto — o que responde "de onde saiu
         esse teste, e esse p?" sem reabrir o banco.
+
+        O intervalo vai em `ic_95` quando é o de 95% que a tabela imprime; quando o
+        teste de postos não o alcança, o de nível menor que o R devolve vai em
+        `ic_alcancavel`, com o nível — fora da tabela, e não perdido.
         """
         resultado = self.resultado
         escolha = self.escolha
@@ -769,11 +861,20 @@ class VariavelComparada:
                 else None
             ),
             "ic_95": (
-                [_arredondar(resultado.ic[0]), _arredondar(resultado.ic[1])]
-                if resultado and resultado.ic
+                [_arredondar(intervalo[0]), _arredondar(intervalo[1])]
+                if (intervalo := _ic_da_tabela(resultado))
+                else None
+            ),
+            "ic_alcancavel": (
+                {
+                    "confianca": _arredondar(resultado.confianca_do_ic),
+                    "limites": [_arredondar(resultado.ic[0]), _arredondar(resultado.ic[1])],
+                }
+                if resultado and resultado.ic and not _ic_da_tabela(resultado)
                 else None
             ),
             "p": _significativos(resultado.p) if resultado else None,
+            "exato": resultado.exato if resultado else None,
             "calculo_do_p": resultado.calculo_do_p if resultado else None,
             "motivo": self.motivo or None,
         }
@@ -788,8 +889,7 @@ class VariavelComparada:
                     {
                         "medida": variavel,
                         "rotulo": grupo.rotulo,
-                        "media": _arredondar((grupo.resumo or {}).get("media")),
-                        "desvio": _arredondar((grupo.resumo or {}).get("desvio")),
+                        **_resumo_no_manifesto(grupo.resumo),
                         "shapiro": _shapiro_no_manifesto(grupo.normal),
                     }
                     for variavel, grupo in zip(self.medidas, self.grupos, strict=True)
@@ -809,15 +909,13 @@ class VariavelComparada:
                     {
                         "grupo": grupo.rotulo,
                         "n": grupo.n,
-                        "media": _arredondar((grupo.resumo or {}).get("media")),
-                        "desvio": _arredondar((grupo.resumo or {}).get("desvio")),
+                        **_resumo_no_manifesto(grupo.resumo),
                         "shapiro": _shapiro_no_manifesto(grupo.normal),
                     }
                     for grupo in self.grupos
                 ],
                 **comum,
             }
-        resumo = self.resumo or {}
         return {
             "delineamento": self.delineamento,
             "variavel": self.variavel,
@@ -825,11 +923,23 @@ class VariavelComparada:
             "n": self.validos,
             "faltantes": self.faltantes,
             "distintos": self.distintos,
-            "media": _arredondar(resumo.get("media")),
-            "desvio": _arredondar(resumo.get("desvio")),
+            **_resumo_no_manifesto(self.resumo),
             "shapiro": _shapiro_no_manifesto(self.normal),
             **comum,
         }
+
+
+def _resumo_no_manifesto(resumo: dict[str, float] | None) -> dict[str, float | None]:
+    """
+    As duas formas do resumo, sempre — a média e o desvio, a mediana e os quartis: a
+    tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
+    um grupo, que a descritiva não tem, não morar só na célula.
+    """
+    resumo = resumo or {}
+    return {
+        chave: _arredondar(resumo.get(chave))
+        for chave in ("media", "desvio", "mediana", "q1", "q3")
+    }
 
 
 @dataclass(frozen=True)
@@ -1167,7 +1277,9 @@ def _comparar_uma_amostra(
 
     Três barreiras vêm antes da regra, e as três deixam a linha sem teste qualquer que
     seja o método escrito na ficha — são as do próprio `t.test` do R: nenhum valor,
-    um valor só, e valores que não variam.
+    um valor só, e valores que não variam. Valem para o Wilcoxon também, que o R
+    calcularia com um valor só, ou com todos iguais: um valor não é uma amostra, e uma
+    variável que não varia não tem o que comparar.
     """
     linha = pergunta.linha
     serie = _coluna(quadro, linha.variavel)
@@ -1215,12 +1327,13 @@ def _comparar_uma_amostra(
         )
 
     calcular = _CALCULO[(UMA_AMOSTRA, escolha.metodo)]
+    resultado = calcular(valores.to_numpy(), referencia)
     return VariavelComparada(
         **base,
         normal=normal,
         escolha=escolha,
-        resultado=calcular(valores.to_numpy(), referencia),
-        avisos=avisos,
+        resultado=resultado,
+        avisos=avisos + _avisos_do_resultado(nome, resultado, (validos,), f"{validos} valores"),
     )
 
 
@@ -1337,6 +1450,82 @@ def _aviso_de_discreta(nome: str, distintos: int, validos: int) -> str:
     )
 
 
+def _avisos_do_resultado(
+    nome: str, resultado: Resultado, tamanhos: Sequence[int], valores: str
+) -> tuple[str, ...]:
+    """
+    O que o Wilcoxon e o Mann-Whitney devolvem e precisa de rastro — os três casos são
+    de amostra pequena, ou de amostra sem variação, e nenhum deles é erro:
+
+    * **o menor p possível acima do α.** No caminho exato, o p mais extremo que a
+      distribuição tem é 2/2ⁿ no Wilcoxon e 2/C(n₁ + n₂, n₁) no Mann-Whitney; com cinco
+      valores ou menos no Wilcoxon — e, no Mann-Whitney, com um valor contra até 38,
+      dois contra até sete, ou três contra até quatro —, ele passa de 0,05, e o teste não
+      rejeita a igualdade com dado nenhum. Um p de 0,125 ali não é «nenhuma diferença»:
+      é o menor que existe;
+    * **o intervalo que não chega a 95%** — o R baixa o nível e avisa. A tabela promete
+      95%, e a célula sai com o traço;
+    * **o intervalo que não existe**: sem os valores iguais à referência, os que sobram
+      são todos iguais; ou os dois grupos não variam por dentro. O p sai, e a célula,
+      com o traço.
+
+    `tamanhos` são os n do teste — o da uma amostra, ou o de cada grupo —, e `valores`,
+    como eles se escrevem na frase.
+    """
+    if resultado.metodo not in (WILCOXON, MANN_WHITNEY):
+        return ()
+    menor = _menor_p_exato(resultado.metodo, tamanhos) if resultado.exato else 0.0
+    nivel = resultado.confianca_do_ic
+    sem_95 = resultado.ic is not None and nivel is not None and nivel < CONFIANCA
+    if menor > ALFA or sem_95:
+        partes: list[str] = []
+        if menor > ALFA:
+            partes.append(
+                f"o menor p que ele pode dar é {valor_p(menor)}, acima de {numero(ALFA)}"
+            )
+        if sem_95:
+            alcance = (
+                f"o mais largo que existe tem {numero(100 * nivel, 1)}%"
+                if nivel
+                else "não há intervalo nenhum"
+            )
+            partes.append(f"o intervalo de 95% não é alcançável — {alcance}")
+        conclusao = (
+            " Com tão poucos valores, o teste não rejeita a igualdade com dado nenhum."
+            if menor > ALFA
+            else ""
+        )
+        celula = " A célula do intervalo sai com —." if sem_95 else ""
+        return (
+            f"{nome}: {resultado.metodo} com {valores} — {', e '.join(partes)}."
+            f"{conclusao}{celula}",
+        )
+    if resultado.ic is None:
+        if resultado.metodo == WILCOXON:
+            return (
+                f"{nome}: sem os valores iguais à referência, os que sobram são todos "
+                "iguais — a pseudomediana e o intervalo dela não existem, e a célula sai "
+                "com —. O p do Wilcoxon sai.",
+            )
+        return (
+            f"{nome}: os grupos não variam por dentro — a diferença de locação e o "
+            "intervalo dela não existem, e a célula sai com —. O p do Mann-Whitney sai.",
+        )
+    return ()
+
+
+def _menor_p_exato(metodo: str, tamanhos: Sequence[int]) -> float:
+    """
+    O menor p bilateral que o caminho exato dá: as duas caudas mais extremas da
+    distribuição, com uma combinação cada — 2/2ⁿ no Wilcoxon, 2/C(n₁ + n₂, n₁) no
+    Mann-Whitney —, e nunca acima de 1.
+    """
+    if metodo == WILCOXON:
+        return min(1.0, 2 / 2 ** tamanhos[0])
+    primeiro, segundo = tamanhos
+    return min(1.0, 2 / math.comb(primeiro + segundo, primeiro))
+
+
 # Uma variável, entre os grupos de outra
 
 
@@ -1451,6 +1640,12 @@ def _comparar_grupos(
     calcular = _CALCULO[(delineamento, escolha.metodo)]
     vetores = [amostra.to_numpy() for amostra in amostras]
     resultado = calcular(vetores) if delineamento == K_GRUPOS else calcular(*vetores)
+    avisos += _avisos_do_resultado(
+        nome,
+        resultado,
+        tuple(grupo.n for grupo in grupos),
+        _em_frase(f"{grupo.n} valores em {grupo.rotulo}" for grupo in grupos),
+    )
     return VariavelComparada(
         **base,
         grupos=grupos,
@@ -1508,6 +1703,11 @@ def _impedimento_do_teste(
     aqui, e não no R: lá o F sai infinito, e o p, zero. Na de Welch basta **um** grupo
     que não varia — o peso dele é n/0, e o R devolve `NaN`; a clássica, com a variância
     combinada dos outros, roda.
+
+    O Mann-Whitney e o Kruskal-Wallis não têm barreira além das que valem para todos:
+    pedem um valor em cada grupo, como o R, e grupos que não variam por dentro, cada um
+    com o seu valor, são para eles a separação mais clara que existe — e não uma divisão
+    por zero.
     """
     if metodo == T_DE_WELCH:
         primeiro, segundo = (amostra.to_numpy() for amostra in amostras)
@@ -1765,8 +1965,10 @@ def _comparar_repetidas(
     se faz no R antes de uma ANOVA de medidas repetidas.
 
     Duas barreiras antes da regra — nenhum caso completo, ou um só, e um valor só em
-    todas as células —, e uma do teste depois dela: medidas que não variam dentro dos
-    casos, em que o F é uma divisão por zero.
+    todas as células —, e a do teste escolhido depois dela: na ANOVA, medidas que não
+    variam dentro dos casos, em que o F é uma divisão por zero; no Friedman, cada caso
+    com o mesmo valor em todas as medidas, em que não há o que ordenar. Ver
+    `_impedimento_das_medidas`.
     """
     medidas = pergunta.medidas
     colunas = [_coluna(quadro, linha.variavel) for linha in medidas]
@@ -1825,12 +2027,9 @@ def _comparar_repetidas(
         )
 
     vetores = [valor.to_numpy() for valor in valores]
-    if sem_variacao_entre_medidas(vetores):
-        motivo = "as medidas não variam dentro dos casos"
-        avisos.append(
-            f"{nome}: {motivo} — cada caso muda o mesmo tanto de uma medida para outra, e "
-            "o F é uma divisão por zero. A linha saiu sem teste."
-        )
+    motivo, aviso = _impedimento_das_medidas(escolha.metodo, vetores, pergunta)
+    if motivo:
+        avisos.append(f"{nome}: {aviso}")
         return VariavelComparada(
             **base, grupos=grupos, escolha=escolha, motivo=motivo, avisos=tuple(avisos)
         )
@@ -1843,6 +2042,38 @@ def _comparar_repetidas(
         resultado=calcular(vetores),
         avisos=tuple(avisos),
     )
+
+
+def _impedimento_das_medidas(
+    metodo: str, vetores: Sequence[Any], pergunta: Pergunta
+) -> tuple[str, str]:
+    """
+    A barreira do teste das medidas repetidas — o motivo curto e o aviso —, ou dois
+    vazios. Cada teste tem a sua, e uma não é a outra:
+
+    * **a ANOVA, quando as medidas não variam dentro dos casos** — cada caso mudando o
+      mesmo tanto de uma medida para outra. A variação de erro é zero, e o F, uma
+      divisão por zero. É justamente o caso em que o Friedman tem mais a dizer: todo
+      caso ordena as medidas do mesmo jeito. O aviso ensina a escrevê-lo;
+    * **o Friedman, quando cada caso tem o mesmo valor em todas as medidas.** Não há o
+      que ordenar dentro de caso nenhum, e o qui-quadrado é 0/0 — o R devolve `NaN`.
+    """
+    if metodo == ANOVA_DE_MEDIDAS_REPETIDAS and sem_variacao_entre_medidas(vetores):
+        motivo = "as medidas não variam dentro dos casos"
+        escrito = replace(_pedido_de(pergunta), metodo="friedman").escrito
+        return motivo, (
+            f"{motivo} — cada caso muda o mesmo tanto de uma medida para outra, e o F é "
+            "uma divisão por zero. A linha saiu sem teste. O Friedman, que olha só a "
+            "ordem das medidas dentro de cada caso, roda com o método escrito no item: "
+            f"`{escrito}`."
+        )
+    if metodo == FRIEDMAN and medidas_iguais_em_cada_caso(vetores):
+        motivo = "cada caso tem o mesmo valor em todas as medidas"
+        return motivo, (
+            f"{motivo} — não há o que ordenar dentro de caso nenhum, e o qui-quadrado de "
+            "Friedman é 0/0. A linha saiu sem teste."
+        )
+    return "", ""
 
 
 def _impedimento_das_repetidas(validos: int, distintos: int) -> str:
@@ -2011,6 +2242,9 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
 
     Pública porque o terminal desenha as mesmas linhas, item por item, com os
     destaques dele: as células saem daqui, e de mais lugar nenhum.
+
+    O resumo de cada linha é o do teste dela — a média e o desvio, ou a mediana e os
+    quartis —, e o intervalo só entra quando é o de 95% que o cabeçalho promete.
     """
     resultado = variavel.resultado
     p = valor_p(resultado.p if resultado else None)
@@ -2019,7 +2253,7 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
             (
                 grupo.rotulo,
                 str(variavel.validos),
-                _media_e_desvio(grupo.resumo),
+                _resumo_da_linha(variavel, grupo.resumo),
                 variavel.celula_do_teste if ordem == 0 else "",
                 p if ordem == 0 else "",
             )
@@ -2030,13 +2264,17 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
             (
                 variavel.rotulo,
                 str(variavel.validos),
-                _media_e_desvio(variavel.resumo),
-                _intervalo(resultado.ic if resultado else None),
+                _resumo_da_linha(variavel, variavel.resumo),
+                _intervalo(_ic_da_tabela(resultado)),
                 _referencia_em_texto(variavel.referencia or 0.0),
                 variavel.celula_do_teste,
                 p,
             ),
         )
+    grupos = tuple(
+        (grupo.rotulo, str(grupo.n), _resumo_da_linha(variavel, grupo.resumo))
+        for grupo in variavel.grupos
+    )
     if variavel.delineamento == K_GRUPOS:
         return (
             (
@@ -2047,10 +2285,7 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
                 variavel.celula_do_teste,
                 p,
             ),
-            *(
-                ("", grupo.rotulo, str(grupo.n), _media_e_desvio(grupo.resumo), "", "")
-                for grupo in variavel.grupos
-            ),
+            *(("", rotulo, n, resumo, "", "") for rotulo, n, resumo in grupos),
         )
     cabeca = (
         variavel.rotulo,
@@ -2061,38 +2296,130 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
         variavel.celula_do_teste,
         p,
     )
-    return (
-        cabeca,
-        *(
-            ("", grupo.rotulo, str(grupo.n), _media_e_desvio(grupo.resumo), "", "", "")
-            for grupo in variavel.grupos
-        ),
-    )
+    return (cabeca, *(("", rotulo, n, resumo, "", "", "") for rotulo, n, resumo in grupos))
+
+
+def _teste_da_linha(variavel: VariavelComparada) -> str:
+    """
+    O teste que a linha mostra, ou que teria mostrado: o que rodou; o escolhido, quando
+    uma barreira dele o impediu de rodar; o da regra, quando ela escolheu um que ainda
+    não tem aritmética. Vazio quando nenhum teste chegou a ser escolhido.
+    """
+    escolha = variavel.escolha
+    if escolha is None:
+        return ""
+    return escolha.metodo or escolha.da_regra
+
+
+def _de_postos(variavel: VariavelComparada) -> bool:
+    return _teste_da_linha(variavel) in TESTES_DE_POSTOS
+
+
+def _resumo_da_linha(variavel: VariavelComparada, resumo: dict[str, float] | None) -> str:
+    """
+    O resumo de um grupo, de uma medida ou da variável, na medida que o teste da linha
+    usa: a mediana e os quartis nos testes de postos, a média e o desvio nos outros — e
+    quando não há teste nenhum, que é como a tabela sempre resumiu.
+    """
+    if _de_postos(variavel):
+        return _mediana_e_quartis(resumo)
+    return _media_e_desvio(resumo)
+
+
+def _coluna_do_resumo(variaveis: Sequence[VariavelComparada]) -> str:
+    """
+    O cabeçalho da coluna do resumo, pelo que ela tem: as linhas sem resumo nenhum — o
+    traço de quem não tem valor — não contam.
+    """
+    formas = {
+        _de_postos(variavel)
+        for variavel in variaveis
+        if variavel.resumo or any(grupo.resumo for grupo in variavel.grupos)
+    }
+    if formas == {True}:
+        return COLUNA_DA_MEDIANA
+    if formas == {True, False}:
+        return COLUNA_DAS_DUAS
+    return COLUNA_DA_MEDIA
+
+
+def _coluna_do_intervalo(variaveis: Sequence[VariavelComparada]) -> str:
+    """
+    O cabeçalho do intervalo da uma amostra, pelo teste de cada linha — o que rodou, ou
+    o que a regra escolheu —, como o do resumo: o traço de um intervalo que não chega a
+    95% fica debaixo do nome do intervalo que faltou, e não do da média. As linhas sem
+    teste nenhum não contam, e uma tabela só delas fica com o da média, de sempre.
+    """
+    formas = {teste == WILCOXON for teste in map(_teste_da_linha, variaveis) if teste}
+    if formas == {True}:
+        return COLUNA_DO_IC_DA_PSEUDOMEDIANA
+    if formas == {True, False}:
+        return COLUNA_DO_IC
+    return COLUNA_DO_IC_DA_MEDIA
+
+
+def _coluna_da_diferenca(variaveis: Sequence[VariavelComparada]) -> str:
+    """
+    O cabeçalho da diferença entre dois grupos, pelo teste de cada linha, como o do
+    intervalo da uma amostra: as linhas sem teste nenhum não contam, e uma tabela só do
+    t — ou sem teste nenhum — fica com o de sempre.
+    """
+    formas = {teste == MANN_WHITNEY for teste in map(_teste_da_linha, variaveis) if teste}
+    if formas == {True}:
+        return COLUNA_DA_DIFERENCA_DE_LOCACAO
+    if formas == {True, False}:
+        return COLUNA_DAS_DUAS_DIFERENCAS
+    return COLUNA_DA_DIFERENCA
+
+
+def _ic_da_tabela(resultado: Resultado | None) -> tuple[float, float] | None:
+    """
+    O intervalo que vai para a tabela: o de 95%, e só ele. Quando o R não o alcança —
+    poucos valores num teste de postos —, ele devolve um de nível menor, que fica no
+    manifesto e no aviso, e não numa coluna que promete 95%.
+    """
+    if resultado is None or resultado.ic is None:
+        return None
+    if resultado.confianca_do_ic is not None and resultado.confianca_do_ic < CONFIANCA:
+        return None
+    return resultado.ic
 
 
 def _tabela_uma_amostra(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
     """
     Uma linha por item, na ordem da ficha.
 
-    As sete colunas — `variável`, `n`, `média (DP)`, `IC 95% da média`, `referência`,
-    `teste` e `p-valor` —, com o **rótulo** do dicionário na primeira. O que decidiu
-    cada teste — o p do Shapiro-Wilk, a estatística e os graus de liberdade — vai para
-    as notas do `.csv`, uma frase por linha, e para o manifesto.
+    As sete colunas — `variável`, `n`, o resumo, o intervalo, `referência`, `teste` e
+    `p-valor` —, com o **rótulo** do dicionário na primeira. O resumo e o intervalo têm
+    o cabeçalho do que levam: `média (DP)` e `IC 95% da média` quando todas as linhas
+    são do t, e os do Wilcoxon quando ele aparece. O que decidiu cada teste — o p do
+    Shapiro-Wilk, a estatística, os graus de liberdade, o caminho do p — vai para as
+    notas do `.csv`, uma frase por linha, e para o manifesto.
     """
     corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
     menor_p = numero(MENOR_P, 3)
+    parametrico, de_postos = REGRA[UMA_AMOSTRA]
     notas = (
         "t de Student para uma amostra, bilateral, como o t.test do R: "
         "t = (média − referência) / (DP / √n), com n − 1 graus de liberdade; o IC 95% "
         "é o da média, com o quantil da mesma t.",
-        "teste escolhido pela regra dos pressupostos: o t quando o Shapiro-Wilk não "
-        f"rejeita a normal (p ≥ {numero(ALFA)}) sobre os valores preenchidos da "
-        "variável; quando rejeita, ou quando a normalidade não pode ser verificada, a "
-        f"regra escolhe o {WILCOXON}, que ainda não está no FlatCap, e a linha sai sem "
-        "teste. O método escrito na ficha tem precedência sobre a regra.",
-        "média e desvio padrão calculados como no resumo da descritiva; n: valores "
-        f"preenchidos, de {total} linhas do banco — os faltantes são por variável.",
-        "a referência é o valor escrito na ficha, na unidade da variável.",
+        "Wilcoxon para uma amostra — o teste do posto sinalizado —, bilateral, como o "
+        "wilcox.test do R: V é a soma dos postos de |valor − referência| entre os valores "
+        "acima da referência, e os valores iguais a ela saem do teste. O p é exato com "
+        f"menos de {LIMITE_DO_EXATO} valores, sem empate e sem valor igual à referência; "
+        "nos outros casos, a aproximação normal, com a correção para empates e a de "
+        "continuidade. O IC 95% é o da pseudomediana de Hodges-Lehmann — a mediana das "
+        "médias de cada par de valores —, como o wilcox.test com conf.int = TRUE.",
+        f"teste escolhido pela regra dos pressupostos: o {parametrico} quando o "
+        f"Shapiro-Wilk não rejeita a normal (p ≥ {numero(ALFA)}) sobre os valores "
+        f"preenchidos da variável; o {de_postos} quando rejeita, ou quando a normalidade "
+        f"não pode ser verificada. {_ainda_nao(UMA_AMOSTRA)}O método escrito na ficha tem "
+        "precedência sobre a regra.",
+        f"{COLUNA_DA_MEDIA} nas linhas do t e {COLUNA_DA_MEDIANA} nas do Wilcoxon, "
+        "calculados como no resumo da descritiva; n: valores preenchidos, de "
+        f"{total} linhas do banco — os faltantes são por variável.",
+        "a referência é o valor escrito na ficha, na unidade da variável; o intervalo, da "
+        "média ou da pseudomediana, se lê contra ela.",
         f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
         "cada linha é um teste; não há correção para comparações múltiplas.",
     ) + tuple(variavel.justificativa for variavel in variaveis)
@@ -2106,8 +2433,8 @@ def _tabela_uma_amostra(variaveis: tuple[VariavelComparada, ...], total: int) ->
         colunas=(
             "variável",
             "n",
-            "média (DP)",
-            "IC 95% da média",
+            _coluna_do_resumo(variaveis),
+            _coluna_do_intervalo(variaveis),
             "referência",
             "teste",
             "p-valor",
@@ -2121,37 +2448,47 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
     """
     Um bloco por item, na ordem da ficha: a linha da comparação e uma linha por grupo.
 
-    Sete colunas, como a da uma amostra — `variável`, `grupo`, `n`, `média (DP)`,
-    `diferença (IC 95%)`, `teste` e `p-valor`. A coluna `grupo` leva o rótulo da
+    Sete colunas, como a da uma amostra — `variável`, `grupo`, `n`, o resumo, a
+    diferença, `teste` e `p-valor`. A coluna `grupo` leva o rótulo da
     variável de grupo na linha da comparação e o de cada grupo nas seguintes, que é
     como uma tabela descritiva põe uma categórica: o nome, e as categorias embaixo.
     A diferença é a do teste da linha, com o intervalo dele — o do de Welch não é o do
-    de Student, e é o do teste que rodou que vai para a célula.
+    de Student, e a diferença de locação do Mann-Whitney não é nenhuma das duas —, e o
+    cabeçalho dela diz qual: `diferença (IC 95%)` quando todas as linhas são do t, como
+    sempre foi, `diferença de locação (IC 95%)` quando são do Mann-Whitney.
     """
     corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
     menor_p = numero(MENOR_P, 3)
-    parametrico, sem_normal = REGRA[DOIS_GRUPOS]
+    parametrico, de_postos = REGRA[DOIS_GRUPOS]
     notas = (
         "uma comparação por bloco: a primeira linha traz a variável de grupo, o n dos "
         "casos que responderam as duas variáveis, a diferença, o teste e o p; as "
         "seguintes, cada grupo, na ordem do dicionário.",
-        "diferença: a média do primeiro grupo menos a do segundo, com o IC 95% do teste "
-        "da linha.",
+        "diferença: no t, a média do primeiro grupo menos a do segundo; no Mann-Whitney, "
+        "a diferença de locação de Hodges-Lehmann — a mediana das diferenças entre um "
+        "valor do primeiro grupo e um do segundo, que não é a diferença das medianas —; "
+        "as duas com o IC 95% do teste da linha.",
         "t de Welch para dois grupos independentes, bilateral, como o t.test do R: cada "
         "grupo com a sua variância, e os graus de liberdade de Welch-Satterthwaite, "
         "fracionários.",
         "t de Student para dois grupos independentes, bilateral, como o t.test do R com "
         "var.equal = TRUE: a variância dos dois grupos combinada, com n₁ + n₂ − 2 graus "
         "de liberdade.",
+        "Mann-Whitney, bilateral, como o wilcox.test do R para duas amostras, que ele chama "
+        "de soma de postos de Wilcoxon: W é o U do primeiro grupo — quantos pares têm o "
+        "valor do primeiro grupo acima do valor do segundo, com meio ponto por empate. O p "
+        f"é exato com menos de {LIMITE_DO_EXATO} valores em cada grupo e sem empate; nos "
+        "outros casos, a aproximação normal, com a correção para empates e a de "
+        "continuidade. O IC 95% é o do wilcox.test com conf.int = TRUE.",
         f"teste escolhido pela regra dos pressupostos: o {parametrico} — o padrão do "
         "t.test do R, que não supõe variâncias iguais — quando o Shapiro-Wilk não rejeita "
-        f"a normal (p ≥ {numero(ALFA)}) em nenhum dos dois grupos; quando rejeita em "
-        "algum, ou quando a normalidade não pode ser verificada em algum, o "
-        f"{sem_normal}. {_ainda_nao(DOIS_GRUPOS)} O t de Student roda quando está "
-        "escrito no item, e o método escrito na ficha tem precedência sobre a regra.",
-        "média e desvio padrão de cada grupo calculados como no resumo da descritiva; n: "
-        f"casos com as duas respostas, de {total} linhas do banco — os faltantes são por "
-        "comparação.",
+        f"a normal (p ≥ {numero(ALFA)}) em nenhum dos dois grupos; o {de_postos} quando "
+        "rejeita em algum, ou quando a normalidade não pode ser verificada em algum. "
+        f"{_ainda_nao(DOIS_GRUPOS)}O t de Student roda quando está escrito no item, e o "
+        "método escrito na ficha tem precedência sobre a regra.",
+        f"{COLUNA_DA_MEDIA} de cada grupo nas linhas do t e {COLUNA_DA_MEDIANA} nas do "
+        "Mann-Whitney, calculados como no resumo da descritiva; n: casos com as duas "
+        f"respostas, de {total} linhas do banco — os faltantes são por comparação.",
         f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
         "cada comparação é um teste; não há correção para comparações múltiplas.",
     ) + tuple(variavel.justificativa for variavel in variaveis)
@@ -2165,8 +2502,8 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
             "variável",
             "grupo",
             "n",
-            "média (DP)",
-            "diferença (IC 95%)",
+            _coluna_do_resumo(variaveis),
+            _coluna_da_diferenca(variaveis),
             "teste",
             "p-valor",
         ),
@@ -2178,13 +2515,13 @@ def _tabela_dois_grupos(variaveis: tuple[VariavelComparada, ...], total: int) ->
 def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
     """
     Um bloco por item, como a dos dois grupos, sem a coluna da diferença: com três
-    grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`,
-    `média (DP)`, `teste` e `p-valor` —; o F e os graus de liberdade vão para as
-    notas, com o resto do que decidiu cada teste.
+    grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`, o
+    resumo, `teste` e `p-valor` —; o F, o qui-quadrado e os graus de liberdade vão para
+    as notas, com o resto do que decidiu cada teste.
     """
     corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
     menor_p = numero(MENOR_P, 3)
-    parametrico, sem_normal = REGRA[K_GRUPOS]
+    parametrico, de_postos = REGRA[K_GRUPOS]
     notas = (
         "uma comparação por bloco: a primeira linha traz a variável de grupo, o n dos "
         "casos que responderam as duas variáveis, o teste e o p; as seguintes, cada "
@@ -2195,17 +2532,19 @@ def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Ta
         "ANOVA de um fator, como o oneway.test do R com var.equal = TRUE — o aov, quando "
         "cada grupo tem dois valores ou mais: a variância dentro dos grupos combinada, e "
         "o F com k − 1 e N − k graus de liberdade.",
+        "Kruskal-Wallis, como o kruskal.test do R: os postos de todos os valores juntos, "
+        "e o qui-quadrado com k − 1 graus de liberdade, com a correção para empates.",
         f"teste escolhido pela regra dos pressupostos: {_com_artigo(parametrico)} — o "
         "padrão do oneway.test do R, que não supõe variâncias iguais — quando o "
         f"Shapiro-Wilk não rejeita a normal (p ≥ {numero(ALFA)}) em nenhum dos grupos; "
-        "quando rejeita em algum, ou quando a normalidade não pode ser verificada em "
-        f"algum, o {sem_normal}. {_ainda_nao(K_GRUPOS)} A ANOVA clássica roda quando está "
+        f"o {de_postos} quando rejeita em algum, ou quando a normalidade não pode ser "
+        f"verificada em algum. {_ainda_nao(K_GRUPOS)}A ANOVA clássica roda quando está "
         "escrita no item, e o método escrito na ficha tem precedência sobre a regra.",
-        "a ANOVA diz se as médias diferem, e não quais: a comparação dois a dois — o "
-        "pós-teste — ainda não está no FlatCap.",
-        "média e desvio padrão de cada grupo calculados como no resumo da descritiva; n: "
-        f"casos com as duas respostas, de {total} linhas do banco — os faltantes são por "
-        "comparação.",
+        "a ANOVA e o Kruskal-Wallis dizem se os grupos diferem, e não quais: a "
+        "comparação dois a dois — o pós-teste — ainda não está no FlatCap.",
+        f"{COLUNA_DA_MEDIA} de cada grupo nas linhas da ANOVA e {COLUNA_DA_MEDIANA} nas "
+        "do Kruskal-Wallis, calculados como no resumo da descritiva; n: casos com as "
+        f"duas respostas, de {total} linhas do banco — os faltantes são por comparação.",
         f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
         "cada comparação é um teste; não há correção para comparações múltiplas.",
     ) + tuple(variavel.justificativa for variavel in variaveis)
@@ -2215,7 +2554,14 @@ def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Ta
         especie=K_GRUPOS,
         variavel="",
         titulo="Comparação entre três grupos ou mais",
-        colunas=("variável", "grupo", "n", "média (DP)", "teste", "p-valor"),
+        colunas=(
+            "variável",
+            "grupo",
+            "n",
+            _coluna_do_resumo(variaveis),
+            "teste",
+            "p-valor",
+        ),
         linhas=corpo,
         notas=notas,
     )
@@ -2224,15 +2570,15 @@ def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Ta
 def _tabela_repetidas(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
     """
     Um bloco por item: uma linha por medida, na ordem da ficha, e o teste e o p na
-    primeira. Cinco colunas — `medida`, `n`, `média (DP)`, `teste` e `p-valor`.
+    primeira. Cinco colunas — `medida`, `n`, o resumo, `teste` e `p-valor`.
 
     O n é o mesmo em todas as linhas do bloco — os casos com todas as medidas, que são
-    os que entram no teste —, e a média de cada medida é a desses casos: com faltante
-    em alguma medida, ela difere da do `resumo` da descritiva, e a nota diz isso.
+    os que entram no teste —, e o resumo de cada medida é o desses casos: com faltante
+    em alguma medida, ele difere do `resumo` da descritiva, e a nota diz isso.
     """
     corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
     menor_p = numero(MENOR_P, 3)
-    parametrico, sem_normal = REGRA[REPETIDAS]
+    parametrico, de_postos = REGRA[REPETIDAS]
     notas = (
         "uma comparação por bloco: uma linha por medida, na ordem da ficha, com o teste e "
         "o p na primeira.",
@@ -2240,17 +2586,23 @@ def _tabela_repetidas(variaveis: tuple[VariavelComparada, ...], total: int) -> T
         "\"Spherical\" — o F do aov com Error(caso / medida) —, sempre com a correção de "
         "Greenhouse-Geisser: ε (k − 1) e ε (n − 1)(k − 1) graus de liberdade, e o p da "
         "coluna G-G Pr. Sem o teste de Mauchly antes.",
+        "Friedman, como o friedman.test do R: em cada caso, os postos das medidas, e o "
+        "qui-quadrado com k − 1 graus de liberdade, com a correção para os empates de "
+        "dentro dos casos.",
         f"teste escolhido pela regra dos pressupostos: {_com_artigo(parametrico)} quando o "
         f"Shapiro-Wilk não rejeita a normal (p ≥ {numero(ALFA)}) em nenhuma das medidas, "
-        "sobre os casos completos; quando rejeita em alguma, ou quando a normalidade não "
-        f"pode ser verificada em alguma, o {sem_normal}. {_ainda_nao(REPETIDAS)} O método "
-        f"escrito no item — `{CHAVE_METODO}: anova` — tem precedência sobre a regra.",
-        "a ANOVA diz se as médias diferem, e não quais: a comparação dois a dois — o "
-        "pós-teste — ainda não está no FlatCap.",
+        "sobre os casos completos; o "
+        f"{de_postos} quando rejeita em alguma, ou quando a normalidade não pode ser "
+        f"verificada em alguma. {_ainda_nao(REPETIDAS)}O método escrito no item — "
+        f"{_ou([f'{CHAVE_METODO}: {chave}' for chave in _metodos_de((REPETIDAS,))])} — "
+        "tem precedência sobre a regra.",
+        "a ANOVA e o Friedman dizem se as medidas diferem, e não quais: a comparação dois "
+        "a dois — o pós-teste — ainda não está no FlatCap.",
         "n: casos com todas as medidas do item, de "
         f"{total} linhas do banco — um caso com uma medida faltando sai do item inteiro. "
-        "Média e desvio padrão de cada medida sobre esses casos, calculados como no "
-        "resumo da descritiva — e diferentes dele quando alguma medida tem faltante.",
+        f"O resumo de cada medida — {COLUNA_DA_MEDIA} nas linhas da ANOVA, "
+        f"{COLUNA_DA_MEDIANA} nas do Friedman — é sobre esses casos, calculado como no "
+        "resumo da descritiva, e diferente dele quando alguma medida tem faltante.",
         f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
         "cada comparação é um teste; não há correção para comparações múltiplas.",
     ) + tuple(variavel.justificativa for variavel in variaveis)
@@ -2260,14 +2612,18 @@ def _tabela_repetidas(variaveis: tuple[VariavelComparada, ...], total: int) -> T
         especie=REPETIDAS,
         variavel="",
         titulo="Comparação entre medidas repetidas",
-        colunas=("medida", "n", "média (DP)", "teste", "p-valor"),
+        colunas=("medida", "n", _coluna_do_resumo(variaveis), "teste", "p-valor"),
         linhas=corpo,
         notas=notas,
     )
 
 
 def _ainda_nao(delineamento: str) -> str:
-    """A frase das notas sobre os testes da regra que ainda não têm aritmética."""
+    """
+    A frase das notas sobre os testes da regra que ainda não têm aritmética — com o
+    espaço do fim, para entrar entre duas frases —, ou vazio, que é o caso de todos os
+    delineamentos desde a 1.14.0.
+    """
     faltam = [teste for teste in REGRA[delineamento] if not _disponivel(delineamento, teste)]
     if not faltam:
         return ""
@@ -2275,9 +2631,9 @@ def _ainda_nao(delineamento: str) -> str:
         pronome = "a" if faltam[0].startswith("ANOVA") else "o"
         return (
             f"{_com_artigo(faltam[0], maiuscula=True)} ainda não está no FlatCap, e onde a "
-            f"regra {pronome} escolhe a linha sai sem teste."
+            f"regra {pronome} escolhe a linha sai sem teste. "
         )
-    return "Os dois ainda não estão no FlatCap, e a linha sai sem teste."
+    return "Os dois ainda não estão no FlatCap, e a linha sai sem teste. "
 
 
 # Os itens da ficha
@@ -2753,7 +3109,10 @@ def _como_pedido(item: Pedido | tuple[Any, ...]) -> Pedido:
             raise ItemInvalidoError(f"`{resto[0]}` não é um método entre grupos.")
         return Pedido(str(variavel), None, chave, grupos=grupo)
     if resto and not metodo_escrito(chave, UMA_AMOSTRA):
-        raise ItemInvalidoError(f"`{resto[0]}` não é um método: t.")
+        raise ItemInvalidoError(
+            f"`{resto[0]}` não é um método contra uma referência: "
+            f"{_ou(_metodos_de((UMA_AMOSTRA,)))}."
+        )
     return Pedido(str(variavel), numero_, chave)
 
 
@@ -3093,6 +3452,13 @@ def _regras() -> dict[str, Any]:
     As regras desta versão, escritas por extenso no manifesto — as mesmas das notas
     das tabelas, sem os números de uma rodada.
     """
+    def escolha(delineamento: str, onde: str, depois: str) -> str:
+        parametrico, de_postos = REGRA[delineamento]
+        return (
+            f"{parametrico} se o Shapiro-Wilk não rejeita a normal (p ≥ {ALFA:g}) {onde}; "
+            f"senão {de_postos}. {_ainda_nao(delineamento)}{depois}"
+        )
+
     return {
         "itens": f"os da lista `{PASTA_COMPARACAO}:` do {ARQUIVO_PROJETO}",
         "delineamentos": {
@@ -3111,29 +3477,27 @@ def _regras() -> dict[str, Any]:
             ),
         },
         "escolha_do_teste": {
-            UMA_AMOSTRA: (
-                "t de Student se o Shapiro-Wilk não rejeita a normal (p ≥ "
-                f"{ALFA:g}) sobre os valores preenchidos; senão {WILCOXON}, que ainda "
-                "não está no FlatCap — a linha sai sem teste. O método escrito na ficha "
-                "tem precedência."
+            UMA_AMOSTRA: escolha(
+                UMA_AMOSTRA,
+                "sobre os valores preenchidos",
+                "O método escrito na ficha tem precedência.",
             ),
-            DOIS_GRUPOS: (
-                f"{REGRA[DOIS_GRUPOS][0]} se o Shapiro-Wilk não rejeita a normal (p ≥ "
-                f"{ALFA:g}) em nenhum dos dois grupos; senão {REGRA[DOIS_GRUPOS][1]}. "
-                f"{_ainda_nao(DOIS_GRUPOS)} O t de Student roda quando está escrito no "
-                "item; o método escrito na ficha tem precedência."
+            DOIS_GRUPOS: escolha(
+                DOIS_GRUPOS,
+                "em nenhum dos dois grupos",
+                "O t de Student roda quando está escrito no item; o método escrito na "
+                "ficha tem precedência.",
             ),
-            K_GRUPOS: (
-                f"{REGRA[K_GRUPOS][0]} se o Shapiro-Wilk não rejeita a normal (p ≥ "
-                f"{ALFA:g}) em nenhum dos grupos; senão {REGRA[K_GRUPOS][1]}. "
-                f"{_ainda_nao(K_GRUPOS)} A ANOVA clássica roda quando está escrita no "
-                "item; o método escrito na ficha tem precedência."
+            K_GRUPOS: escolha(
+                K_GRUPOS,
+                "em nenhum dos grupos",
+                "A ANOVA clássica roda quando está escrita no item; o método escrito na "
+                "ficha tem precedência.",
             ),
-            REPETIDAS: (
-                f"{REGRA[REPETIDAS][0]} se o Shapiro-Wilk não rejeita a normal (p ≥ "
-                f"{ALFA:g}) em nenhuma das medidas, sobre os casos completos; senão "
-                f"{REGRA[REPETIDAS][1]}. {_ainda_nao(REPETIDAS)} O método escrito no item "
-                f"(`{CHAVE_METODO}:`) tem precedência."
+            REPETIDAS: escolha(
+                REPETIDAS,
+                "em nenhuma das medidas, sobre os casos completos",
+                f"O método escrito no item (`{CHAVE_METODO}:`) tem precedência.",
             ),
         },
         "t_de_student": (
@@ -3159,6 +3523,37 @@ def _regras() -> dict[str, Any]:
             "correção de Greenhouse-Geisser — os gl multiplicados pelo ε, o p da coluna "
             "G-G Pr —, sem o teste de Mauchly; sem pós-teste"
         ),
+        "wilcoxon": (
+            "wilcox.test do R com conf.int = TRUE: bilateral; V, a soma dos postos de "
+            "|valor − referência| dos valores acima da referência, sem os iguais a ela; p "
+            f"exato com menos de {LIMITE_DO_EXATO} valores, sem empate e sem valor igual à "
+            "referência, senão a aproximação normal com a correção para empates e a de "
+            f"continuidade; IC {CONFIANCA:.0%} da pseudomediana de Hodges-Lehmann"
+        ),
+        "mann_whitney": (
+            "wilcox.test do R para duas amostras, com conf.int = TRUE: bilateral; W, o U "
+            f"do primeiro grupo; p exato com menos de {LIMITE_DO_EXATO} valores em cada "
+            "grupo e sem empate, senão a aproximação normal com a correção para empates e "
+            f"a de continuidade; IC {CONFIANCA:.0%} da diferença de locação de "
+            "Hodges-Lehmann, que não é a diferença das medianas"
+        ),
+        "kruskal_wallis": (
+            "kruskal.test do R: os postos de todos os valores juntos; qui-quadrado com "
+            "k − 1 graus de liberdade, com a correção para empates; sem pós-teste"
+        ),
+        "friedman": (
+            "friedman.test do R: os postos das medidas dentro de cada caso; qui-quadrado "
+            "com k − 1 graus de liberdade, com a correção para empates; sem pós-teste"
+        ),
+        "resumo": (
+            f"{COLUNA_DA_MEDIA} nas linhas do t e da ANOVA; {COLUNA_DA_MEDIANA} nas do "
+            "Wilcoxon, do Mann-Whitney, do Kruskal-Wallis e do Friedman — o do teste que "
+            "rodou, ou do que a regra escolheu quando ele não pôde rodar"
+        ),
+        "intervalo": (
+            f"só o de {CONFIANCA:.0%} vai para a tabela; quando o teste de postos não o "
+            "alcança, o de nível menor que o R devolve fica no manifesto"
+        ),
         "normalidade": (
             "Shapiro-Wilk, pela mesma função da análise de normalidade — sobre os valores "
             "preenchidos na uma amostra, dentro de cada grupo entre grupos, e em cada "
@@ -3178,6 +3573,10 @@ def _regras() -> dict[str, Any]:
             "anova_de_medidas_repetidas": (
                 f"{MINIMO_DE_MEDIDAS} medidas e {MINIMO_T} casos com todas elas"
             ),
+            "wilcoxon": MINIMO_T,
+            "mann_whitney": "1 em cada grupo",
+            "kruskal_wallis": "1 em cada grupo",
+            "friedman": f"{MINIMO_DE_MEDIDAS} medidas e {MINIMO_T} casos com todas elas",
         },
         "faltantes": (
             "por variável na uma amostra; por comparação entre grupos; nas medidas "
@@ -3389,12 +3788,16 @@ def _p_na_frase(p: float | None) -> str:
 
 def _estatistica_em_texto(resultado: Resultado) -> str:
     """`t = 2,16; 56 gl`, `F = 6,39; 2 e 57 gl` — e, nas medidas repetidas, o ε de
-    Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`."""
+    Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`. No
+    Wilcoxon e no Mann-Whitney, o caminho do p, que muda com o n e com os empates:
+    `V = 70; p exato`, `W = 25,5; p aproximado pela normal, …, porque há empates`."""
     texto = f"{resultado.nome_da_estatistica} = {numero(resultado.estatistica, 2)}"
     if resultado.gl:
         texto += "; " + " e ".join(numero(gl, 2) for gl in resultado.gl) + " gl"
     if resultado.epsilon is not None:
         texto += f"; ε = {numero(resultado.epsilon, 3)}"
+    if resultado.exato is not None:
+        texto += f"; p {resultado.calculo_do_p}"
     return texto
 
 
@@ -3408,6 +3811,18 @@ def _media_e_desvio(resumo: dict[str, float] | None) -> str:
     return f"{numero(resumo['media'])} ({numero(resumo['desvio'])})"
 
 
+def _mediana_e_quartis(resumo: dict[str, float] | None) -> str:
+    """
+    `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
+    escreve, pelo mesmo `numero()`, com os quartis entre colchetes e o `a` do intervalo.
+    """
+    if not resumo:
+        return _AUSENTE
+    return (
+        f"{numero(resumo['mediana'])} [{numero(resumo['q1'])} a {numero(resumo['q3'])}]"
+    )
+
+
 def _intervalo(intervalo: tuple[float, float] | None) -> str:
     if intervalo is None:
         return _AUSENTE
@@ -3418,11 +3833,13 @@ def _intervalo(intervalo: tuple[float, float] | None) -> str:
 def _diferenca(resultado: Resultado | None) -> str:
     """
     `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
-    fixas do intervalo da uma amostra.
+    fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
+    locação no Mann-Whitney. Sem o intervalo de 95%, o traço na célula inteira.
     """
-    if resultado is None or resultado.estimativa is None or resultado.ic is None:
+    intervalo = _ic_da_tabela(resultado)
+    if resultado is None or resultado.estimativa is None or intervalo is None:
         return _AUSENTE
-    return f"{_fixo(resultado.estimativa)} ({_intervalo(resultado.ic)})"
+    return f"{_fixo(resultado.estimativa)} ({_intervalo(intervalo)})"
 
 
 def _fixo(valor: float) -> str:
@@ -3508,6 +3925,15 @@ __all__ = [
     "CASAS_REFERENCIA",
     "CHAVE_METODO",
     "CHAVE_REPETIDAS",
+    "COLUNA_DAS_DUAS",
+    "COLUNA_DAS_DUAS_DIFERENCAS",
+    "COLUNA_DA_DIFERENCA",
+    "COLUNA_DA_DIFERENCA_DE_LOCACAO",
+    "COLUNA_DA_MEDIA",
+    "COLUNA_DA_MEDIANA",
+    "COLUNA_DO_IC",
+    "COLUNA_DO_IC_DA_MEDIA",
+    "COLUNA_DO_IC_DA_PSEUDOMEDIANA",
     "DELINEAMENTOS",
     "DOIS_GRUPOS",
     "EXEMPLO_DA_FICHA",
@@ -3522,6 +3948,7 @@ __all__ = [
     "RAZAO_DE_DESVIOS",
     "REGRA",
     "REPETIDAS",
+    "TESTES_DE_POSTOS",
     "T_DE_WELCH",
     "UMA_AMOSTRA",
     "WILCOXON",
