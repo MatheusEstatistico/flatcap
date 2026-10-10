@@ -316,6 +316,28 @@ def acrescentar_a_ficha(raiz: Path, texto: str) -> Path:
     return caminho
 
 
+def marcar_numericas(raiz: Path, *nomes: str) -> Path:
+    """
+    Marca as variáveis `numerica` no `dicionario.csv`, como se faz na reunião.
+
+    O `perfil` propõe `categorica` para inteiros pequenos que se repetem — a dor de 0
+    a 4 tem a cara de um código —, e é a pessoa quem diz que ela é uma escala: troca
+    o `tipo` e apaga a `categorias_ordem`, que numérica não tem.
+    """
+    caminho = Path(raiz) / "dicionario.csv"
+    linhas = caminho.read_text(encoding="utf-8-sig").splitlines()
+    faltam = set(nomes)
+    for i, linha in enumerate(linhas):
+        campos = linha.split(";")
+        if campos[0] in faltam:
+            campos[2], campos[3] = "numerica", ""
+            linhas[i] = ";".join(campos)
+            faltam.discard(campos[0])
+    assert not faltam, f"o dicionário não tem {sorted(faltam)}"
+    caminho.write_text("\n".join(linhas) + "\n", encoding="utf-8-sig", newline="\n")
+    return caminho
+
+
 def escrever_analises(raiz: Path, texto: str) -> Path:
     """
     Troca a linha `analises: []` da ficha pelo que você escreveria na reunião.
