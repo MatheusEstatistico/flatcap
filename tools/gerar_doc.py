@@ -15,7 +15,7 @@ o fluxo, a arquitetura — e este script não a toca. A segunda começa no `MARC
                                           gerada estiver desatualizada ou se algum
                                           comentário do código não estiver no documento
 
-Só biblioteca padrão, e sem importar o FlatCap: a CI o roda sem instalar nada.
+Só biblioteca padrão, e sem importar o FlatCap: roda sem instalar nada.
 
 Como cada coisa aparece:
 

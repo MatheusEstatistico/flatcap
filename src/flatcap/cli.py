@@ -256,13 +256,17 @@ def doctor(
     # quando falta biblioteca. O `doctor` é o comando que responde "o que está
     # errado?" — ele não pode morrer no meio do próprio diagnóstico.
     if faltando:
+        # O `uv tool upgrade --reinstall` reinstala da origem guardada na instalação — o
+        # repositório. O `uv tool install --reinstall flatcap` procura o nome no PyPI, onde
+        # o FlatCap não está: falha, ou instala o pacote de quem registrar o nome. O
+        # `pipx reinstall` já usa a origem guardada.
         quais = ", ".join(f"`{nome}`" for nome in faltando)
         raise _abortar(
             "Instalação incompleta",
             f"Falta {quais}. Sem isso o FlatCap não abre o banco, não desenha os "
             "gráficos ou não escreve o relatório. Reinstale do jeito que instalou:\n\n"
             "    pipx reinstall flatcap               (pelo pipx)\n"
-            "    uv tool install --reinstall flatcap  (pelo uv)\n"
+            "    uv tool upgrade --reinstall flatcap  (pelo uv)\n"
             '    pip install -e ".[dev]"              (num clone, com o .venv ativado)'
         )
 

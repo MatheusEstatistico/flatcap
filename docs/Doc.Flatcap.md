@@ -1,8 +1,8 @@
 # FlatCap — a documentação
 
-> **Versão 1.13.1.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.14.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
-> divide, e como se testa e se publica uma versão. A **Parte II** é gerada a partir do código:
+> divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
 > Para mexer na Parte II, mude o comentário no código e rode `python tools/gerar_doc.py`.
 
@@ -16,8 +16,8 @@
 6. [Os comandos](#6-os-comandos)
 7. [As pastas e os arquivos](#7-as-pastas-e-os-arquivos)
 8. [A arquitetura](#8-a-arquitetura)
-9. [Os testes e a integração contínua](#9-os-testes-e-a-integração-contínua)
-10. [Como publicar uma versão](#10-como-publicar-uma-versão)
+9. [Os testes](#9-os-testes)
+10. [As versões](#10-as-versões)
 11. [Licença e avisos](#11-licença-e-avisos)
 12. [Como este documento é feito](#12-como-este-documento-é-feito)
 
@@ -64,8 +64,10 @@ University nem ao REDCap Consortium.
 
 O FlatCap precisa do **Python 3.11 ou mais novo** e roda no Windows, no macOS e no Linux.
 Ele é um programa de terminal, e o jeito recomendado de instalá-lo é **como ferramenta**: num
-ambiente isolado, com o comando `flatcap` disponível em qualquer pasta, sem clonar o
-repositório e sem o código à vista.
+ambiente isolado, com o comando `flatcap` disponível em qualquer pasta. A instalação vem
+direto do repositório no GitHub, sem cloná-lo — o código é baixado para uma pasta
+temporária, instalado e descartado —, e por isso pede o [Git](https://git-scm.com/downloads)
+na máquina.
 
 ### 2.1 Como ferramenta, com o `uv` (recomendado)
 
@@ -84,11 +86,10 @@ não tiver um.
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
 
-2. **Instale o FlatCap** pelo endereço do pacote da versão, na página de
-   [versões](https://github.com/MatheusEstatistico/flatcap/releases) do repositório:
+2. **Instale o FlatCap:**
 
    ```bash
-   uv tool install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+   uv tool install git+https://github.com/MatheusEstatistico/flatcap
    ```
 
    Se o terminal disser que não acha o comando `flatcap`, rode `uv tool update-shell` e abra
@@ -109,32 +110,21 @@ Com o Python já instalado (o instalador do [python.org](https://www.python.org/
 ```bash
 python -m pip install --user pipx
 python -m pipx ensurepath          # abra um terminal novo depois
-pipx install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+pipx install git+https://github.com/MatheusEstatistico/flatcap
 ```
 
-### 2.3 Direto do repositório, sem o pacote da versão
-
-Com o Git na máquina, a instalação pode vir da etiqueta da versão — o código é baixado para
-uma pasta temporária, instalado e descartado:
-
-```bash
-uv tool install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
-pipx install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
-```
-
-### 2.4 Atualizar e desinstalar
+### 2.3 Atualizar e desinstalar
 
 | | `uv` | `pipx` |
 |---|---|---|
-| trocar de versão | `uv tool install --force <endereço da versão nova>` | `pipx install --force <endereço da versão nova>` |
+| atualizar para o que está no `main` | `uv tool upgrade flatcap` | `pipx upgrade flatcap` |
 | desinstalar | `uv tool uninstall flatcap` | `pipx uninstall flatcap` |
 | ver o que está instalado | `uv tool list` | `pipx list` |
 
-O `.env` da sua conta e o `FLATCAP_ROOT` não são tocados por nenhum desses comandos. Quando o
-FlatCap estiver no PyPI ([seção 10.4](#104-o-pypi-depois)), a instalação vira
-`uv tool install flatcap` e a atualização, `uv tool upgrade flatcap`.
+O `.env` da sua conta e o `FLATCAP_ROOT` não são tocados por nenhum desses comandos. A
+versão instalada aparece no `flatcap --version`.
 
-### 2.5 Para desenvolver
+### 2.4 Para desenvolver
 
 ```bash
 git clone https://github.com/MatheusEstatistico/flatcap.git
@@ -273,7 +263,7 @@ do projeto — esta só quando o cliente tem um projeto.
 | `flatcap cruzamento <id>` | não | `3. Análises/cruzamento/` | uma tabela cruzada por par da lista `cruzamento:` |
 | `flatcap associacao <id>` | não | `3. Análises/associacao/` | qui-quadrado ou Fisher, pela regra de Cochran |
 | `flatcap correlacao <id>` | não | `3. Análises/correlacao/` | Pearson, Spearman ou Kendall, pelos pressupostos |
-| `flatcap comparacao <id>` | não | `3. Análises/comparacao/` | testes t e ANOVAs: contra referência, entre grupos, entre medidas |
+| `flatcap comparacao <id>` | não | `3. Análises/comparacao/` | testes t e ANOVAs, ou Wilcoxon, Mann-Whitney, Kruskal-Wallis e Friedman, pelos pressupostos: contra referência, entre grupos, entre medidas |
 | `flatcap analisar <id>` | não | as pastas das análises | as análises da lista `analises:`, de uma vez |
 | `flatcap relatorio <id>` | não | `Relatorio_<matrícula>_<data>.docx` | o documento, montado das rodadas |
 | `flatcap template` | não | `template.docx`, `template-decisoes.md` | o modelo do relatório, para ajustar no Word |
@@ -379,7 +369,7 @@ correlacao:
   - [dor, ansiedade, kendall]   # o método escrito manda
 comparacao:
   - [imc, 25]                   # uma amostra, contra a referência
-  - [imc, sexo]                 # dois grupos: o t de Welch
+  - [imc, sexo]                 # dois grupos: o t de Welch ou, sem a normal, o Mann-Whitney
   - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
   - repetidas: [pas_0, pas_1, pas_2]         # a mesma medida, três vezes
     metodo: anova
@@ -491,13 +481,14 @@ por dia, não paga pelo `pandas`.
   `fsync`, `os.replace` —, o texto sai em UTF-8 com `\n`, e o que deixa de valer vai para
   `2. Versões antigas/`. Uma falha no meio desfaz o que já foi feito.
 
-## 9. Os testes e a integração contínua
+## 9. Os testes
 
 ```bash
 pytest              # a suíte offline — alguns minutos: os gráficos são desenhados a 600 DPI
 pytest -m e2e       # a ponta a ponta: o flatcap como subprocesso contra um REDCap falso
 pytest -m ""        # as duas
 ruff check src tests tools
+python tools/gerar_doc.py --conferir   # este documento em dia com os comentários do código
 ```
 
 - **Um módulo em `src/flatcap/` pede um `test_` de mesmo nome** em `tests/`.
@@ -511,89 +502,32 @@ ruff check src tests tools
 - Os testes `test_o_que_so_se_ve_*` não testam nada: lembram que um `.docx` e um `.png` se
   conferem abrindo.
 
-A **integração contínua** (`.github/workflows/ci.yml`) roda em todo push e pull request: o
-`ruff`, a conferência deste documento, as duas suítes no Linux, no Windows e no macOS, do
-Python 3.11 ao 3.14, e o wheel instalado num ambiente limpo, rodando a ponta a ponta contra
-ele. O **pre-commit** (`.pre-commit-config.yaml`) roda o `ruff`, as conferências de arquivo, o
-`gitleaks` e um gancho que barra banco, relatório e `.env` mesmo com `git add -f`.
+O repositório não tem integração contínua: essas conferências rodam na máquina de quem muda o
+código, antes do commit, e são elas que mantêm o `main` de pé. O **pre-commit**
+(`.pre-commit-config.yaml`) roda o `ruff`, as conferências de arquivo, o `gitleaks` e um gancho
+que barra banco, relatório e `.env` mesmo com `git add -f`.
 
 O ritual completo de uma mudança está no [`CONTRIBUTING.md`](../CONTRIBUTING.md).
 
-## 10. Como publicar uma versão
+## 10. As versões
 
-Uma versão é uma **etiqueta do Git** (`v1.13.1`). A etiqueta dispara o workflow
-`.github/workflows/versao.yml`, que constrói o pacote, confere e publica — nada é construído
-na sua máquina.
+Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **único lugar**: o
+`pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. Por enquanto, o FlatCap não
+publica pacotes nem etiquetas: quem instala pelo repositório ([seção 2](#2-instalação))
+recebe o que está no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois.
 
-### 10.1 Preparar
+Para fechar uma versão:
 
-1. Suba a versão em `src/flatcap/__init__.py` (`__version__`) — é o **único lugar**: o
-   `pyproject.toml` a lê de lá.
+1. Suba o `__version__` no `__init__.py`.
 2. Escreva a seção da versão no docstring do `__init__.py` (o porquê) e no `CHANGELOG.md` (o
-   quê, em uma linha por mudança). As notas da versão no GitHub saem do `CHANGELOG.md`.
-3. Troque o número da versão nos comandos de instalação do `README.md` e da
-   [seção 2](#2-instalação).
-4. Rode o ritual, `python tools/gerar_doc.py`, e faça o commit. Espere a CI passar.
+   quê, em uma linha por mudança).
+3. Rode `python tools/gerar_doc.py` e o ritual do [`CONTRIBUTING.md`](../CONTRIBUTING.md), e
+   faça o commit no `main`.
 
-### 10.2 Publicar
-
-```bash
-git tag -a v1.13.1 -m "FlatCap 1.13.1"
-git push origin v1.13.1
-```
-
-O workflow:
-
-1. confere que a etiqueta é a versão do `__init__.py` — `v1.13.0` sobre um `1.13.1` recusa;
-2. constrói o **wheel** (`flatcap-1.13.1-py3-none-any.whl`, o pacote que se instala) e o
-   **sdist** (`flatcap-1.13.1.tar.gz`, o código-fonte com os testes), e confere os dois com o
-   `twine`;
-3. instala o wheel num ambiente limpo e roda a suíte ponta a ponta contra ele;
-4. cria a versão no GitHub, com os dois arquivos anexados e as notas tiradas do
-   `CHANGELOG.md`, já com os comandos de instalação.
-
-A página da versão fica em `https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.13.1`,
-e o endereço do wheel, que vai nos comandos de instalação, é
-
-```
-https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
-```
-
-Uma etiqueta errada se desfaz antes de alguém instalar: apague a versão no GitHub, e então
-`git tag -d v1.13.1` e `git push origin :refs/tags/v1.13.1`.
-
-### 10.3 Instalar em outra máquina
-
-A [seção 2](#2-instalação): o `uv` (ou o `pipx`) e o endereço do wheel. A máquina não precisa
-do Git, do código nem de um clone, e com o `uv` não precisa nem do Python. Depois,
-`flatcap doctor --criar-env`, preencher as três chaves, e `flatcap doctor`.
-
-### 10.4 O PyPI, depois
-
-Com o FlatCap no [PyPI](https://pypi.org), a instalação vira `uv tool install flatcap` e a
-atualização, `uv tool upgrade flatcap`. O nome `flatcap` estava livre no PyPI em outubro de
-2026. O workflow já tem o passo, desligado; para ligá-lo, uma vez:
-
-1. Crie uma conta no PyPI, com autenticação em dois fatores.
-2. Em *Your account* → *Publishing*, cadastre um *pending publisher*: owner
-   `MatheusEstatistico`, repositório `flatcap`, workflow `versao.yml`, environment `pypi`. É a
-   *trusted publishing*: o GitHub prova ao PyPI quem está publicando, e nenhum token do PyPI
-   precisa existir.
-3. No GitHub, em *Settings* → *Environments*, crie o environment `pypi` (dá para exigir uma
-   aprovação manual antes de cada publicação).
-4. Em *Settings* → *Secrets and variables* → *Actions* → *Variables*, crie
-   `PUBLICAR_NO_PYPI` com o valor `true`.
-
-A próxima etiqueta publica no GitHub e no PyPI. Um arquivo publicado no PyPI não pode ser
-substituído — mesmo apagado, o nome dele não é aceito de novo —, então um erro vira a versão
-seguinte.
-
-### 10.5 E um executável, sem Python?
-
-Dá para empacotar o FlatCap com o PyInstaller num executável por sistema, mas com o `pandas`, o
-`scipy` e o `matplotlib` dentro ele costuma passar de 100 MB, precisa ser construído em cada
-sistema, e antivírus costumam desconfiar de executável novo. O `uv` resolve o mesmo problema — instalar
-sem ter o Python — sem nenhum desses custos.
+**E um executável, sem Python?** Dá para empacotar o FlatCap com o PyInstaller num executável
+por sistema, mas com o `pandas`, o `scipy` e o `matplotlib` dentro ele costuma passar de 100 MB,
+precisa ser construído em cada sistema, e antivírus costumam desconfiar de executável novo. O
+`uv` resolve o mesmo problema — instalar sem ter o Python — sem nenhum desses custos.
 
 ## 11. Licença e avisos
 
@@ -622,9 +556,15 @@ código-fonte.
   | `associacao.qui_quadrado` | `src/library/stats/R/chisq.test.R` |
   | `associacao._fisher_2x2` | `src/library/stats/R/fisher.test.R` |
   | `hipoteses.anova_de_medidas_repetidas` | o `anova.mlm`, em `src/library/stats/R/mlm.R` |
+  | `hipoteses.wilcoxon_uma_amostra`, `hipoteses.mann_whitney` — a escolha entre o p exato e a aproximação, e o intervalo e a estimativa de Hodges-Lehmann | o `wilcox.test.default`, em `src/library/stats/R/wilcox.test.R`, na versão do R até a 4.5 |
+  | `hipoteses._raiz` — a busca de raiz do `uniroot`, pelo método de Brent | o `R_zeroin2`, em `src/library/stats/src/zeroin.c` |
+  | `hipoteses._quantil` — o quantil das distribuições exatas | o `qsignrank` e o `qwilcox`, em `src/nmath/signrank.c` e `src/nmath/wilcox.c` |
+  | `hipoteses.friedman` | `src/library/stats/R/friedman.test.R` |
 
   O Fisher das tabelas maiores que 2×2 é uma implementação própria do algoritmo de rede de
-  Mehta e Patel (1983), e não uma transcrição do `fexact.c`.
+  Mehta e Patel (1983), e não uma transcrição do `fexact.c`. As distribuições exatas do posto
+  sinalizado e da soma dos postos também são próprias — contagens em inteiros —, e não a
+  recursão do `csignrank` e do `cwilcox`.
 
 - `flatcap --version` mostra a licença, no formato dos programas GNU.
 - O FlatCap não é afiliado à Vanderbilt University nem ao REDCap Consortium.
@@ -653,9 +593,10 @@ python tools/gerar_doc.py --conferir  # não escreve; falha se a Parte II estive
                                       # ou se algum comentário do código não estiver aqui
 ```
 
-O `--conferir` roda na CI: um comentário mudado sem regerar o documento reprova o pull request.
-E ele confere, independentemente da formatação, que **todo** comentário `#`, todo docstring e
-toda string solta de `src/flatcap/` aparece neste documento.
+O `--conferir` faz parte do ritual de cada mudança, no [`CONTRIBUTING.md`](../CONTRIBUTING.md):
+ele acusa o comentário mudado sem o documento regerado. E confere, independentemente da
+formatação, que **todo** comentário `#`, todo docstring e toda string solta de `src/flatcap/`
+aparece neste documento.
 
 <!-- Daqui para baixo, o documento é gerado por tools/gerar_doc.py a partir dos comentários de src/flatcap/. Não edite à mão: mude o comentário no código e rode o script. -->
 
@@ -693,7 +634,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*440 linhas.*
+*487 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -715,7 +656,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     associacao.py  testa a associação entre pares de categóricas (qui-quadrado ou Fisher)
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
-    comparacao.py  compara médias: contra uma referência, entre grupos e entre medidas
+    comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
@@ -1129,6 +1070,53 @@ para quem instala o FlatCap com o `pipx` ou o `uv` e roda o comando de qualquer 
 
 **A abertura.** `LICENSE` com a GPL-3.0, `NOTICE.md` com os trechos derivados do R, o
 cabeçalho SPDX em todo arquivo de código, e o `flatcap --version` dizendo a licença.
+
+### 1.14.0 — os testes de postos
+
+**Onde a normal não se sustenta, a comparação passa a ter teste.** O Wilcoxon contra uma
+referência, o Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou mais e o
+Friedman nas medidas repetidas — os quatro que a regra já nomeava desde a 1.7.0, e que
+deixavam a linha sem teste. A regra não mudou: o Shapiro-Wilk em cada vetor do
+delineamento, o paramétrico quando ele não rejeita, o de postos quando rejeita ou não pode
+ser verificado, e o método escrito no item por cima dos dois — `wilcoxon`, `mannwhitney`,
+`kruskal`, `metodo: friedman`.
+
+**Os quatro são os do R, com a escolha do R escrita.** O `wilcox.test` decide o p exato com
+menos de 50 valores, sem empate e sem zero, e a aproximação normal com as correções de
+empate e de continuidade nos outros casos; o `scipy` decide por outro critério, e por isso
+a aritmética do Wilcoxon e do Mann-Whitney está no `hipoteses.py` — as distribuições exatas
+contadas em inteiros, servindo ao p e ao intervalo. O Kruskal-Wallis é o `kruskal` do
+`scipy`, igual ao do R; o Friedman é escrito, como a ANOVA, porque o `scipy` recusa duas
+medidas, que o R aceita.
+
+**O Wilcoxon e o Mann-Whitney saem com a estimativa de Hodges-Lehmann e o intervalo de 95%
+dela** — o `conf.int = TRUE` do R: a pseudomediana na uma amostra, a diferença de locação
+entre dois grupos, que não é a diferença das medianas. No caminho aproximado, o R acha os
+limites com o `uniroot`, e ele está transcrito — o `R_zeroin2` —, para os limites saírem
+os do R, e não outros a menos de 1e-4 deles. Com poucos valores, o intervalo de 95% pode
+não existir na distribuição exata, e o menor p possível pode passar de 0,05: os dois saem
+com aviso, e o intervalo que não chega a 95% fica fora da tabela.
+
+**O resumo, linha a linha.** `média (DP)` nas linhas do t e da ANOVA, `mediana [Q1 a Q3]`
+nas dos testes de postos, como o `compareGroups` — o cabeçalho diz o que a coluna tem, e
+uma tabela só de paramétricos sai como antes. O mesmo no intervalo da uma amostra (`IC 95%
+da média`, `da pseudomediana`, ou `IC 95%` quando a tabela tem os dois) e na diferença
+entre dois grupos: `diferença de locação (IC 95%)` no Mann-Whitney, porque o documento não
+leva as notas do `.csv`, e a de locação, ao lado da mediana de cada grupo, seria lida como
+a diferença das duas. O manifesto guarda as duas formas do resumo de cada linha, de cada
+grupo e de cada medida.
+
+**Cada teste com a sua barreira.** O Friedman roda onde a ANOVA de medidas repetidas não
+pode — cada caso mudando o mesmo tanto entre as medidas —, e o aviso da ANOVA ensina a
+escrevê-lo; e recusa o caso em que cada caso tem o mesmo valor em todas as medidas, onde o
+R devolve `NaN`.
+
+**Os nomes.** `wilcoxon` é o `wilcox.test` do R: o do posto sinalizado contra uma
+referência, e o Mann-Whitney entre dois grupos. O `signed rank` escrito por extenso recusa,
+em vez de levar ao Mann-Whitney quem pediu o posto sinalizado; as outras grafias dos livros
+— `U de Mann-Whitney`, `Wilcoxon rank sum`, `Kruskal-Wallis` — valem.
+
+O `relatorio.py` não mudou uma linha.
 
 ## `flatcap/config.py`
 
@@ -9581,9 +9569,9 @@ Com seis casas, um p de 2,5e-08 é gravado como `0.0` — o número que o
 
 ## `flatcap/hipoteses.py`
 
-`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-FileCopyrightText: 1998-2018 The R Core Team` · `SPDX-FileCopyrightText: 1998 B. D. Ripley` · `SPDX-License-Identifier: GPL-3.0-or-later`
+`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-FileCopyrightText: 1995-2019 The R Core Team` · `SPDX-FileCopyrightText: 1998 B. D. Ripley` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*702 linhas.*
+*1471 linhas.*
 
 A aritmética dos testes de hipótese — como o R os calcula, e mais nada.
 
@@ -9616,15 +9604,32 @@ de arquivo.
 
 ### O `Resultado` é o `htest` do R
 
-`t.test`, `wilcox.test`, `oneway.test` e `kruskal.test` devolvem o mesmo objeto —
-`statistic`, `parameter`, `p.value`, `conf.int`, `estimate`, `null.value` e
-`method` —, e é por isso que ele serve de contrato para todos os testes de
-comparação. Os campos do `Resultado` são esses, com os nomes da casa. O
+`t.test`, `wilcox.test`, `oneway.test`, `kruskal.test` e `friedman.test` devolvem o
+mesmo objeto — `statistic`, `parameter`, `p.value`, `conf.int`, `estimate`,
+`null.value` e `method` —, e é por isso que ele serve de contrato para todos os testes
+de comparação. Os campos do `Resultado` são esses, com os nomes da casa. O
 `Coeficiente` da correlação já era quase ele.
 
 **Sempre bilateral.** Como na correlação: um teste unilateral escolhido depois de
 olhar os dados é o p dividido por dois, e a ficha não tem como dizer que a direção
 foi decidida antes.
+
+### Os testes de postos
+
+Os quatro que dispensam a normal — o Wilcoxon de uma amostra, o Mann-Whitney, o
+Kruskal-Wallis e o Friedman — trocam os valores pelos postos deles, com o posto médio
+nos empates, como o `rank` do R. Os dois primeiros são o `wilcox.test` do R, e os dois
+saem **com a estimativa e o intervalo**, o `conf.int = TRUE` — que não é o padrão do
+R, e é o que dá o tamanho do efeito na unidade da variável, como o intervalo do t: a
+pseudomediana de Hodges-Lehmann no Wilcoxon, a diferença de locação no Mann-Whitney.
+O Kruskal-Wallis e o Friedman não estimam nada, como a ANOVA.
+
+**O caminho do p é a escolha do R, escrita**: exato — pela distribuição do posto
+sinalizado ou da soma dos postos — com menos de 50 valores (na uma amostra, os que não
+são iguais à referência; no Mann-Whitney, em cada grupo), sem empate e sem zero; nos
+outros casos, a aproximação normal, com a variância corrigida para os empates e a
+correção de continuidade. O Kruskal-Wallis e o Friedman só têm a aproximação do
+qui-quadrado, no R e aqui.
 
 ### Quando importar, e quando escrever
 
@@ -9633,16 +9638,23 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 1. **o `scipy` faz o que o R faz** → importar. É o caso do t: `ttest_1samp`,
    `ttest_ind` e o `confidence_interval()` deles dão o t, os graus de liberdade, o p e
    o intervalo do `t.test`, conferidos até a décima quarta casa — no de duas amostras,
-   inclusive com um grupo de um valor só. O `f_oneway` dá o F e o p do `oneway.test`,
-   mas não os graus de liberdade, e a ANOVA desce um degrau: ver `anova_de_um_fator`;
-2. **o `scipy` calcula igual e escolhe diferente** → escrever a escolha do R e
-   importar a conta. É o caso do Wilcoxon e do Mann-Whitney, que vêm depois: o R usa
-   o p exato só com menos de 50 casos, sem empate e sem zero, e a aproximação normal
-   com correção de continuidade nos outros casos; o `scipy` decide o exato por outro
-   critério e não corrige;
+   inclusive com um grupo de um valor só. E do Kruskal-Wallis: o `kruskal` dá o
+   qui-quadrado e o p do `kruskal.test`, com a mesma correção para empates;
+2. **o `scipy` dá o número, mas não tudo o que vai para a tabela** → escrever a
+   fórmula, e do `scipy` importar só a cauda. O `f_oneway` dá o F e o p do
+   `oneway.test`, mas não os graus de liberdade: ver `anova_de_um_fator`. O
+   `friedmanchisquare` dá o qui-quadrado do `friedman.test`, mas recusa duas medidas,
+   que o R aceita: ver `friedman`. A função do `scipy` fica nos testes, como
+   conferência;
 3. **nem isso basta** → transcrever a aritmética do R, como o AS 89 do Spearman e o
    algoritmo de rede do Fisher — e a ANOVA de medidas repetidas, que o `scipy` não
-   tem: ver `anova_de_medidas_repetidas`.
+   tem: ver `anova_de_medidas_repetidas`. **O Wilcoxon e o Mann-Whitney estão aqui**,
+   e não no segundo degrau, como o desenho previa: o `wilcoxon` e o `mannwhitneyu` do
+   `scipy` dão o p do R quando recebem a escolha do R, mas o intervalo pede os quantis
+   das distribuições exatas — que o `scipy` não expõe — e, no caminho aproximado, a
+   busca de raiz do `wilcox.test`, que o R faz com o `uniroot`. As distribuições são
+   contadas aqui, em inteiros, e servem ao p e ao intervalo ao mesmo tempo; a busca é
+   o `uniroot` do R transcrito: ver `_raiz`.
 
 ### O que ele recusa
 
@@ -9653,7 +9665,11 @@ R para ele: um valor em cada grupo e três no total (`not enough observations`);
 Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
 a sua variância, e a de um valor só não existe; na ANOVA — as duas —, dois em cada grupo
 também, que é o `not enough observations` do `oneway.test`; nas medidas repetidas, dois
-casos com todas as medidas. Quem
+casos com todas as medidas. Nos testes de postos, os mínimos do R são menores — um
+valor no Wilcoxon, um em cada grupo no Mann-Whitney e no Kruskal-Wallis; no Friedman,
+dois casos, como na ANOVA —, e as barreiras que o R não tem são as do resultado sem
+sentido, onde ele devolve `NaN`: todos os valores iguais à referência no Wilcoxon,
+todos iguais no Kruskal-Wallis, e cada caso com as medidas todas iguais no Friedman. Quem
 chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
 de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
 ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
@@ -9670,46 +9686,69 @@ comando que não faz teste deve pagar o import. O `numpy` não é dependência n
 
 ### `CONFIANCA`
 
-*linha 100*
+*linha 130*
 
 > O nível do intervalo. O mesmo 95% da correlação e do `conf.level` padrão do R.
 
 ### `MINIMO_T`
 
-*linha 103*
+*linha 133*
 
 > O menor número de valores com que o `t.test` do R calcula o t de uma amostra.
 
 ### `MINIMO_STUDENT`
 
-*linha 106*
+*linha 136*
 
 > O menor número de valores, somados os dois grupos, com que o `t.test` do R calcula o
 > t de Student de duas amostras: um em cada grupo, e um grau de liberdade que sobre.
 
 ### `T_DE_STUDENT`
 
-*linha 110*
+*linha 140*
 
 > O nome de cada teste, como ele vai para a coluna `teste` da tabela. É o `method`
-> do `htest`, em português.
+> do `htest`, em português — e, nos testes de postos, o nome pelo qual cada um é
+> conhecido: o `wilcox.test` de duas amostras, que o R chama de soma de postos de
+> Wilcoxon, é o Mann-Whitney.
+
+### `LIMITE_DO_EXATO`
+
+*linha 154*
+
+> O `exact <- (n < 50)` do `wilcox.test` do R: com menos valores do que isto — na uma
+> amostra, os que não são iguais à referência; no Mann-Whitney, em cada grupo —, sem
+> empate e sem zero, o p é exato; nos outros casos, a aproximação normal.
+
+### `TOLERANCIA_DA_RAIZ`
+
+*linha 159*
+
+> A busca do intervalo e da estimativa no caminho aproximado: o `tol.root = 1e-4` do
+> `wilcox.test` e o `maxiter = 1000` do `uniroot`. O intervalo aproximado do R é exato
+> até essa tolerância, e não além dela — e o daqui é o mesmo número, e não um melhor.
 
 ### `class Resultado`
 
-*linha 120*
+*linha 167*
 
 O que um teste de hipótese devolve — o `htest` do R, com os nomes da casa.
 
 `estatistica` é a do R, com o nome dela em `nome_da_estatistica`: t no t de
-Student, V no Wilcoxon, W no Mann-Whitney, F na ANOVA, o qui-quadrado de
-Kruskal-Wallis. `gl` é uma tupla porque o número de graus de liberdade muda de
-teste para teste: `(14.0,)` no t, fracionário no de Welch, `(2.0, 25.0)` na
-ANOVA, vazio nos testes de postos. `calculo_do_p` diz em palavras como o p saiu,
-porque nos testes de postos são dois caminhos conforme o n e os empates.
+Student, V no Wilcoxon, W no Mann-Whitney, F na ANOVA, o qui-quadrado no
+Kruskal-Wallis e no Friedman. `gl` é uma tupla porque o número de graus de
+liberdade muda de teste para teste: `(14.0,)` no t, fracionário no de Welch,
+`(2.0, 25.0)` na ANOVA, vazio no Wilcoxon e no Mann-Whitney. `calculo_do_p` diz em
+palavras como o p saiu, porque nos testes de postos são dois caminhos conforme o n
+e os empates; `exato` diz qual deles — o `exact` do `method` do R —, e fica `None`
+nos testes que só têm um.
 
 `estimativa` é o que o teste estima — a média, a diferença de médias, a
 pseudomediana —, com o nome em `nome_da_estimativa`; `ic` é o intervalo dela,
-como o `conf.int` do R; `referencia` é o `mu` da hipótese nula.
+como o `conf.int` do R, e `confianca_do_ic`, o nível dele — o 95% pedido, ou menos,
+quando o R não o alcança: com poucos valores, a distribuição exata não tem um
+intervalo de 95%, e o R devolve o de nível mais alto que ela tem, com um aviso.
+`referencia` é o `mu` da hipótese nula.
 
 `epsilon` é o ε de Greenhouse-Geisser das medidas repetidas — o quanto a correção
 encolheu os graus de liberdade, que em `gl` já saem corrigidos. É o único campo que
@@ -9719,7 +9758,7 @@ não está no `htest`: o R o dá no `anova.mlm`, que não é um.
 
 ### `def t_uma_amostra(x, mu)`
 
-*linha 156*
+*linha 210*
 
 O `t.test(x, mu = mu)` do R: bilateral, t com n − 1 graus de liberdade e o
 intervalo de 95% **da média** — não da diferença para a referência, que é como o
@@ -9738,7 +9777,7 @@ Raises:
 
 ### `def t_de_student(x, y)`
 
-*linha 202*
+*linha 257*
 
 O `t.test(x, y, var.equal = TRUE)` do R: duas amostras independentes, a variância
 dos dois grupos combinada, bilateral, n₁ + n₂ − 2 graus de liberdade, e o intervalo
@@ -9760,7 +9799,7 @@ Raises:
 
 ### `def t_de_welch(x, y)`
 
-*linha 254*
+*linha 310*
 
 O `t.test(x, y)` do R — o padrão dele, `var.equal = FALSE`: cada grupo com a sua
 variância, bilateral, os graus de liberdade de Welch-Satterthwaite, fracionários, e
@@ -9782,7 +9821,7 @@ Raises:
 
 ### `def anova_de_um_fator(grupos)`
 
-*linha 303*
+*linha 360*
 
 O `oneway.test(y ~ g, var.equal = TRUE)` do R — a ANOVA de um fator, a clássica: a
 variância dentro dos grupos combinada, e o F com k − 1 e N − k graus de liberdade.
@@ -9806,7 +9845,7 @@ Raises:
 
 ### `def anova_de_welch(grupos)`
 
-*linha 354*
+*linha 411*
 
 O `oneway.test(y ~ g)` do R — o padrão dele, `var.equal = FALSE`: cada grupo pesado
 pelo inverso da variância da sua média, e os graus de liberdade do denominador pela
@@ -9829,7 +9868,7 @@ Raises:
 
 ### `def anova_de_medidas_repetidas(medidas)`
 
-*linha 405*
+*linha 462*
 
 A ANOVA de um fator de medidas repetidas — as mesmas pessoas medidas k vezes —,
 **sempre com a correção de Greenhouse-Geisser**: o `anova(lm(Y ~ 1), X = ~1,
@@ -9865,7 +9904,7 @@ Raises:
 
 ### `def sem_variacao_entre_medidas(medidas)`
 
-*linha 482*
+*linha 539*
 
 As medidas não variam dentro dos casos: cada caso muda o mesmo tanto de uma medida
 para outra, ou não muda nada.
@@ -9878,16 +9917,18 @@ critério é o do `t.test`, levado para cá: o desvio padrão residual abaixo de
 
 Recebe as colunas, ou a matriz n × k já montada.
 
-### `def _matriz_das_medidas(medidas, conferir)`
+### `def _matriz_das_medidas(medidas, conferir, teste)`
 
-*linha 507*
+*linha 564*
 
 As medidas como matriz n × k — os casos nas linhas, as medidas nas colunas —, com
-as barreiras: duas medidas ou mais, todas do mesmo tamanho, e dois casos ou mais.
+as barreiras: duas medidas ou mais, todas do mesmo tamanho, e dois casos ou mais —
+o mínimo do R na ANOVA de medidas repetidas e no Friedman. `teste` é o nome que vai
+para a frase.
 
 ### `def sem_variacao_nos_grupos(grupos, variancias_iguais)`
 
-*linha 538*
+*linha 598*
 
 Os valores não variam dentro dos grupos, para a ANOVA.
 
@@ -9903,15 +9944,346 @@ infinito; o R devolve `NaN`.
 
 ### `def _grupos_da_anova(grupos)`
 
-*linha 570*
+*linha 630*
 
 Os grupos como vetores, com as duas barreiras do `oneway.test`: dois grupos ou mais
 (`not enough groups`), e dois valores ou mais em cada um (`not enough
 observations`).
 
+### Os testes de postos
+
+### `def wilcoxon_uma_amostra(x, mu)`
+
+*linha 651*
+
+O `wilcox.test(x, mu = mu, conf.int = TRUE)` do R: o teste do posto sinalizado de
+Wilcoxon, bilateral, com a pseudomediana de Hodges-Lehmann e o intervalo de 95% dela.
+
+    d = x − mu, sem os zeros            V = Σ postos de |d| onde d > 0
+
+Os valores iguais à referência saem antes de tudo, como no R: um zero não tem
+sinal. O p é exato — pela distribuição do posto sinalizado — com menos de
+`LIMITE_DO_EXATO` valores restantes, sem empate em |d| e sem zero; nos outros casos,
+a aproximação normal, com a variância corrigida para os empates e a correção de
+continuidade:
+
+    z = [V − n(n + 1)/4 − ½ sinal(V − n(n + 1)/4)] / √[n(n + 1)(2n + 1)/24 − Σ(t³ − t)/48]
+
+**A estimativa e o intervalo.** No caminho exato, a mediana das médias de Walsh —
+(xᵢ + xⱼ)/2, com i ≤ j — e o intervalo entre duas delas, nas posições que o quantil
+da mesma distribuição dá. No aproximado, o valor que zera a estatística padronizada
+e os que a levam aos quantis da normal, achados como o R os acha: ver
+`_ic_assintotico_da_pseudomediana`. Os valores iguais à referência ficam de fora do
+intervalo também, como no R.
+
+Derivada do `wilcox.test.default`, em `src/library/stats/R/wilcox.test.R`, do R —
+(C) 1995-2019 The R Core Team, GPL-2.0-or-later. Origem, e os direitos autorais do
+original: ver o `NOTICE.md`.
+
+Raises:
+
+    ValueError: nenhum valor, todos iguais à referência — onde o R devolve `NaN` —,
+        valor ausente ou infinito, ou referência que não é um número finito.
+
+*linha 704*
+
+> O `x <- x + mu` do R: o intervalo é sobre os valores, e não sobre as diferenças —
+> refeitos pela mesma conta dele, e não lidos de novo do vetor original.
+
+*linha 733*
+
+> Sem o `min(1.0, …)` dos outros testes: o teto de 1 já veio do `_p_exato`, como no
+> R, e a aproximação normal dobra uma cauda que não passa de ½.
+
+### `def mann_whitney(x, y)`
+
+*linha 750*
+
+O `wilcox.test(x, y, conf.int = TRUE)` do R — que ele chama de teste da soma de
+postos de Wilcoxon, e que é o de Mann-Whitney —: bilateral, com a diferença de
+locação de Hodges-Lehmann e o intervalo de 95% dela.
+
+    W = Σ postos de x − n₁(n₁ + 1)/2
+
+W é o U de Mann-Whitney do primeiro grupo, como o R o imprime: quantos pares
+(xᵢ, yⱼ) têm xᵢ > yⱼ, com meio ponto por empate. O p é exato — pela distribuição da
+soma dos postos — com menos de `LIMITE_DO_EXATO` valores em cada grupo e sem
+empate; nos outros casos, a aproximação normal, com a variância corrigida para os
+empates e a correção de continuidade:
+
+    z = [W − n₁n₂/2 − ½ sinal(W − n₁n₂/2)] / σ
+    σ² = n₁n₂/12 · [n₁ + n₂ + 1 − Σ(t³ − t) / ((n₁ + n₂)(n₁ + n₂ − 1))]
+
+**A estimativa e o intervalo.** No caminho exato, a mediana das n₁n₂ diferenças
+xᵢ − yⱼ e o intervalo entre duas delas, nas posições que o quantil da mesma
+distribuição dá; no aproximado, como o R os acha: ver
+`_ic_assintotico_da_diferenca`. **A diferença de locação não é a diferença das
+medianas** dos dois grupos: é a mediana das diferenças entre um valor de cada um, e
+estima o deslocamento de um grupo em relação ao outro quando as duas distribuições
+têm a mesma forma. A ordem dos dois vetores é a do sinal, como no t.
+
+Derivada do `wilcox.test.default`, em `src/library/stats/R/wilcox.test.R`, do R —
+(C) 1995-2019 The R Core Team, GPL-2.0-or-later. Origem: ver o `NOTICE.md`.
+
+Raises:
+
+    ValueError: grupo vazio, ou valor ausente ou infinito.
+
+*linha 825*
+
+> O teto de 1, como no Wilcoxon, já veio do `_p_exato`.
+
+### `def kruskal_wallis(grupos)`
+
+*linha 841*
+
+O `kruskal.test` do R: os postos de todos os valores juntos, e
+
+    H = [12 / (N(N + 1)) · Σ Rᵢ²/nᵢ − 3(N + 1)] / [1 − Σ(t³ − t)/(N³ − N)]
+
+com k − 1 graus de liberdade, pela cauda do qui-quadrado — o R não tem caminho
+exato. Rᵢ é a soma dos postos do grupo i, e o denominador é a correção para os
+empates. Pelo `scipy`, que faz o mesmo: é o primeiro degrau da régua do topo. Não
+estima nada, como a ANOVA: com k grupos não há uma diferença só.
+
+Raises:
+
+    ValueError: menos de dois grupos, grupo vazio, todos os valores iguais — onde o
+        R devolve `NaN` —, ou valor ausente ou infinito.
+
+### `def friedman(medidas)`
+
+*linha 887*
+
+O `friedman.test` do R — as mesmas pessoas medidas k vezes, sem a normal: em cada
+caso, os postos das k medidas; Rⱼ a soma dos postos da medida j, e
+
+    χ² = 12 Σ [Rⱼ − n(k + 1)/2]² / [n k (k + 1) − Σ(t³ − t)/(k − 1)]
+
+com k − 1 graus de liberdade, pela cauda do qui-quadrado, como no R. Os empates
+são os de dentro de cada caso.
+
+**Escrita, e não importada**, pela razão da ANOVA: o `friedmanchisquare` do `scipy`
+dá o mesmo qui-quadrado, mas recusa duas medidas, que o R aceita — e a função daqui
+é o `friedman.test`. Do `scipy` vêm só os postos e a cauda; o `friedmanchisquare`
+fica nos testes, como conferência. A fórmula é a do `friedman.test`, em
+`src/library/stats/R/friedman.test.R`, do R — (C) 1995-2015 The R Core Team,
+GPL-2.0-or-later. Origem: ver o `NOTICE.md`.
+
+`medidas` são as k colunas, cada uma com os mesmos n casos, na mesma ordem: quem
+chama tira antes os casos com alguma medida faltando, como o `complete.cases` do R.
+
+O mínimo é o do R: dois casos com todas as medidas. Com um caso só, o
+`friedman.test` para com erro — a seleção dos casos completos tira a dimensão da
+matriz de uma linha, e o `apply` não tem sobre o que andar.
+
+Raises:
+
+    ValueError: menos de duas medidas, medidas de tamanhos diferentes, menos de dois
+        casos, cada caso com o mesmo valor em todas as medidas — onde o R devolve
+        `NaN` —, ou valor ausente ou infinito.
+
+### `def medidas_iguais_em_cada_caso(medidas)`
+
+*linha 941*
+
+Cada caso tem o mesmo valor em todas as medidas — e não há o que ordenar dentro de
+caso nenhum.
+
+É a barreira do Friedman, e não a mesma da ANOVA de medidas repetidas
+(`sem_variacao_entre_medidas`): cada caso mudando o mesmo tanto de uma medida para
+outra deixa a ANOVA sem variação de erro, e dá ao Friedman os mesmos postos em todo
+caso — o qui-quadrado mais alto que ele tem, e não uma divisão por zero. Aqui é o
+contrário: o denominador do Friedman é zero quando todo caso está empatado inteiro,
+e o R devolve `NaN`.
+
+Recebe as colunas, ou a matriz n × k já montada.
+
+### `_APROXIMADO`
+
+*linha 959*
+
+> A frase do cálculo do p dos testes de postos: o caminho, como a frase da tabela o diz
+> — `p exato`, `p aproximado pela normal, …`.
+
+### `def _ic_exato(ordenadas, contagens, total, arredondar)`
+
+*linha 967*
+
+O intervalo exato do `wilcox.test`: entre dois valores de `ordenadas` — as médias de
+Walsh na uma amostra, as diferenças entre os grupos no Mann-Whitney —, nas posições
+que o quantil da distribuição exata dá, e o nível dele.
+
+A posição de baixo é o `qsignrank(α/2, n)` — ou o `qwilcox` —, e a de cima, a que
+sobra do outro lado. Com poucos valores, nem o intervalo mais largo, do menor ao
+maior, chega a 95%: o R fica com ele e baixa o nível, avisando, quando o α que ele
+alcança passa de 1,5 α. `arredondar` é a diferença entre os dois ramos do R: a uma
+amostra escreve o nível com o α em dois algarismos significativos (`signif`), e o
+Mann-Whitney, com o α inteiro.
+
+### `def _ic_assintotico_da_pseudomediana(x)`
+
+*linha 994*
+
+O intervalo e a estimativa da uma amostra no caminho aproximado, como o
+`wilcox.test` os acha — o algoritmo que o próprio R diz não estar publicado, e por
+isso documenta no código.
+
+A estatística padronizada de `x − d` cai à medida que `d` cresce, em degraus. O
+limite de baixo é o `d` em que ela cruza o quantil de cima da normal, e o de cima, o
+`d` em que cruza o de baixo; a estimativa, o `d` em que ela cruza o zero — sem a
+correção de continuidade. Os três são achados pelo `uniroot` do R, entre o menor e o
+maior valor (`_raiz`). Quando nem nos extremos a estatística alcança os quantis, o R
+dobra o α até alcançar, e baixa o nível do intervalo.
+
+Devolve o intervalo, a estimativa e o nível; os três `None` quando os valores — sem
+os iguais à referência — são todos iguais: não há degrau a cruzar, e o R devolve
+`NaN` no intervalo e o ponto médio dos valores no lugar da pseudomediana, que aqui
+não se imprime com o nome de outra coisa.
+
+#### `def padronizada(d, correcao)`
+
+*linha 1017*
+
+*linha 1027*
+
+> Só quando não sobra valor nenhum — o desvio é pelo menos √(n(n + 1)²/16),
+> com todos empatados. O núcleo é zero também, e o R devolve o NaN de 0/0.
+
+### `def _ic_assintotico_da_diferenca(x, y)`
+
+*linha 1074*
+
+O intervalo e a estimativa do Mann-Whitney no caminho aproximado, como o
+`wilcox.test` os acha: a estatística padronizada dos postos de `x − d` contra `y`,
+e os `d` em que ela cruza os quantis da normal e — sem a correção de continuidade —
+o zero, entre a menor e a maior diferença possível. Quando nem no extremo ela
+alcança o quantil, o limite é o próprio extremo, como no R; aqui o nível não baixa.
+
+Devolve os três `None` quando os dois grupos não variam por dentro: todo valor de
+um empata com todo valor do outro num dos extremos, a estatística é 0/0, e o R para
+com erro.
+
+#### `def padronizada(d, correcao)`
+
+*linha 1093*
+
+*linha 1102*
+
+> Só quando todos os valores empatam: cada posto é (N + 1)/2, o núcleo é zero
+> também, e o R devolve o NaN de 0/0.
+
+#### `def limite(quantil)`
+
+*linha 1113*
+
+### `def _raiz(funcao, a, b, fa, fb, tolerancia, iteracoes)`
+
+*linha 1138*
+
+O `uniroot(f, lower = a, upper = b, f.lower = fa, f.upper = fb, tol = 1e-4)$root` do
+R: o método de Brent — bisseção, com interpolação linear ou quadrática inversa
+quando ela cai dentro do intervalo —, como o `R_zeroin2` o escreve.
+
+**Transcrito linha a linha**, e não trocado pelo `brentq` do `scipy`, que é o mesmo
+método com outros passos: a função aqui é uma escada — a estatística dos postos só
+muda quando `d` cruza uma média de Walsh ou uma diferença entre os grupos —, a raiz
+está num degrau, e a tolerância de 1e-4 deixa o ponto devolvido em qualquer lugar a
+até 1e-4 dele. Com outros passos, o número sai outro, e a segunda casa do intervalo
+pode virar quando o degrau cai num `,xx5`. Com os mesmos, sai o do R.
+
+A função é finita em todo o intervalo, e só por isso o `fcn2` e o `truncate` do
+`uniroot` — que trocam o ±∞ e o `NaN` pelo maior `double` — não estão aqui: a
+estatística padronizada só deixa de ser finita nos casos degenerados, sem valor que
+não empate, e quem chama sai antes da busca.
+
+Transcrito do `R_zeroin2`, em `src/library/stats/src/zeroin.c`, do R — (C)
+1999-2016 The R Core Team, GPL-2.0-or-later, a partir do `zeroin` do NETLIB
+(`c/brent.shar`), com o número máximo de iterações de Peter Dalgaard. Algoritmo de
+G. Forsythe, M. Malcolm e C. Moler, *Computer methods for mathematical
+computations* (1977). Origem: ver o `NOTICE.md`.
+
+### `def _contagens_do_posto_sinalizado(n)`
+
+*linha 1220*
+
+De quantas das 2ⁿ atribuições de sinal sai cada soma V = 0, 1, …, n(n + 1)/2 — a
+distribuição exata do posto sinalizado, em inteiros: quantos subconjuntos de
+{1, …, n} somam cada valor. É o `csignrank` do R, que guarda as mesmas contagens em
+`double`.
+
+### `def _contagens_da_soma_dos_postos(m, n)`
+
+*linha 1236*
+
+De quantas das C(m + n, m) maneiras de escolher os postos do primeiro grupo sai cada
+W = 0, 1, …, m·n — a distribuição exata da estatística de Mann-Whitney, em
+inteiros. São os coeficientes do binômio gaussiano [m + n, m], pelo produto
+
+    Π (1 − q^(n + i)) / (1 − q^i),  i = 1, …, m
+
+multiplicando e dividindo como séries de potências — exato, porque o resultado é
+um polinômio de grau m·n. É o `cwilcox` do R, que guarda as contagens em `double`,
+pela recursão de Mann e Whitney. A distribuição é a mesma com os grupos trocados, e
+quem chama passa o menor primeiro.
+
+### `def _p_exato(contagens, total, estatistica, centro)`
+
+*linha 1260*
+
+O p bilateral exato do `wilcox.test`: a cauda do lado em que a estatística está —
+P(S ≥ s) acima do centro da distribuição, P(S ≤ s) até ele —, dobrada, e nunca
+acima de 1. Sem empates a estatística é inteira.
+
+### `def _probabilidade(contagens, total, de, ate)`
+
+*linha 1276*
+
+P(de ≤ S ≤ ate), em frações exatas, e um `float` só no fim: as contagens são
+inteiras, e a soma delas sobre o total não erra casa nenhuma.
+
+### `def _quantil(contagens, total, probabilidade)`
+
+*linha 1291*
+
+O menor q com P(S ≤ q) ≥ `probabilidade` — o `qsignrank` e o `qwilcox` do R, com a
+folga de dez épsilons que os dois dão à probabilidade, no ramo de até ½, que é o
+único que o intervalo usa. A conta da acumulada é exata; a folga é a do R, para o
+quantil ser o dele também no caso em que a acumulada cai em cima do alvo.
+
+A busca é a do `qsignrank`, em `src/nmath/signrank.c`, e a do `qwilcox`, em
+`src/nmath/wilcox.c`, do R — (C) 1999-2014 The R Core Team, GPL-2.0-or-later.
+Origem: ver o `NOTICE.md`.
+
+### `def _postos(valores)`
+
+*linha 1311*
+
+Os postos, com o posto médio nos empates — o `rank` do R, pelo `rankdata` do
+`scipy`, que dá os mesmos números.
+
+### `def _soma_dos_empates(postos)`
+
+*linha 1321*
+
+Σ (t³ − t) sobre os grupos de postos iguais — o `sum(NTIES^3 - NTIES)` do R, com o
+`table(r)` dele: t é quantos valores empatam em cada posto. Zero sem empate.
+
+### `def _sinal(valor)`
+
+*linha 1332*
+
+O `sign` do R: −1, 0 ou 1.
+
+### `def _em_frase(itens)`
+
+*linha 1337*
+
+`A`, `A e B`, `A, B e C`.
+
 ### `def sem_variacao(x)`
 
-*linha 588*
+*linha 1345*
 
 Os valores não variam — o `data are essentially constant` do `t.test`.
 
@@ -9924,7 +10296,7 @@ em vez de um `ValueError`.
 
 ### `def sem_variacao_em_duas(x, y, variancias_iguais)`
 
-*linha 608*
+*linha 1365*
 
 Os valores dos dois grupos não variam — o `data are essentially constant` do
 `t.test` de duas amostras.
@@ -9941,7 +10313,7 @@ vem antes, com a frase dela.
 
 ### `def _sem_o_aviso_de_precisao()`
 
-*linha 647*
+*linha 1404*
 
 Cala o «Precision loss occurred in moment calculation» do `scipy` — e só ele.
 
@@ -9954,7 +10326,7 @@ da saída do comando, que é o recado que o usuário aprende a ignorar; é a man
 
 ### `def _vetor(x)`
 
-*linha 665*
+*linha 1422*
 
 O vetor como `float64`, com as duas condições que nenhum teste daqui aceita.
 
@@ -9965,10 +10337,11 @@ por variável —, e um `nan` que chegasse viraria um t `nan` sem aviso nenhum.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*3553 linhas.*
+*3980 linhas.*
 
-A comparação — a média de uma variável contra um valor de referência ou entre os
-grupos de outra, e o lugar onde os outros testes de comparação vão entrar.
+A comparação — uma variável contra um valor de referência, entre os grupos de outra,
+ou entre medidas repetidas nos mesmos casos —, com o teste que os pressupostos pedem:
+o paramétrico, ou o de postos, que dispensa a normal.
 
 Responde ao passo 2b do fluxo. Cada item da ficha é uma pergunta, e cada delineamento
 tem a sua tabela, na mesma pasta:
@@ -9976,7 +10349,7 @@ tem a sua tabela, na mesma pasta:
     uma_amostra.csv
     variável       n  média (DP)         IC 95% da média  referência  teste         p-valor
     IMC (kg/m²)  116  26,43 (4,59)       25,58 a 27,27    25          t de Student    0,001
-    Renda (R$)   120  3098,64 (2139,03)  —                3000        não testado*        —
+    PAS (mmHg)   120  128,4 (14,2)       125,83 a 130,97  120         t de Student  < 0,001
 
     dois_grupos.csv
     variável     grupo        n  média (DP)    diferença (IC 95%)     teste         p-valor
@@ -9997,8 +10370,11 @@ tem a sua tabela, na mesma pasta:
     PAS 30 dias  40  128,4 (15,1)
     PAS 90 dias  40  125,9 (14,8)
 
-    * não testado: normal rejeitada — a regra escolhe o Wilcoxon, que ainda não está no
-      FlatCap, e a linha sai com o motivo no lugar do teste.
+Nas linhas de um teste de postos — o Wilcoxon, o Mann-Whitney, o Kruskal-Wallis e o
+Friedman —, o resumo é a mediana e os quartis, `2982,62 [1774,62 a 5013,54]`, e o
+intervalo é o de Hodges-Lehmann: o da pseudomediana na uma amostra, e o da diferença de
+locação entre dois grupos, `-921,57 (-2414,48 a 406,97)`. O cabeçalho de cada coluna diz
+o que ela tem — ver "O resumo, linha a linha", abaixo.
 
 Segue o padrão das Fases 2 a 6, decidir e escrever separados:
 
@@ -10023,8 +10399,10 @@ o teste quando a normal se sustenta e o teste quando não; o `_CALCULO` diz quai
 já têm a aritmética no `hipoteses.py`; o `METODOS` diz o que cada nome escrito no item
 quer dizer em cada delineamento. Um teste que está na regra e não no cálculo é um
 teste que a regra sabe escolher e o FlatCap ainda não sabe fazer, e a linha dele sai
-sem teste, com o motivo escrito. Quando ele chegar, entra uma linha no `_CALCULO`, e
-as linhas "não testado" viram linhas dele.
+sem teste, com o motivo escrito; quando ele chega, entra uma linha no `_CALCULO`, e
+as linhas "não testado" viram linhas dele. Foi assim que os paramétricos e, na 1.14.0,
+os quatro testes de postos entraram, um por um; desde ela, todo teste da regra tem a
+aritmética, e o caminho fica para o próximo que entrar.
 
 ### O delineamento
 
@@ -10061,12 +10439,11 @@ Três passos, como na correlação:
    preenchidos da variável; entre grupos, **cada grupo**, separado — é a normalidade
    que o t supõe, e não a da coluna inteira. Não rejeitou em nenhum → o paramétrico;
 2. **rejeitou em algum, ou não pôde ser verificado em algum** (menos de três valores,
-   ou um grupo que não varia) → o que dispensa a normal: o Wilcoxon na uma amostra, o
-   Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou mais, o Friedman nas
-   medidas repetidas. Nenhum deles está no FlatCap ainda, e a linha sai **sem teste**,
-   com o motivo na coluna `teste`;
-3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, com um
-   aviso e a frase nas notas do `.csv`.
+   ou um grupo que não varia) → o teste de postos, que dispensa a normal: o Wilcoxon
+   na uma amostra, o Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou
+   mais, o Friedman nas medidas repetidas;
+3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, e
+   `[imc, 25, wilcoxon]` o Wilcoxon, com um aviso e a frase nas notas do `.csv`.
 
 **Entre dois grupos, o paramétrico da regra é o t de Welch**, e não o de Student: é o
 padrão do `t.test` do R, perde pouco quando as variâncias são iguais e protege quando
@@ -10094,16 +10471,50 @@ o p que decide é o mesmo da tabela de normalidade — por construção.
 
 **O Shapiro-Wilk não garante o pressuposto**, e o módulo não finge que garante: é a
 regra que o projeto adotou, com os limites dela escritos no topo do `normalidade.py`.
-Abaixo de 20 valores ele quase não rejeita, e o teste escolhido ali sai com aviso; com
-n grande ele rejeita desvio irrelevante, e a linha que sai sem teste diz como escrever
-o método no item quando você concluir que o paramétrico vale — n grande e assimetria
-pequena, por exemplo. A decisão é sua, e fica registrada contra a regra.
+Abaixo de 20 valores ele quase não rejeita, e o paramétrico escolhido ali sai com
+aviso; com n grande ele rejeita desvio irrelevante, e a linha vai para o teste de
+postos — que continua valendo, e custa pouco. Quando você concluir que o paramétrico
+vale ali — n grande e assimetria pequena, por exemplo —, o método escrito no item
+manda. A decisão é sua, e fica registrada contra a regra.
+
+### Os testes de postos
+
+São os do R, pela aritmética do `hipoteses.py`: o `wilcox.test` — de uma amostra e de
+duas, que é o Mann-Whitney —, o `kruskal.test` e o `friedman.test`. O Wilcoxon e o
+Mann-Whitney saem **com a estimativa de Hodges-Lehmann e o intervalo dela**, o
+`conf.int = TRUE` do R: a pseudomediana, lida contra a referência como o intervalo da
+média; a diferença de locação entre dois grupos, lida contra o zero como a diferença
+das médias. **A diferença de locação não é a diferença das medianas** dos grupos — é a
+mediana das diferenças entre um valor de cada grupo —, e a nota da tabela diz isso. O
+Kruskal-Wallis e o Friedman, como a ANOVA, dizem se há diferença, e não quanto.
+
+Com poucos valores, a distribuição exata pode não ter um intervalo de 95% — o mais
+largo, do menor ao maior valor, fica abaixo disso —, e o menor p que o teste consegue
+dar pode passar de 0,05: o teste não rejeita com dado nenhum. Os dois casos saem com
+aviso, e o intervalo que não chega a 95% fica fora da tabela, que promete 95%.
+
+### O resumo, linha a linha
+
+Cada linha descreve a variável na medida que o teste dela usa: **média (DP)** nas
+linhas do t e da ANOVA, **mediana [Q1 a Q3]** nas dos testes de postos — como o
+`compareGroups` do R faz. O teste é o da linha: o que rodou, ou o que a regra escolheu
+quando ele não pôde rodar; sem teste nenhum, a média. As duas formas saem pelo
+`descritiva.resumo_numerico` e pelo `numero()`, letra por letra as do
+`resumo_<variável>.csv`. Os colchetes separam os quartis do desvio padrão na leitura de
+relance, e o cabeçalho diz o que a coluna tem: `média (DP)`, `mediana [Q1 a Q3]`, ou as
+duas, quando a tabela mistura. O mesmo vale para o intervalo da uma amostra — `IC 95% da
+média`, `da pseudomediana`, ou só `IC 95%` — e para a diferença entre dois grupos:
+`diferença (IC 95%)` no t, `diferença de locação (IC 95%)` no Mann-Whitney. As notas,
+que dizem o que é a diferença de locação, ficam no `.csv`; o documento leva a tabela, e
+é o cabeçalho que impede a leitura dela como a diferença das medianas ao lado. Uma tabela
+só de paramétricos sai com os cabeçalhos de antes.
 
 ### A ficha
 
     comparacao:
       - [imc, 25]                # a média do IMC difere de 25?
       - [pas, 120, t]            # o t, mesmo que a regra discorde
+      - [renda, 3000, wilcoxon]  # o Wilcoxon, mesmo que a regra escolhesse o t
       - [imc, sexo]              # o IMC difere entre os sexos?
       - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
@@ -10125,10 +10536,11 @@ dois.
 
 As recusas de dicionário e de tipo são as da descritiva, com a classe de erro deste
 módulo. O Shapiro-Wilk e o formatador do p são os da normalidade. A média e o desvio
-padrão saem pelo `descritiva.resumo_numerico` e pelo `numero()`: a média da uma
-amostra é, letra por letra, a do `resumo_<variável>.csv`. Os grupos saem pela
-`serie_de_texto` da descritiva, pelo `rotulo_de` do dicionário e pela ordem da
-associação. A aritmética dos testes é a do `hipoteses.py`, que confere com o `t.test`
+padrão — e a mediana e os quartis — saem pelo `descritiva.resumo_numerico` e pelo
+`numero()`: o resumo da uma amostra é, letra por letra, o do `resumo_<variável>.csv`.
+Os grupos saem pela `serie_de_texto` da descritiva, pelo `rotulo_de` do dicionário e
+pela ordem da associação. A aritmética dos testes é a do `hipoteses.py`, que confere
+com o `t.test`, o `oneway.test`, o `wilcox.test`, o `kruskal.test` e o `friedman.test`
 do R.
 
 ### O que ele deliberadamente não faz
@@ -10137,9 +10549,9 @@ do R.
 destas variáveis; as caixas por grupo são uma espécie nova no `graficos.py`, e ficam
 para quando a comparação entre grupos estiver inteira.
 
-**Não imprime o d de Cohen.** O intervalo — da média, lido contra a referência; da
-diferença, lido contra o zero — já é o tamanho do efeito, na unidade que o cliente
-entende.
+**Não imprime o d de Cohen**, nem um r de efeito nos testes de postos. O intervalo —
+da média ou da pseudomediana, lido contra a referência; da diferença, lido contra o
+zero — já é o tamanho do efeito, na unidade que o cliente entende.
 
 **Não roda o Levene**, pela razão do Welch, acima.
 
@@ -10148,7 +10560,7 @@ escrito nas notas e no terminal.
 
 ### `UMA_AMOSTRA`
 
-*linha 262*
+*linha 312*
 
 > Os delineamentos, na ordem em que as tabelas saem. Cada um tem a sua tabela, porque
 > as colunas mudam de um para outro: a uma amostra tem a referência; os grupos, uma
@@ -10156,7 +10568,7 @@ escrito nas notas e no terminal.
 
 ### `CHAVE_REPETIDAS`
 
-*linha 271*
+*linha 321*
 
 > As chaves do item de medidas repetidas — a marca, e o método, que ali não tem um
 > terceiro lugar na lista para morar:
@@ -10166,55 +10578,56 @@ escrito nas notas e no terminal.
 
 ### `MINIMO_DE_MEDIDAS`
 
-*linha 279*
+*linha 329*
 
 > O menor número de medidas da ANOVA de medidas repetidas nesta versão. Com duas, a
 > pergunta é a do t pareado, que usa a mesma forma de item e ainda não está no FlatCap.
 
 ### `GRUPOS`
 
-*linha 283*
+*linha 333*
 
 > A forma do item entre grupos, antes de o banco dizer quantos são. A `Pergunta` sai
 > da ficha com ela, e a `VariavelComparada` sai do banco com o delineamento de fato.
 
-### `WILCOXON`
-
-*linha 299*
-
-> Os testes que a regra conhece pelo nome e o FlatCap ainda não calcula. Os que têm
-> aritmética vêm do `hipoteses.py`, que é quem calcula; estes são só nomes — a regra
-> os escolhe, e a linha sai sem teste, com o motivo.
-
 ### `REGRA`
 
-*linha 307*
+*linha 349*
 
 > A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
-> quando não. Entre grupos o paramétrico é o de Welch — o padrão do `t.test` e do
-> `oneway.test` do R.
+> quando não — o de postos. Entre grupos o paramétrico é o de Welch — o padrão do
+> `t.test` e do `oneway.test` do R. Os nomes, e a aritmética, vêm do `hipoteses.py`.
 
 ### `_CALCULO`
 
-*linha 317*
+*linha 359*
 
 > O que já tem aritmética. Um teste da `REGRA` que não está aqui é escolhido pela
 > regra e sai sem teste, com o motivo. O t de Student e a ANOVA clássica estão aqui
 > sem estar na regra: eles rodam quando o item os pede.
 
+### `TESTES_DE_POSTOS`
+
+*linha 375*
+
+> Os testes de postos: os que dispensam a normal, e cujas linhas resumem a variável
+> pela mediana e pelos quartis, e não pela média e pelo desvio.
+
 ### `METODOS`
 
-*linha 329*
+*linha 381*
 
 > Como cada método se escreve no item — o terceiro nome —, e o teste que ele quer
 > dizer em cada delineamento. Sem acento, minúsculo e sem hífen, que é como `_chave`
 > deixa o que se digitou. `t` é o t que o R roda sem argumento: o de uma amostra, e o
 > de Welch entre dois grupos — o `var.equal = FALSE` padrão do `t.test`. `welch` é o
 > de Welch do número de grupos que o banco trouxer: o t com dois, a ANOVA com mais.
+> `wilcoxon` é o `wilcox.test` do R: o do posto sinalizado contra uma referência, e o
+> Mann-Whitney entre dois grupos — que o R chama de soma de postos de Wilcoxon.
 
 ### `PREVISTOS`
 
-*linha 345*
+*linha 399*
 
 > Os nomes que a regra ainda não conhece em delineamento nenhum desta versão. Escritos
 > na ficha, recusam com a frase certa, em vez de "não é um método". Vazio nesta versão:
@@ -10222,21 +10635,28 @@ escrito nas notas e no terminal.
 
 ### `_EQUIVALENTES`
 
-*linha 350*
+*linha 404*
 
 > O método de um número de grupos escrito para outro: o que se escreve no lugar dele,
 > e por quê. O banco é que diz quantos grupos há, e a recusa ensina a troca.
 
 ### `_SINONIMOS`
 
-*linha 363*
+*linha 421*
 
 > Outras grafias do mesmo método. `welsh` é a troca mais comum de letra no nome do
 > Welch, e ninguém a escreve querendo outra coisa.
 
+*No módulo, linha 441:*
+
+> O `signed rank` fica de fora de propósito: o `wilcoxon` entre dois grupos é o
+> Mann-Whitney, e um sinônimo dele levaria quem escreveu o posto sinalizado — o teste
+> de uma amostra, ou do pareado — ao da soma de postos sem aviso. Escrito, ele recusa,
+> e a recusa ensina o `wilcoxon`.
+
 ### `_VARIANCIAS_IGUAIS`
 
-*linha 379*
+*linha 446*
 
 > Os testes que supõem a mesma variância nos grupos. Quando um deles roda, o aviso diz
 > quanto o maior desvio padrão passa do menor — acima de duas vezes, a regra de bolso
@@ -10244,43 +10664,67 @@ escrito nas notas e no terminal.
 
 ### `CASAS_IC`
 
-*linha 387*
+*linha 454*
 
 > O intervalo sai com casas fixas: ele não existe na descritiva, e uma célula com
 > `25,8 a 27,02` — um limite com uma casa, outro com duas — não se lê de relance. A
 > média e o desvio não: eles têm de sair letra por letra como no `resumo`.
 
+### `COLUNA_DA_MEDIA`
+
+*linha 459*
+
+> O cabeçalho da coluna do resumo, conforme o que ela tem: a média e o desvio nas
+> linhas do t e da ANOVA, a mediana e os quartis nas dos testes de postos — e as duas
+> formas no cabeçalho quando a tabela mistura. Os colchetes separam os quartis do
+> desvio padrão, que vem entre parênteses, na leitura de relance.
+
+### `COLUNA_DO_IC_DA_MEDIA`
+
+*linha 467*
+
+> O cabeçalho do intervalo da uma amostra, pela mesma regra: o da média no t, o da
+> pseudomediana no Wilcoxon, e só o nível quando a tabela tem os dois.
+
+### `COLUNA_DA_DIFERENCA`
+
+*linha 473*
+
+> O cabeçalho da diferença entre dois grupos, pela mesma regra: o de sempre no t, a de
+> locação no Mann-Whitney — que não é a diferença das medianas, e que a célula ao lado
+> da mediana de cada grupo convidaria a ler como tal —, e as duas quando a tabela mistura.
+
 ### `CASAS_REFERENCIA`
 
-*linha 392*
+*linha 480*
 
 > A referência sai como foi escrita, sem arredondar para duas casas: um `0,125` da
 > ficha impresso `0,12` seria uma hipótese que ninguém testou.
 
 ### `_NUMERO_ESCRITO`
 
-*linha 398*
+*linha 486*
 
 > Um número escrito como texto na ficha: `"24,9"`, `"24.9"`, `" 25 "`. Sem separador
 > de milhar — `1.234,5` é ambíguo, e ambiguidade numa hipótese se recusa.
 
 ### `_PARECE_NUMERO`
 
-*linha 402*
+*linha 490*
 
 > Um texto que quer ser número e não é um que se leia sem ambiguidade: `"2.500,00"`.
 > Só algarismos, pontos, vírgulas e espaços — `pas_0` tem algarismo e é um nome.
 
 ### `EXEMPLO_DA_FICHA`
 
-*linha 406*
+*linha 494*
 
 > O exemplo que as mensagens escrevem. Um lugar só, para a recusa e o `--help` nunca
 > ensinarem duas formas diferentes de escrever a mesma lista.
 
 ### `class ComparacaoError(RuntimeError)`
 
-*linha 415*
+*linha 503*
 
 Falha ao gerar a comparação, já traduzida para o usuário.
 
@@ -10290,19 +10734,19 @@ verdade e deve subir com o traceback inteiro.
 
 ### `class DicionarioAusenteError(ComparacaoError)`
 
-*linha 425*
+*linha 513*
 
 O projeto não tem `dicionario.csv`. Não há o que obedecer.
 
 ### `class DicionarioDesatualizadoError(ComparacaoError)`
 
-*linha 431*
+*linha 519*
 
 O banco tem colunas que o dicionário desconhece.
 
 ### `class VariavelIncompativelError(ComparacaoError)`
 
-*linha 437*
+*linha 525*
 
 O dicionário promete `numerica` e a coluna chegou como texto, ou declara uma
 variável que o banco não tem.
@@ -10312,13 +10756,13 @@ como na correlação.
 
 ### `class SemItensError(ComparacaoError)`
 
-*linha 447*
+*linha 535*
 
 A ficha não diz o que comparar.
 
 ### `class ItemInvalidoError(ComparacaoError)`
 
-*linha 453*
+*linha 541*
 
 A lista `comparacao:` da ficha tem item que não serve.
 
@@ -10332,7 +10776,7 @@ uma variável de grupo com mais grupos do que esta versão compara. A mensagem l
 
 ### `class Pedido`
 
-*linha 469*
+*linha 557*
 
 Um item como a ficha o escreve: a variável e, conforme a forma, a referência ou a
 variável de grupo — e, quando houver, o método.
@@ -10346,7 +10790,7 @@ Nas medidas repetidas, `medidas` são as variáveis, na ordem da ficha, e `varia
 
 #### `def escrito(self)`
 
-*linha 489*
+*linha 577*
 
 O item de volta na forma da ficha, para as mensagens. O de medidas repetidas com
 método sai na forma de uma linha só, `{repetidas: [...], metodo: anova}`, que o
@@ -10354,14 +10798,14 @@ YAML lê igual à de duas linhas.
 
 #### `def chave(self)`
 
-*linha 505*
+*linha 593*
 
 O que faz dois itens serem a mesma comparação: o método não entra — o mesmo
 item com outro método é a mesma pergunta feita duas vezes.
 
 ### `class Pergunta`
 
-*linha 518*
+*linha 606*
 
 Um item da ficha, já conferido contra o dicionário. É a pergunta da reunião — "a
 média desta variável difere desta referência?", "difere entre estes grupos?" —
@@ -10373,11 +10817,11 @@ só se sabe com o banco aberto. `metodo` é o nome escrito na ficha, como no
 
 #### `def linhas(self)`
 
-*linha 537*
+*linha 625*
 
 ### `class Normal`
 
-*linha 544*
+*linha 632*
 
 O Shapiro-Wilk do vetor do delineamento.
 
@@ -10387,22 +10831,22 @@ houve um.
 
 #### `def testada(self)`
 
-*linha 559*
+*linha 647*
 
 #### `def rejeita(self)`
 
-*linha 563*
+*linha 651*
 
 ### `class Grupo`
 
-*linha 568*
+*linha 656*
 
 Um grupo de uma comparação entre grupos: o rótulo, quantos casos, a média e o
 desvio, e o Shapiro-Wilk dos valores dele.
 
 ### `class Escolha`
 
-*linha 581*
+*linha 669*
 
 Qual teste rodou, e de onde ele veio.
 
@@ -10413,73 +10857,73 @@ a regra escolheu um que ainda não tem aritmética, e a ficha não mandou outro.
 
 #### `def contra_a_regra(self)`
 
-*linha 597*
+*linha 685*
 
 ### `class VariavelComparada`
 
-*linha 602*
+*linha 690*
 
 Uma pergunta respondida. Na uma amostra é uma linha da tabela; entre grupos, um
 bloco — a linha da comparação e uma linha por grupo.
 
 `resultado` fica `None` quando não houve teste; o motivo está em `motivo`, e a
 comparação **sai assim mesmo** — um item pedido que sumisse da tabela seria a falta
-em que ninguém repara. A média e o desvio saem mesmo sem teste: eles descrevem a
-variável, e não dependem de pressuposto nenhum.
+em que ninguém repara. O resumo sai mesmo sem teste: ele descreve a variável, e não
+depende de pressuposto nenhum.
 
 Na uma amostra, `referencia`, `resumo` e `normal` são da variável inteira; entre
 grupos, `referencia` é `None`, e o resumo e o Shapiro-Wilk estão em cada `Grupo`.
 
 #### `def faltantes(self)`
 
-*linha 635*
+*linha 723*
 
 #### `def testada(self)`
 
-*linha 639*
+*linha 727*
 
 #### `def entre_grupos(self)`
 
-*linha 643*
+*linha 731*
 
 #### `def repetidas(self)`
 
-*linha 647*
+*linha 735*
 
 #### `def metodo(self)`
 
-*linha 651*
+*linha 739*
 
 #### `def colunas(self)`
 
-*linha 655*
+*linha 743*
 
 As colunas do banco que esta comparação usou.
 
 #### `def cabeca(self)`
 
-*linha 664*
+*linha 752*
 
 Como a comparação se chama nas frases: `IMC (kg/m²) por Sexo`; nas medidas
 repetidas, os rótulos delas — `PAS basal, PAS 30 dias e PAS 90 dias`.
 
 #### `def n_na_frase(self)`
 
-*linha 676*
+*linha 764*
 
 `n = 57`, e entre grupos `n = 57 (29 em Feminino e 28 em Masculino)`. Nas medidas
 repetidas o n é um só — os casos com todas as medidas.
 
 #### `def celula_do_teste(self)`
 
-*linha 689*
+*linha 777*
 
 O que vai para a coluna `teste`: o nome do teste, ou o motivo no lugar dele —
 como a coluna `método` da correlação e a `teste` da associação.
 
 #### `def justificativa(self)`
 
-*linha 699*
+*linha 787*
 
 A frase que explica a comparação — a nota do `.csv` e a linha do terminal.
 
@@ -10488,20 +10932,32 @@ com as mesmas casas.
 
 #### `def como_detalhe(self)`
 
-*linha 745*
+*linha 833*
 
 Os números desta comparação, para o manifesto — o que responde "de onde saiu
 esse teste, e esse p?" sem reabrir o banco.
 
+O intervalo vai em `ic_95` quando é o de 95% que a tabela imprime; quando o
+teste de postos não o alcança, o de nível menor que o R devolve vai em
+`ic_alcancavel`, com o nível — fora da tabela, e não perdido.
+
+### `def _resumo_no_manifesto(resumo)`
+
+*linha 932*
+
+As duas formas do resumo, sempre — a média e o desvio, a mediana e os quartis: a
+tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
+um grupo, que a descritiva não tem, não morar só na célula.
+
 ### `class ForaDaComparacao`
 
-*linha 836*
+*linha 946*
 
 Uma variável do dicionário que não está em item nenhum, e por quê.
 
 ### `class Comparacao`
 
-*linha 847*
+*linha 957*
 
 A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
@@ -10510,43 +10966,43 @@ A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
 #### `def raiz(self)`
 
-*linha 864*
+*linha 974*
 
 #### `def linhas(self)`
 
-*linha 868*
+*linha 978*
 
 #### `def colunas_usadas(self)`
 
-*linha 872*
+*linha 982*
 
 #### `def testadas(self)`
 
-*linha 881*
+*linha 991*
 
 #### `def sem_teste(self)`
 
-*linha 885*
+*linha 995*
 
 #### `def pela_ficha(self)`
 
-*linha 889*
+*linha 999*
 
 #### `def quantos(self, metodo)`
 
-*linha 892*
+*linha 1002*
 
 #### `def do_delineamento(self, delineamento)`
 
-*linha 895*
+*linha 1005*
 
 #### `def tabela_de(self, delineamento)`
 
-*linha 898*
+*linha 1008*
 
 ### `class PlanoComparacao`
 
-*linha 903*
+*linha 1013*
 
 Tudo o que a `comparacao` faria, decidido e ainda não escrito.
 
@@ -10555,19 +11011,19 @@ a execução ninguém altera um caminho em trânsito.
 
 #### `def raiz(self)`
 
-*linha 918*
+*linha 1028*
 
 #### `def tabelas(self)`
 
-*linha 922*
+*linha 1032*
 
 #### `def arquivos(self)`
 
-*linha 926*
+*linha 1036*
 
 ### `class ResultadoComparacao`
 
-*linha 931*
+*linha 1041*
 
 O que a execução de fato escreveu.
 
@@ -10575,7 +11031,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_comparacao(raiz, aba, conferir, agora)`
 
-*linha 944*
+*linha 1054*
 
 Lê os itens da ficha, abre o banco, compara cada item e monta o plano. Não
 escreve nada.
@@ -10599,7 +11055,7 @@ Raises:
 
 ### `def executar_comparacao(plano)`
 
-*linha 997*
+*linha 1107*
 
 Escreve o plano no disco. Não decide mais nada.
 
@@ -10608,7 +11064,7 @@ tabelas, e só então o `manifesto.json` — o recibo vem depois do que ele desc
 Uma falha no meio desfaz o que já foi feito, inclusive devolvendo a pasta
 arquivada ao lugar, e a exceção continua subindo inteira.
 
-*linha 1019*
+*linha 1129*
 
 > `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi este
 > comando que a criou, e o `rmdir` é registrado antes dos arquivos — o
@@ -10616,7 +11072,7 @@ arquivada ao lugar, e a exceção continua subindo inteira.
 
 ### `def comparar(banco, ficha, linhas_do_dicionario, pedidos, quando)`
 
-*linha 1064*
+*linha 1174*
 
 Compara cada item pedido, obedecendo ao dicionário. Função pura.
 
@@ -10639,7 +11095,7 @@ Raises:
 
     SemItensError, ItemInvalidoError, VariavelIncompativelError
 
-*linha 1101*
+*linha 1211*
 
 > Só as variáveis da lista vão para a recusa: a conferência é a da Fase 5, e o
 > escopo é deste comando.
@@ -10648,7 +11104,7 @@ Raises:
 
 ### `def _comparar_uma_amostra(quadro, pergunta, total)`
 
-*linha 1157*
+*linha 1267*
 
 Mede o pressuposto, aplica a regra (ou obedece à ficha) e calcula.
 
@@ -10659,13 +11115,15 @@ de normalidade.
 
 Três barreiras vêm antes da regra, e as três deixam a linha sem teste qualquer que
 seja o método escrito na ficha — são as do próprio `t.test` do R: nenhum valor,
-um valor só, e valores que não variam.
+um valor só, e valores que não variam. Valem para o Wilcoxon também, que o R
+calcularia com um valor só, ou com todos iguais: um valor não é uma amostra, e uma
+variável que não varia não tem o que comparar.
 
-- *linha 1174* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
+- *linha 1286* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
 
 ### `def _impedimento(valores, validos, distintos)`
 
-*linha 1227*
+*linha 1340*
 
 O motivo de não haver teste nenhum, ou vazio.
 
@@ -10674,13 +11132,13 @@ terceira usa o critério do R, e não "todos iguais": ver `hipoteses.sem_variaca
 
 ### `def _normal(variavel, valores)`
 
-*linha 1245*
+*linha 1358*
 
 O Shapiro-Wilk da normalidade, pela mesma função, sobre os valores preenchidos.
 
 ### `def _motivo_sem_teste(normal, validos)`
 
-*linha 1253*
+*linha 1366*
 
 O motivo curto, para a célula da coluna `teste`, quando a regra escolheu um teste
 que ainda não existe. A frase inteira, com o p do Shapiro-Wilk, vai para as notas.
@@ -10691,7 +11149,7 @@ para repetir o que a tabela de normalidade do mesmo documento já imprime.
 
 ### `def _avisos_da_linha(nome, pergunta, escolha, normal, validos, distintos)`
 
-*linha 1267*
+*linha 1380*
 
 O que a escolha precisa levar junto para o terminal e para o manifesto.
 
@@ -10710,17 +11168,47 @@ Cinco casos, e cada um é um engano conhecido ou uma decisão que precisa de ras
 
 ### `def _aviso_contra_a_regra(nome, escolha, faltou)`
 
-*linha 1322*
+*linha 1435*
 
 ### `def _aviso_de_discreta(nome, distintos, validos)`
 
-*linha 1331*
+*linha 1444*
+
+### `def _avisos_do_resultado(nome, resultado, tamanhos, valores)`
+
+*linha 1453*
+
+O que o Wilcoxon e o Mann-Whitney devolvem e precisa de rastro — os três casos são
+de amostra pequena, ou de amostra sem variação, e nenhum deles é erro:
+
+* **o menor p possível acima do α.** No caminho exato, o p mais extremo que a
+  distribuição tem é 2/2ⁿ no Wilcoxon e 2/C(n₁ + n₂, n₁) no Mann-Whitney; com cinco
+  valores ou menos no Wilcoxon — e, no Mann-Whitney, com um valor contra até 38,
+  dois contra até sete, ou três contra até quatro —, ele passa de 0,05, e o teste não
+  rejeita a igualdade com dado nenhum. Um p de 0,125 ali não é «nenhuma diferença»:
+  é o menor que existe;
+* **o intervalo que não chega a 95%** — o R baixa o nível e avisa. A tabela promete
+  95%, e a célula sai com o traço;
+* **o intervalo que não existe**: sem os valores iguais à referência, os que sobram
+  são todos iguais; ou os dois grupos não variam por dentro. O p sai, e a célula,
+  com o traço.
+
+`tamanhos` são os n do teste — o da uma amostra, ou o de cada grupo —, e `valores`,
+como eles se escrevem na frase.
+
+### `def _menor_p_exato(metodo, tamanhos)`
+
+*linha 1517*
+
+O menor p bilateral que o caminho exato dá: as duas caudas mais extremas da
+distribuição, com uma combinação cada — 2/2ⁿ no Wilcoxon, 2/C(n₁ + n₂, n₁) no
+Mann-Whitney —, e nunca acima de 1.
 
 ### Uma variável, entre os grupos de outra
 
 ### `def _comparar_grupos(quadro, pergunta, total)`
 
-*linha 1343*
+*linha 1532*
 
 Separa os grupos, mede o pressuposto em cada um, aplica a regra (ou obedece à
 ficha) e calcula. Devolve a comparação, ou `None` e a frase do que este banco não
@@ -10737,11 +11225,11 @@ Três barreiras vêm antes da regra — nenhum caso com as duas respostas, um gr
 só, um valor só em todas as linhas —, e as do teste escolhido vêm depois dela:
 cada teste tem o seu mínimo no R.
 
-- *linha 1367* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
+- *linha 1556* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
 
 ### `def _delineamento_dos_grupos(quantos, de_grupo)`
 
-*linha 1463*
+*linha 1658*
 
 O delineamento pelo número de grupos com resposta: dois, ou três ou mais.
 
@@ -10751,14 +11239,14 @@ outros casos: a pergunta foi feita sobre aqueles grupos, e o banco não os tem.
 
 ### `def _impedimento_dos_grupos(validos, quantos, distintos)`
 
-*linha 1479*
+*linha 1674*
 
 O motivo de não haver teste nenhum entre grupos, ou vazio. Vale para qualquer
 teste, escrito na ficha ou não.
 
 ### `def _impedimento_do_teste(metodo, amostras, grupos)`
 
-*linha 1493*
+*linha 1688*
 
 O motivo de o teste escolhido não rodar, ou vazio — as barreiras do R para ele,
 que mudam de teste para teste.
@@ -10775,13 +11263,18 @@ aqui, e não no R: lá o F sai infinito, e o p, zero. Na de Welch basta **um** g
 que não varia — o peso dele é n/0, e o R devolve `NaN`; a clássica, com a variância
 combinada dos outros, roda.
 
+O Mann-Whitney e o Kruskal-Wallis não têm barreira além das que valem para todos:
+pedem um valor em cada grupo, como o R, e grupos que não variam por dentro, cada um
+com o seu valor, são para eles a separação mais clara que existe — e não uma divisão
+por zero.
+
 ### `def _sem_variacao_nos_grupos(amostras)`
 
-*linha 1561*
+*linha 1761*
 
 ### `def _normal_do_grupo(variavel, rotulo, valores, onde)`
 
-*linha 1567*
+*linha 1767*
 
 O Shapiro-Wilk de um grupo — ou de uma medida, nas repetidas —, pela mesma função
 da normalidade.
@@ -10793,7 +11286,7 @@ completos.
 
 ### `def _motivo_sem_teste_dos_grupos(escolha, grupos, delineamento)`
 
-*linha 1587*
+*linha 1787*
 
 O motivo curto, para a célula, quando a regra escolheu um teste que ainda não
 existe. Sem o p, pela mesma razão da uma amostra; a frase inteira vai para as
@@ -10801,7 +11294,7 @@ notas.
 
 ### `def _avisos_dos_grupos(nome, pergunta, escolha, grupos, delineamento, validos, distintos)`
 
-*linha 1605*
+*linha 1805*
 
 Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
@@ -10819,7 +11312,7 @@ Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
 ### `def _aviso_de_variancias(nome, metodo, grupos, delineamento)`
 
-*linha 1674*
+*linha 1874*
 
 O maior desvio padrão contra o menor, quando o teste supõe variâncias iguais e
 eles passam de `RAZAO_DE_DESVIOS` — ou quando um grupo não varia.
@@ -10829,7 +11322,7 @@ Só os grupos com dois valores ou mais: o desvio de um valor só sai zero no
 
 ### `def _metodo_sugerido(delineamento)`
 
-*linha 1710*
+*linha 1910*
 
 O método para o aviso ensinar a escrever: o paramétrico da regra, quando ele
 existe, e senão o primeiro paramétrico que existe — o nome como se escreve e o
@@ -10837,7 +11330,7 @@ teste.
 
 ### `def _problema_do_metodo(chave, teste, delineamento, de_grupo, quantos)`
 
-*linha 1728*
+*linha 1928*
 
 O método escrito que não serve para o número de grupos que o banco trouxe, ou
 vazio. A ficha é conferida antes de abrir o banco, mas só o banco diz quantos
@@ -10847,7 +11340,7 @@ grupos há — e um método de dois grupos numa variável de três é recusado a
 
 ### `def _comparar_repetidas(quadro, pergunta, total)`
 
-*linha 1754*
+*linha 1954*
 
 As mesmas pessoas, medidas k vezes: mede o pressuposto em cada medida, aplica a
 regra (ou obedece à ficha) e calcula.
@@ -10859,18 +11352,34 @@ sobre esses casos: é a normalidade que o teste usa, e é a checagem por momento
 se faz no R antes de uma ANOVA de medidas repetidas.
 
 Duas barreiras antes da regra — nenhum caso completo, ou um só, e um valor só em
-todas as células —, e uma do teste depois dela: medidas que não variam dentro dos
-casos, em que o F é uma divisão por zero.
+todas as células —, e a do teste escolhido depois dela: na ANOVA, medidas que não
+variam dentro dos casos, em que o F é uma divisão por zero; no Friedman, cada caso
+com o mesmo valor em todas as medidas, em que não há o que ordenar. Ver
+`_impedimento_das_medidas`.
 
-- *linha 1773* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
+- *linha 1975* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
+
+### `def _impedimento_das_medidas(metodo, vetores, pergunta)`
+
+*linha 2047*
+
+A barreira do teste das medidas repetidas — o motivo curto e o aviso —, ou dois
+vazios. Cada teste tem a sua, e uma não é a outra:
+
+* **a ANOVA, quando as medidas não variam dentro dos casos** — cada caso mudando o
+  mesmo tanto de uma medida para outra. A variação de erro é zero, e o F, uma
+  divisão por zero. É justamente o caso em que o Friedman tem mais a dizer: todo
+  caso ordena as medidas do mesmo jeito. O aviso ensina a escrevê-lo;
+* **o Friedman, quando cada caso tem o mesmo valor em todas as medidas.** Não há o
+  que ordenar dentro de caso nenhum, e o qui-quadrado é 0/0 — o R devolve `NaN`.
 
 ### `def _impedimento_das_repetidas(validos, distintos)`
 
-*linha 1848*
+*linha 2079*
 
 ### `def _avisos_das_repetidas(nome, pergunta, escolha, grupos, validos, distintos)`
 
-*linha 1858*
+*linha 2089*
 
 Os avisos dos grupos, na forma das medidas: a linha sem teste ensina a escrever o
 método no item — `metodo: anova`, na linha de baixo —; a ficha contra a regra; o
@@ -10883,7 +11392,7 @@ justamente para quando a covariância foge da esfericidade.
 
 ### `def regra(delineamento, normal)`
 
-*linha 1907*
+*linha 2138*
 
 A regra dos pressupostos: o teste que ela escolhe, e o motivo.
 
@@ -10902,24 +11411,24 @@ escolhido.
 
 ### `def _pela_regra(delineamento, teste, motivo)`
 
-*linha 1971*
+*linha 2202*
 
 ### `def _disponivel(delineamento, teste)`
 
-*linha 1976*
+*linha 2207*
 
 ### As tabelas
 
 ### `def _tabelas(variaveis, total)`
 
-*linha 1983*
+*linha 2214*
 
 Uma tabela por delineamento que apareceu na ficha, na ordem de `DELINEAMENTOS`, e
 os itens de cada uma na ordem da ficha.
 
 ### `def linhas_da_tabela(variavel)`
 
-*linha 2002*
+*linha 2233*
 
 As linhas de uma comparação na tabela do delineamento dela.
 
@@ -10932,65 +11441,126 @@ primeira: não há variável de grupo para uma linha de cabeça.
 Pública porque o terminal desenha as mesmas linhas, item por item, com os
 destaques dele: as células saem daqui, e de mais lugar nenhum.
 
+O resumo de cada linha é o do teste dela — a média e o desvio, ou a mediana e os
+quartis —, e o intervalo só entra quando é o de 95% que o cabeçalho promete.
+
+### `def _teste_da_linha(variavel)`
+
+*linha 2302*
+
+O teste que a linha mostra, ou que teria mostrado: o que rodou; o escolhido, quando
+uma barreira dele o impediu de rodar; o da regra, quando ela escolheu um que ainda
+não tem aritmética. Vazio quando nenhum teste chegou a ser escolhido.
+
+### `def _de_postos(variavel)`
+
+*linha 2314*
+
+### `def _resumo_da_linha(variavel, resumo)`
+
+*linha 2318*
+
+O resumo de um grupo, de uma medida ou da variável, na medida que o teste da linha
+usa: a mediana e os quartis nos testes de postos, a média e o desvio nos outros — e
+quando não há teste nenhum, que é como a tabela sempre resumiu.
+
+### `def _coluna_do_resumo(variaveis)`
+
+*linha 2329*
+
+O cabeçalho da coluna do resumo, pelo que ela tem: as linhas sem resumo nenhum — o
+traço de quem não tem valor — não contam.
+
+### `def _coluna_do_intervalo(variaveis)`
+
+*linha 2346*
+
+O cabeçalho do intervalo da uma amostra, pelo teste de cada linha — o que rodou, ou
+o que a regra escolheu —, como o do resumo: o traço de um intervalo que não chega a
+95% fica debaixo do nome do intervalo que faltou, e não do da média. As linhas sem
+teste nenhum não contam, e uma tabela só delas fica com o da média, de sempre.
+
+### `def _coluna_da_diferenca(variaveis)`
+
+*linha 2361*
+
+O cabeçalho da diferença entre dois grupos, pelo teste de cada linha, como o do
+intervalo da uma amostra: as linhas sem teste nenhum não contam, e uma tabela só do
+t — ou sem teste nenhum — fica com o de sempre.
+
+### `def _ic_da_tabela(resultado)`
+
+*linha 2375*
+
+O intervalo que vai para a tabela: o de 95%, e só ele. Quando o R não o alcança —
+poucos valores num teste de postos —, ele devolve um de nível menor, que fica no
+manifesto e no aviso, e não numa coluna que promete 95%.
+
 ### `def _tabela_uma_amostra(variaveis, total)`
 
-*linha 2073*
+*linha 2388*
 
 Uma linha por item, na ordem da ficha.
 
-As sete colunas — `variável`, `n`, `média (DP)`, `IC 95% da média`, `referência`,
-`teste` e `p-valor` —, com o **rótulo** do dicionário na primeira. O que decidiu
-cada teste — o p do Shapiro-Wilk, a estatística e os graus de liberdade — vai para
-as notas do `.csv`, uma frase por linha, e para o manifesto.
+As sete colunas — `variável`, `n`, o resumo, o intervalo, `referência`, `teste` e
+`p-valor` —, com o **rótulo** do dicionário na primeira. O resumo e o intervalo têm
+o cabeçalho do que levam: `média (DP)` e `IC 95% da média` quando todas as linhas
+são do t, e os do Wilcoxon quando ele aparece. O que decidiu cada teste — o p do
+Shapiro-Wilk, a estatística, os graus de liberdade, o caminho do p — vai para as
+notas do `.csv`, uma frase por linha, e para o manifesto.
 
-*linha 2103*
+*linha 2430*
 
 > Vazia de propósito: esta tabela fala de várias variáveis.
 
 ### `def _tabela_dois_grupos(variaveis, total)`
 
-*linha 2120*
+*linha 2447*
 
 Um bloco por item, na ordem da ficha: a linha da comparação e uma linha por grupo.
 
-Sete colunas, como a da uma amostra — `variável`, `grupo`, `n`, `média (DP)`,
-`diferença (IC 95%)`, `teste` e `p-valor`. A coluna `grupo` leva o rótulo da
+Sete colunas, como a da uma amostra — `variável`, `grupo`, `n`, o resumo, a
+diferença, `teste` e `p-valor`. A coluna `grupo` leva o rótulo da
 variável de grupo na linha da comparação e o de cada grupo nas seguintes, que é
 como uma tabela descritiva põe uma categórica: o nome, e as categorias embaixo.
 A diferença é a do teste da linha, com o intervalo dele — o do de Welch não é o do
-de Student, e é o do teste que rodou que vai para a célula.
+de Student, e a diferença de locação do Mann-Whitney não é nenhuma das duas —, e o
+cabeçalho dela diz qual: `diferença (IC 95%)` quando todas as linhas são do t, como
+sempre foi, `diferença de locação (IC 95%)` quando são do Mann-Whitney.
 
 ### `def _tabela_k_grupos(variaveis, total)`
 
-*linha 2178*
+*linha 2515*
 
 Um bloco por item, como a dos dois grupos, sem a coluna da diferença: com três
-grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`,
-`média (DP)`, `teste` e `p-valor` —; o F e os graus de liberdade vão para as
-notas, com o resto do que decidiu cada teste.
+grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`, o
+resumo, `teste` e `p-valor` —; o F, o qui-quadrado e os graus de liberdade vão para
+as notas, com o resto do que decidiu cada teste.
 
 ### `def _tabela_repetidas(variaveis, total)`
 
-*linha 2224*
+*linha 2570*
 
 Um bloco por item: uma linha por medida, na ordem da ficha, e o teste e o p na
-primeira. Cinco colunas — `medida`, `n`, `média (DP)`, `teste` e `p-valor`.
+primeira. Cinco colunas — `medida`, `n`, o resumo, `teste` e `p-valor`.
 
 O n é o mesmo em todas as linhas do bloco — os casos com todas as medidas, que são
-os que entram no teste —, e a média de cada medida é a desses casos: com faltante
-em alguma medida, ela difere da do `resumo` da descritiva, e a nota diz isso.
+os que entram no teste —, e o resumo de cada medida é o desses casos: com faltante
+em alguma medida, ele difere do `resumo` da descritiva, e a nota diz isso.
 
 ### `def _ainda_nao(delineamento)`
 
-*linha 2269*
+*linha 2621*
 
-A frase das notas sobre os testes da regra que ainda não têm aritmética.
+A frase das notas sobre os testes da regra que ainda não têm aritmética — com o
+espaço do fim, para entrar entre duas frases —, ou vazio, que é o caso de todos os
+delineamentos desde a 1.14.0.
 
 ### Os itens da ficha
 
 ### `def itens_da_ficha(raiz)`
 
-*linha 2286*
+*linha 2642*
 
 A lista `comparacao:` do `projeto.yaml`, conferida na forma e desdobrada.
 
@@ -11020,19 +11590,19 @@ Raises:
 
 ### `def _ler_item(item)`
 
-*linha 2349*
+*linha 2705*
 
 Um item da lista: os `Pedido` que ele escreve, ou a frase do que está errado nele.
 
 ### `def _ler_grupos(item, escrito, nome, grupo)`
 
-*linha 2437*
+*linha 2793*
 
 O item entre grupos: `[imc, sexo]`, ou `[imc, sexo, student]`.
 
 ### `def _ler_repetidas(item)`
 
-*linha 2468*
+*linha 2824*
 
 O item de medidas repetidas — a marca `repetidas:` e a lista das medidas, na ordem
 em que foram feitas, e o método numa chave ao lado, quando vier:
@@ -11046,14 +11616,14 @@ que é o t pareado ao quadrado.
 
 ### `def _ler_uma_contra_varias(item)`
 
-*linha 2518*
+*linha 2874*
 
 A forma com dois-pontos: `sexo: [imc, idade]` — cada variável da lista entre os
 grupos da que vem antes dos dois-pontos.
 
 ### `def _metodo_na_ficha(escrito, texto, familia)`
 
-*linha 2552*
+*linha 2908*
 
 O método escrito no item, conferido contra a forma dele: devolve o nome na forma
 de `_chave`, ou a frase do que está errado.
@@ -11065,21 +11635,21 @@ ele serve para o número de grupos que o banco tem só se sabe depois: ver
 
 ### `def _metodos_de(familia)`
 
-*linha 2626*
+*linha 2982*
 
 Os nomes que se escrevem no item e têm teste com aritmética na família.
 
 ### `def _e_metodo(texto)`
 
-*linha 2636*
+*linha 2992*
 
 ### `def _teste_da_chave(chave, delineamento)`
 
-*linha 2641*
+*linha 2997*
 
 ### `def metodo_escrito(texto, delineamento)`
 
-*linha 2645*
+*linha 3001*
 
 O teste que o método escrito na ficha quer dizer no delineamento, como a tabela o
 escreve; vazio quando o texto não é um método dele, ou quando o teste ainda não
@@ -11091,7 +11661,7 @@ Student contra uma referência, e o de Welch entre dois grupos.
 
 ### `def referencia_escrita(valor)`
 
-*linha 2659*
+*linha 3015*
 
 O valor de referência, a partir de como a ficha o trouxe; `None` quando não é um
 número.
@@ -11103,7 +11673,7 @@ Python ache que `True` vale 1.
 
 ### `def _numero_partido(item)`
 
-*linha 2681*
+*linha 3037*
 
 O `[imc, 24,9]` que o YAML leu como `[imc, 24, 9]`: o número de volta, com ponto
 — `24.9` —, e se o sinal dele se perdeu; `None` quando o item não tem essa forma.
@@ -11117,7 +11687,7 @@ mesmo inteiro.
 
 ### `def _digitos(valor)`
 
-*linha 2704*
+*linha 3060*
 
 Os algarismos de um inteiro sem sinal como foram digitados — `05`, e não `5` —, ou
 vazio quando o valor não é um.
@@ -11131,23 +11701,23 @@ também serve: é como outra biblioteca de YAML leria o `09`.
 
 ### `def _inteiro(valor)`
 
-*linha 2730*
+*linha 3086*
 
 ### `def _como_pedido(item)`
 
-*linha 2734*
+*linha 3090*
 
 ### `def _metodos_da_chave(chave, familia)`
 
-*linha 2760*
+*linha 3119*
 
 ### `def _pedido_de(pergunta)`
 
-*linha 2766*
+*linha 3125*
 
 ### `def _conferir_itens(pedidos, linhas)`
 
-*linha 2777*
+*linha 3136*
 
 Confere cada item contra o dicionário, e recusa listando todos os problemas.
 
@@ -11164,15 +11734,15 @@ numéricas são uma correlação —, ou diz que os dois nomes estão trocados.
 
 ### `def _motivo_de_recusa(nome, linha)`
 
-*linha 2866*
+*linha 3225*
 
 ### `def _motivo_de_ausencia(nome, linha)`
 
-*linha 2880*
+*linha 3239*
 
 ### `def _motivo_de_recusa_das_medidas(nomes, por_nome)`
 
-*linha 2890*
+*linha 3249*
 
 O que impede as medidas repetidas, pelo dicionário — ou vazio. As medidas com o
 mesmo problema saem numa frase só: três medidas marcadas `categorica` são uma
@@ -11180,15 +11750,15 @@ decisão do dicionário, e não três.
 
 ### `def _crases(nomes)`
 
-*linha 2937*
+*linha 3296*
 
 ### `def _verbo(nomes, singular, plural)`
 
-*linha 2941*
+*linha 3300*
 
 ### `def _motivo_de_recusa_entre_grupos(pedido, por_nome)`
 
-*linha 2945*
+*linha 3304*
 
 O que impede o item entre grupos, pelo dicionário — ou vazio.
 
@@ -11196,7 +11766,7 @@ O que impede o item entre grupos, pelo dicionário — ou vazio.
 
 ### `def montar_manifesto(comparacao, linhas)`
 
-*linha 2999*
+*linha 3358*
 
 Traduz a rodada para o índice que o relatório vai ler.
 
@@ -11208,14 +11778,18 @@ variável. O que decidiu cada teste vai em `detalhes`, sob o nome do delineament
 
 ### `def _regras()`
 
-*linha 3091*
+*linha 3450*
 
 As regras desta versão, escritas por extenso no manifesto — as mesmas das notas
 das tabelas, sem os números de uma rodada.
 
+#### `def escolha(delineamento, onde, depois)`
+
+*linha 3455*
+
 ### `def _ambiente()`
 
-*linha 3192*
+*linha 3591*
 
 As versões que produziram estes números.
 
@@ -11225,38 +11799,38 @@ bloco ter a forma dos outros.
 
 ### `def _shapiro_no_manifesto(normal)`
 
-*linha 3214*
+*linha 3613*
 
 ### Mensagens
 
 ### `def _mensagem_sem_itens(linhas)`
 
-*linha 3228*
+*linha 3627*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 3265*
+*linha 3664*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 3273*
+*linha 3672*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 3301*
+*linha 3700*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras análises:
 nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _rotulo(linha)`
 
-*linha 3312*
+*linha 3711*
 
 ### `def _nome(valor)`
 
-*linha 3316*
+*linha 3715*
 
 Um nome, como a ficha o trouxe; vazio quando não é um nome.
 
@@ -11265,11 +11839,11 @@ da lista também não — é o `[[imc, 25]]` digitado com um colchete a mais.
 
 ### `def _simplificado(texto)`
 
-*linha 3328*
+*linha 3727*
 
 ### `def _chave(texto)`
 
-*linha 3333*
+*linha 3732*
 
 O método como ele se procura no `METODOS`: sem acento, minúsculo, e só letras e
 algarismos — `Mann-Whitney`, `mann whitney` e `MANN_WHITNEY` são o mesmo —, com as
@@ -11277,74 +11851,84 @@ outras grafias do `_SINONIMOS` trocadas pela da casa.
 
 ### `def _concorda(teste, participio)`
 
-*linha 3343*
+*linha 3742*
 
 `t de Welch escrito`, `ANOVA escrita`: o participio no gênero do teste.
 
 ### `def _com_artigo(teste, maiuscula)`
 
-*linha 3348*
+*linha 3747*
 
 `o t de Welch`, `a ANOVA` — e, no começo da frase, `O t de Welch`, `A ANOVA`.
 
 ### `def _em_frase(itens)`
 
-*linha 3354*
+*linha 3753*
 
 `A`, `A e B`, `A, B e C`.
 
 ### `def _ou(nomes)`
 
-*linha 3362*
+*linha 3761*
 
 `` `t` ``, `` `t` ou `student` ``, com as crases.
 
 ### `def _unidades(delineamento)`
 
-*linha 3370*
+*linha 3769*
 
 O que se compara no delineamento, no singular e no plural.
 
 ### `def _nenhum(delineamento, quantos)`
 
-*linha 3375*
+*linha 3774*
 
 `nenhum dos dois grupos`, `nenhum dos 3 grupos`, `nenhuma das 3 medidas`.
 
 ### `def _p_na_frase(p)`
 
-*linha 3382*
+*linha 3781*
 
 O p dentro de uma frase: `p = 0,412`, ou `p < 0,001` — nunca `p = < 0,001`.
 
 ### `def _estatistica_em_texto(resultado)`
 
-*linha 3390*
+*linha 3789*
 
 `t = 2,16; 56 gl`, `F = 6,39; 2 e 57 gl` — e, nas medidas repetidas, o ε de
-Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`.
+Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`. No
+Wilcoxon e no Mann-Whitney, o caminho do p, que muda com o n e com os empates:
+`V = 70; p exato`, `W = 25,5; p aproximado pela normal, …, porque há empates`.
 
 ### `def _media_e_desvio(resumo)`
 
-*linha 3401*
+*linha 3804*
 
 `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
 pelo mesmo `numero()`.
 
+### `def _mediana_e_quartis(resumo)`
+
+*linha 3814*
+
+`25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
+escreve, pelo mesmo `numero()`, com os quartis entre colchetes e o `a` do intervalo.
+
 ### `def _intervalo(intervalo)`
 
-*linha 3411*
+*linha 3826*
 
 ### `def _diferenca(resultado)`
 
-*linha 3418*
+*linha 3833*
 
 `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
-fixas do intervalo da uma amostra.
+fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
+locação no Mann-Whitney. Sem o intervalo de 95%, o traço na célula inteira.
 
 ### `def _fixo(valor)`
 
-*linha 3428*
+*linha 3845*
 
 Duas casas fixas, o hífen do teclado no negativo, e nunca `-0,00` — o formato do
 coeficiente da correlação: o Excel em português lê a célula como número, e um
@@ -11352,7 +11936,7 @@ zero não tem direção.
 
 ### `def _referencia_em_texto(valor, ponto)`
 
-*linha 3440*
+*linha 3857*
 
 A referência como foi escrita, sem os zeros do fim: `25`, `24,9`, `0,125`.
 
@@ -11361,34 +11945,34 @@ o que funciona.
 
 ### `def _descrever_valor(valor)`
 
-*linha 3451*
+*linha 3868*
 
 ### `def _descrever_solto(valor)`
 
-*linha 3463*
+*linha 3880*
 
 Um valor como ele apareceria dentro dos colchetes da ficha.
 
 ### `def _arredondar(valor)`
 
-*linha 3472*
+*linha 3889*
 
 ### `def _significativos(valor)`
 
-*linha 3479*
+*linha 3896*
 
 O p no manifesto, com seis algarismos significativos, e não seis casas — o da
 correlação. Com seis casas, um p de 2,5e-08 seria gravado como `0.0`.
 
 ### `def _integridade(confere)`
 
-*linha 3490*
+*linha 3907*
 
 ## `flatcap/analises.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1004 linhas.*
+*1009 linhas.*
 
 O lote — as análises da lista `analises:` do projeto.yaml, de uma vez.
 
@@ -11866,7 +12450,7 @@ Os itens de um bloco como se escrevem na ficha: `[idade, imc]`, `sexo: [imc]`.
 
 ### `def _sugestao(nome)`
 
-*linha 821*
+*linha 826*
 
 O conserto de um nome desconhecido, do mais certo para o mais provável.
 
@@ -11876,17 +12460,17 @@ teste no lugar da análise que o roda. Por último a grafia parecida.
 
 ### `def _mensagem_de_repetidos(repetidos)`
 
-*linha 846*
+*linha 851*
 
 ### O histórico
 
 ### `def _comando(plano)`
 
-*linha 859*
+*linha 864*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 863*
+*linha 868*
 
 A linha do lote, escrita depois das linhas das análises.
 
@@ -11895,7 +12479,7 @@ lote é. Esta diz que elas foram uma execução só, e o que ficou de fora.
 
 ### `def situacao_da_parada(plano, feitas, em_curso, erro)`
 
-*linha 893*
+*linha 898*
 
 Onde o lote parou, o que ficou escrito e o que não rodou — numa frase.
 
@@ -11907,7 +12491,7 @@ passa pelo desfazer do `executar_*` da análise, que pega `Exception`, e a pasta
 dela pode ter ficado pela metade — e a frase diz isso em vez de prometer o que
 não aconteceu.
 
-*linha 915*
+*linha 920*
 
 > Entre duas análises — no `ao_escrever` da CLI, que roda depois de cada uma.
 > Nenhuma pasta ficou pela metade, e a frase diz isso.
@@ -11916,7 +12500,7 @@ não aconteceu.
 
 ### `def _em_texto(nomes)`
 
-*linha 966*
+*linha 971*
 
 `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
 
@@ -11925,7 +12509,7 @@ Sem artigo antes do nome, pelo motivo que o relatório escreveu na função dele
 
 ### `def _sem_acento(texto)`
 
-*linha 979*
+*linha 984*
 
 ## `flatcap/relatorio.py`
 
@@ -13475,7 +14059,7 @@ apertada — sem verticais, é o espaço que separa as colunas.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*3683 linhas.*
+*3689 linhas.*
 
 Interface de linha de comando do FlatCap.
 
@@ -13567,15 +14151,22 @@ Responde se o problema está na configuração, na rede ou no token.
 > quando falta biblioteca. O `doctor` é o comando que responde "o que está
 > errado?" — ele não pode morrer no meio do próprio diagnóstico.
 
+*linha 259*
+
+> O `uv tool upgrade --reinstall` reinstala da origem guardada na instalação — o
+> repositório. O `uv tool install --reinstall flatcap` procura o nome no PyPI, onde
+> o FlatCap não está: falha, ou instala o pacote de quem registrar o nome. O
+> `pipx reinstall` já usa a origem guardada.
+
 ### `def _criar_env_da_conta()`
 
-*linha 271*
+*linha 275*
 
 O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_BIBLIOTECAS`
 
-*linha 302*
+*linha 306*
 
 > As bibliotecas que abrem o banco, calculam, desenham e escrevem o documento.
 > A ordem é a do fluxo: ler, calcular, desenhar, entregar.
@@ -13588,7 +14179,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_NOME_NO_PIP`
 
-*linha 312*
+*linha 316*
 
 > `import docx` é o pacote `python-docx`, e o nome de instalação não é o nome de
 > import. Quem lê "falta `docx`" no terminal vai procurar por `docx` no pip e
@@ -13596,7 +14187,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `def _bibliotecas()`
 
-*linha 318*
+*linha 322*
 
 Quais versões abrem o banco, desenham os gráficos e escrevem o documento hoje.
 
@@ -13612,13 +14203,13 @@ porque a máquina que os roda é a única em que ele nunca falha.
 
 ### `def listar(ultimos, env, conferir_anexos)`
 
-*linha 348*
+*linha 352*
 
 Lista as solicitações no REDCap, e o que já foi para o disco.
     É o que coordena o fluxo diário de trabalho.
     Mostra o que chegou de novo de um lado e o que já virou pasta.
 
-*linha 389*
+*linha 393*
 
 > A busca no disco é feita **uma vez** por cliente e o resultado é passado
 > adiante. A tabela e o resumo faziam a mesma varredura em separado, o que já
@@ -13626,13 +14217,13 @@ Lista as solicitações no REDCap, e o que já foi para o disco.
 
 ### `def _reconferir_anexos(cfg, clientes)`
 
-*linha 400*
+*linha 404*
 
 Confirma na API os anexos que o export de registros não declarou.
 
 ### `def _tabela_de_clientes(clientes, pastas)`
 
-*linha 432*
+*linha 436*
 
 Monta a tabela que sai do comando `listar`.
 Valores que vêm do REDCap entram como `Text`, nunca como string crua:
@@ -13645,7 +14236,7 @@ ter vários trabalhos essa pergunta faria a segunda solicitação dele aparecer
 como já atendida — e ela nunca viraria pasta, porque o `listar` é o comando
 que diz o que ainda falta fazer.
 
-*linha 461*
+*linha 465*
 
 > Só o nome do projeto: a matrícula e o nome do cliente já têm coluna
 > própria duas casas atrás, e repeti-los aqui espremeria a tabela inteira
@@ -13653,13 +14244,13 @@ que diz o que ainda falta fazer.
 
 ### `def _resumo(clientes, pastas, total)`
 
-*linha 469*
+*linha 473*
 
 Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
 
 ### `def novo(record_id, sim, env)`
 
-*linha 506*
+*linha 510*
 
 Cria a pasta do projeto a partir de uma solicitação do REDCap.
 POR PADRÃO APENAS SIMULA:
@@ -13668,14 +14259,14 @@ POR PADRÃO APENAS SIMULA:
 
 ### `def _cabecalho_do_plano(plano)`
 
-*linha 582*
+*linha 586*
 
 Uma linha identificando de quem é a solicitação, antes de desenhar a árvore.
 Confirma que o `record_id` digitado é mesmo o cliente que você tinha em mente.
 
 ### `def _arvore_do_plano(cfg, plano)`
 
-*linha 595*
+*linha 599*
 
 Desenha exatamente o que `executar` criaria, lendo o próprio `Plano`.
 
@@ -13688,7 +14279,7 @@ diferentes, e só uma delas pede conferência antes do `--sim`.
 
 ### `def dados_adicionar(identificador, caminho, sim, env)`
 
-*linha 646*
+*linha 650*
 
 Registra uma nova versão do banco na pasta do projeto.
 
@@ -13700,7 +14291,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para executar.
 
 ### `def dados_listar(identificador, rapido, env)`
 
-*linha 724*
+*linha 728*
 
 Mostra a linha do tempo das versões do banco de um projeto.
 
@@ -13710,27 +14301,27 @@ presente na pasta que a ficha desconhece.
 
 ### `def _cabecalho_dos_dados(plano)`
 
-*linha 772*
+*linha 776*
 
 ### `def _cabecalho_da_ficha(tempo)`
 
-*linha 781*
+*linha 785*
 
 ### `def _arvore_da_adicao(plano)`
 
-*linha 791*
+*linha 795*
 
 Desenha o que `executar_adicao` faria, lendo o próprio plano.
 
 ### `def _tabela_da_linha_do_tempo(tempo)`
 
-*linha 840*
+*linha 844*
 
 A cronologia. Nomes de arquivo entram como `Text` pelo mesmo motivo de sempre.
 
 ### `def _divergencias(tempo)`
 
-*linha 884*
+*linha 888*
 
 As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
@@ -13738,7 +14329,7 @@ As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
 ### `def perfil(identificador, aba, rapido, sim, env)`
 
-*linha 945*
+*linha 949*
 
 Descreve o banco e prepara a reunião com o cliente.
 
@@ -13752,7 +14343,7 @@ ficam intactas, e só entram as variáveis novas.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 980*
+*linha 984*
 
 > O `pandas` sai de dentro deste import e não do topo do arquivo: ele custa uns
 > 0,4 s para carregar, contra 0,08 s do typer com o rich. O `listar`, que roda
@@ -13760,30 +14351,30 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_perfil(perfil)`
 
-*linha 1039*
+*linha 1043*
 
 Quem, qual arquivo, e se dá para confiar nele. Nessa ordem.
 
 ### `def _tabela_do_perfil(perfil)`
 
-*linha 1077*
+*linha 1081*
 
 Uma linha por variável. Valores do banco entram como `Text`, nunca como string
 crua, pelo mesmo motivo do `listar`.
 
 ### `def _achados_no_terminal(perfil)`
 
-*linha 1113*
+*linha 1117*
 
 Os achados agrupados pelo que fazer com eles, do mais urgente para o menos.
 
 ### `def _lista_de_achados(achados)`
 
-*linha 1150*
+*linha 1154*
 
 ### `def _arvore_do_perfil(plano)`
 
-*linha 1165*
+*linha 1169*
 
 Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
@@ -13791,7 +14382,7 @@ Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
 ### `def descritiva(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1204*
+*linha 1208*
 
 Gera a análise descritiva obedecendo ao dicionario.csv.
 
@@ -13808,7 +14399,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1246*
+*linha 1250*
 
 > Mesmo motivo do `perfil`: o `pandas` custa perto de meio segundo para
 > carregar e o `matplotlib` outro tanto. O `listar`, que roda várias vezes por
@@ -13816,7 +14407,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_descritiva(plano)`
 
-*linha 1297*
+*linha 1301*
 
 O que a descritiva mostra antes de escrever — no comando dela e no `analisar`.
 
@@ -13827,13 +14418,13 @@ análises seguintes têm a sua `_mostrar_*` pelo mesmo motivo.
 
 ### `def _cabecalho_da_descritiva(plano)`
 
-*linha 1315*
+*linha 1319*
 
 Quem, qual banco, se dá para confiar nele, e quanto do dicionário entra.
 
 ### `def _tabela_da_descritiva(descritiva)`
 
-*linha 1359*
+*linha 1363*
 
 Uma linha por variável, com os arquivos que ela gera.
 
@@ -13842,7 +14433,7 @@ responde "de qual variável saiu este .csv?" antes de o .csv existir.
 
 ### `def _fora_da_descritiva(descritiva)`
 
-*linha 1396*
+*linha 1400*
 
 As variáveis que não geraram artefato, e por quê.
 
@@ -13851,7 +14442,7 @@ relatório" e "ninguém reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_da_descritiva(plano)`
 
-*linha 1422*
+*linha 1426*
 
 Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
@@ -13859,7 +14450,7 @@ Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
 ### `def normalidade(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1477*
+*linha 1481*
 
 Testa a normalidade das variáveis numéricas do dicionario.csv.
 
@@ -13878,7 +14469,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1521*
+*linha 1525*
 
 > Mesmo motivo do `perfil` e da `descritiva`: `pandas`, `scipy` e `matplotlib`
 > custam perto de um segundo somados, e o `listar`, que roda várias vezes por
@@ -13886,19 +14477,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_normalidade(plano)`
 
-*linha 1572*
+*linha 1576*
 
 O que a normalidade mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_normalidade(plano)`
 
-*linha 1586*
+*linha 1590*
 
 Quem, qual banco, se dá para confiar nele, e quantas variáveis entram.
 
 ### `def _tabela_da_normalidade(normalidade)`
 
-*linha 1632*
+*linha 1636*
 
 Uma linha por variável, na mesma ordem e com os mesmos números do `.csv`.
 
@@ -13907,7 +14498,7 @@ e uma tabela que o escondesse deixaria a coluna `p` parecer uma resposta. Pelo
 mesmo motivo a assimetria e a curtose vêm **antes** do W e do p, e não depois:
 elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
-*linha 1652*
+*linha 1656*
 
 > A tabela do terminal lê as mesmas células do `.csv` que vai para o disco, e
 > não reformata número nenhum: dois formatadores para a mesma grandeza é como
@@ -13915,7 +14506,7 @@ elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
 ### `def _nota_da_normalidade(normalidade)`
 
-*linha 1681*
+*linha 1685*
 
 A frase que impede a tabela de ser lida como um veredito.
 
@@ -13926,7 +14517,7 @@ vira leitura de conferência.
 
 ### `def _fora_da_normalidade(normalidade)`
 
-*linha 1729*
+*linha 1733*
 
 As variáveis que não entraram, e por quê.
 
@@ -13936,7 +14527,7 @@ lista é o que impede a pergunta "por que `sexo` não está na tabela?".
 
 ### `def _arvore_da_normalidade(plano)`
 
-*linha 1756*
+*linha 1760*
 
 Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
@@ -13944,7 +14535,7 @@ Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
 ### `def cruzamento(identificador, aba, rapido, sim, env)`
 
-*linha 1817*
+*linha 1821*
 
 Cruza pares de variáveis categóricas: uma tabela por par.
 
@@ -13966,26 +14557,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1860*
+*linha 1864*
 
 > O `pandas` entra aqui dentro, como em todo comando que abre o banco: o
 > `listar`, que roda várias vezes por dia, não deve pagar por ele.
 
 ### `def _mostrar_cruzamento(plano)`
 
-*linha 1904*
+*linha 1908*
 
 O que o cruzamento mostra antes de escrever — no comando dele e no `analisar`.
 
 ### `def _cabecalho_do_cruzamento(plano)`
 
-*linha 1916*
+*linha 1920*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_do_cruzamento(par)`
 
-*linha 1958*
+*linha 1962*
 
 A tabela de um par, com as mesmas células do `.csv`.
 
@@ -13994,7 +14585,7 @@ deste comando, e a simulação existe para você ler o que vai para o documento
 antes de escrevê-lo. A linha do `Total` em negrito e a `(sem informação)`
 apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
-*linha 1969*
+*linha 1973*
 
 > `Text` no título e nos cabeçalhos, e não a string: são rótulos do
 > dicionário, e um `Idade [anos]` perderia o colchete como marcação do rich —
@@ -14002,7 +14593,7 @@ apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
 ### `def _arvore_do_cruzamento(plano)`
 
-*linha 1992*
+*linha 1996*
 
 Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
@@ -14010,7 +14601,7 @@ Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
 ### `def associacao(identificador, aba, rapido, sim, env)`
 
-*linha 2036*
+*linha 2040*
 
 Testa a associação entre pares de variáveis categóricas.
 
@@ -14035,26 +14626,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2082*
+*linha 2086*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_associacao(plano)`
 
-*linha 2126*
+*linha 2130*
 
 O que a associação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_associacao(plano)`
 
-*linha 2138*
+*linha 2142*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_associacao(associacao)`
 
-*linha 2180*
+*linha 2184*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14063,11 +14654,11 @@ dois formatadores para o mesmo p é como o terminal diz `0.042` enquanto o
 arquivo diz `0,042`. O p abaixo de 0,05 sai em negrito: é o destaque de quem
 lê a simulação, e ele fica no terminal — o documento não marca nada.
 
-- *linha 2193* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
+- *linha 2197* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
 
 ### `def _nota_da_associacao(associacao)`
 
-*linha 2216*
+*linha 2220*
 
 Por que cada par foi para o teste em que foi, e quantos testes são.
 
@@ -14077,7 +14668,7 @@ ir para o documento.
 
 ### `def _arvore_da_associacao(plano)`
 
-*linha 2253*
+*linha 2257*
 
 Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
@@ -14085,7 +14676,7 @@ Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
 ### `def correlacao(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 2296*
+*linha 2300*
 
 Correlaciona pares de variáveis: Pearson, Spearman ou Kendall.
 
@@ -14113,7 +14704,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2349*
+*linha 2353*
 
 > O `pandas`, o `scipy` e o `matplotlib` entram aqui dentro, como em todo
 > comando que abre o banco: o `listar`, que roda várias vezes por dia, não deve
@@ -14121,19 +14712,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_correlacao(plano)`
 
-*linha 2396*
+*linha 2400*
 
 O que a correlação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_correlacao(plano)`
 
-*linha 2408*
+*linha 2412*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_correlacao(correlacao)`
 
-*linha 2450*
+*linha 2454*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14143,11 +14734,11 @@ o arquivo diz `0,31`. O p abaixo de 0,05 sai em negrito, e o método escrito na
 ficha contra a regra sai em amarelo: são destaques de quem lê a simulação, e
 ficam no terminal — o documento não marca nada.
 
-- *linha 2464* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
+- *linha 2468* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
 
 ### `def _nota_da_correlacao(correlacao)`
 
-*linha 2489*
+*linha 2493*
 
 Por que cada par foi para o método em que foi, e quantos testes são.
 
@@ -14158,7 +14749,7 @@ a regra teria escolhido.
 
 ### `def _arvore_da_correlacao(plano)`
 
-*linha 2533*
+*linha 2537*
 
 Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
@@ -14166,21 +14757,22 @@ Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
 ### `def comparacao(identificador, aba, rapido, sim, env)`
 
-*linha 2591*
+*linha 2595*
 
-Compara médias: contra um valor de referência, entre grupos ou entre medidas.
+Compara: contra um valor de referência, entre grupos ou entre medidas.
 
 Para cada item da lista `comparacao:` do projeto.yaml, o teste que a regra dos
-pressupostos escolhe. Contra um valor de referência, o t de Student para uma
-amostra quando o Shapiro-Wilk não rejeita a normal, como o t.test do R. Entre os
-dois grupos de uma variável categórica, o t de Welch — o padrão do t.test — quando
-o Shapiro-Wilk não rejeita a normal em nenhum dos grupos; o t de Student roda
-quando está escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão
-do oneway.test —, e a clássica quando está escrita no item. Nas medidas repetidas —
-a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA de medidas
-repetidas, sempre com a correção de Greenhouse-Geisser. Onde a regra escolhe um
-teste que ainda não existe, a linha sai sem teste, com o motivo. Sai uma tabela por
-delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
+pressupostos escolhe: o paramétrico quando o Shapiro-Wilk não rejeita a normal, e o
+de postos quando rejeita. Contra um valor de referência, o t de Student para uma
+amostra, ou o Wilcoxon. Entre os dois grupos de uma variável categórica, o t de
+Welch — o padrão do t.test —, ou o Mann-Whitney; o t de Student roda quando está
+escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão do
+oneway.test —, ou o Kruskal-Wallis; a clássica roda quando está escrita no item. Nas
+medidas repetidas — a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA
+de medidas repetidas, sempre com a correção de Greenhouse-Geisser, ou o Friedman.
+Todos como o R os calcula; o Wilcoxon e o Mann-Whitney com o intervalo de
+Hodges-Lehmann. Sai uma tabela por delineamento em `3. Análises/comparacao/`, com um
+`manifesto.json`.
 
 Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
 variável e a de grupo; ou as medidas repetidas, com a marca:
@@ -14191,33 +14783,34 @@ variável e a de grupo; ou as medidas repetidas, com a marca:
       - \[imc, sexo]
       - repetidas: \[pas_0, pas_1, pas_2]
 
-O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra. Nas
-medidas repetidas, o método vem na chave `metodo:`, na linha de baixo.
+O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra, e
+`wilcoxon`, `mannwhitney` ou `kruskal`, o de postos. Nas medidas repetidas, o método
+vem na chave `metodo:`, na linha de baixo — `anova` ou `friedman`.
 
 Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2644*
+*linha 2650*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_comparacao(plano)`
 
-*linha 2688*
+*linha 2694*
 
 O que a comparação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_comparacao(plano)`
 
-*linha 2701*
+*linha 2707*
 
 Quem, qual banco, se dá para confiar nele, e quantos itens entram.
 
 ### `def _tabelas_da_comparacao(comparacao)`
 
-*linha 2743*
+*linha 2749*
 
 Uma tabela por delineamento, com as mesmas células do `.csv`.
 
@@ -14231,14 +14824,14 @@ O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com o método escrito
 contra a regra sai com a coluna `teste` em amarelo: são destaques de quem lê a
 simulação, e ficam no terminal — o documento não marca nada.
 
-*linha 2760*
+*linha 2766*
 
 > n, referência e p-valor: números, à direita. Pelo nome, e não pela posição —
 > cada delineamento tem as suas colunas.
 
 ### `def _nota_da_comparacao(comparacao)`
 
-*linha 2804*
+*linha 2810*
 
 Por que cada item foi para o teste em que foi, e quantos testes são.
 
@@ -14249,7 +14842,7 @@ escolheu um teste que ainda não existe, a frase sai em amarelo.
 
 ### `def _arvore_da_comparacao(plano)`
 
-*linha 2844*
+*linha 2850*
 
 Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
@@ -14257,42 +14850,42 @@ Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
 ### `class _Tela`
 
-*linha 2892*
+*linha 2898*
 
 O que o terminal sabe de uma análise: como mostrá-la antes de escrever, a frase
 de depois de escrita e a linha dela na tabela do lote.
 
 ### `def _sem_teste(quantos)`
 
-*linha 2903*
+*linha 2909*
 
 ### `def _resumo_da_descritiva(plano)`
 
-*linha 2907*
+*linha 2913*
 
 ### `def _resumo_da_normalidade(plano)`
 
-*linha 2914*
+*linha 2920*
 
 ### `def _resumo_do_cruzamento(plano)`
 
-*linha 2922*
+*linha 2928*
 
 ### `def _resumo_da_associacao(plano)`
 
-*linha 2927*
+*linha 2933*
 
 ### `def _resumo_da_correlacao(plano)`
 
-*linha 2935*
+*linha 2941*
 
 ### `def _resumo_da_comparacao(plano)`
 
-*linha 2943*
+*linha 2949*
 
 ### `_NA_TELA`
 
-*linha 2951*
+*linha 2957*
 
 > Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
 > iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
@@ -14301,7 +14894,7 @@ de depois de escrita e a linha dela na tabela do lote.
 
 ### `def analisar(identificador, aba, sem_graficos, rapido, resumo, sim, env)`
 
-*linha 2978*
+*linha 2984*
 
 Roda, de uma vez, as análises da lista `analises:` do projeto.yaml.
 
@@ -14326,21 +14919,21 @@ Para rodar uma análise só, o comando dela continua valendo.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3033*
+*linha 3039*
 
 > O `analises.py` não traz o `pandas`; quem traz é cada análise, no `preparar_*`
 > dela. O import fica aqui dentro pelo mesmo motivo dos outros comandos.
 
-*linha 3060*
+*linha 3066*
 
 > Um painel por recusa, com o título da análise — o mesmo painel que o
 > comando dela abriria —, e o fecho do lote por último.
 
 #### `def ao_escrever(feita)`
 
-*linha 3099*
+*linha 3105*
 
-*linha 3111*
+*linha 3117*
 
 > Ctrl+C no meio do lote. O `click` diria só «Aborted!», e aqui a pergunta
 > que sobra é qual análise ficou escrita e qual ficou pela metade — a mesma
@@ -14348,19 +14941,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _notas(erro)`
 
-*linha 3136*
+*linha 3142*
 
 As notas que o `executar_analises` prende ao erro: onde o lote parou.
 
 ### `def _regua_da_etapa(posicao, total, etapa)`
 
-*linha 3143*
+*linha 3149*
 
 A linha que abre a saída de cada análise, com a posição dela no lote.
 
 ### `def _cabecalho_do_lote(plano)`
 
-*linha 3154*
+*linha 3160*
 
 Quem, qual banco, se dá para confiar nele, e quantas análises a lista pede.
 
@@ -14369,7 +14962,7 @@ versão vigente da ficha.
 
 ### `def _tabela_do_lote(plano)`
 
-*linha 3198*
+*linha 3204*
 
 Uma linha por análise, na ordem da lista: o que entra nela, quantos arquivos, e
 se a rodada é a primeira ou refaz uma anterior.
@@ -14380,7 +14973,7 @@ par que não tinha casos para o teste.
 
 ### `def _avisos_das_etapas(plano)`
 
-*linha 3226*
+*linha 3232*
 
 Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
 
@@ -14389,7 +14982,7 @@ seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
 
 ### `def _arvore_do_lote(plano)`
 
-*linha 3247*
+*linha 3253*
 
 Desenha o que `executar_analises` escreveria, lendo o próprio plano.
 
@@ -14401,7 +14994,7 @@ logo acima. Aqui é o lote inteiro de uma vez — o que vai para
 
 ### `def relatorio(identificador, template, titulo, rapido, sim, env)`
 
-*linha 3293*
+*linha 3299*
 
 Monta o relatório .docx a partir das análises já rodadas.
 
@@ -14428,7 +15021,7 @@ escrito dentro dele.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3346*
+*linha 3352*
 
 > Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê os
 > manifestos e os `.csv` das rodadas, e é só isso. O `python-docx` entra só
@@ -14436,7 +15029,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def template(saida, sim, env)`
 
-*linha 3428*
+*linha 3434*
 
 Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
 
@@ -14453,7 +15046,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_relatorio(plano)`
 
-*linha 3500*
+*linha 3506*
 
 Quem, de quais análises, sobre qual banco, com qual modelo e qual título.
 
@@ -14466,7 +15059,7 @@ de executar, que é exatamente o que a simulação existe para evitar.
 
 ### `def _tabela_do_relatorio(relatorio)`
 
-*linha 3541*
+*linha 3547*
 
 Uma linha por seção do documento, com os arquivos que entram nela.
 
@@ -14478,7 +15071,7 @@ pergunta deixou de ser «o que entrou?» e passou a ser «o que entrou, e de
 qual rodada?». O nome aparece uma vez por bloco, e não repetido em toda
 linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
-*linha 3562*
+*linha 3568*
 
 > `rodadas` vazio é o `Relatorio` montado à mão — em teste, ou por uma
 > camada de cima que não passou pela varredura. A tabela continua saindo,
@@ -14486,7 +15079,7 @@ linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
 ### `def _alertas_no_terminal(relatorio)`
 
-*linha 3599*
+*linha 3605*
 
 Os avisos que também vão para dentro do documento.
 
@@ -14495,7 +15088,7 @@ que sobra depois de o arquivo ser anexado a um e-mail.
 
 ### `def _fora_do_relatorio(relatorio)`
 
-*linha 3626*
+*linha 3632*
 
 As variáveis que **nenhuma** análise descreveu, e por quê.
 
@@ -14510,7 +15103,7 @@ reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_do_relatorio(plano)`
 
-*linha 3658*
+*linha 3664*
 
 Desenha o que `executar_relatorio` escreveria, lendo o próprio plano.
 

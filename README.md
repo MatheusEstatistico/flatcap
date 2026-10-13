@@ -9,8 +9,9 @@ estatística que recebe as solicitações pelo REDCap:
 > consulting service whose requests arrive through a REDCap survey: it creates one folder per
 > client and project, versions the client's datasets, profiles them, runs descriptive and
 > inferential analyses (normality, cross-tabulation, chi-square/Fisher, Pearson/Spearman/Kendall,
-> t-tests and ANOVAs) checked against R, and writes a `.docx` report. Code, messages and
-> documentation are in Brazilian Portuguese. Licensed under GPL-3.0-or-later.
+> t-tests, ANOVAs and the rank-based Wilcoxon, Mann-Whitney, Kruskal-Wallis and Friedman tests)
+> checked against R, and writes a `.docx` report. Code, messages and documentation are in
+> Brazilian Portuguese. Licensed under GPL-3.0-or-later.
 
 ## Princípio
 
@@ -38,31 +39,23 @@ código — está em [`docs/Doc.Flatcap.md`](docs/Doc.Flatcap.md).
 
 ## Instalação
 
-Requer **Python 3.11 ou mais novo**. O FlatCap é um programa de terminal, e o jeito
-recomendado de instalá-lo é como uma ferramenta isolada — com o
-[`pipx`](https://pipx.pypa.io) ou com o [`uv`](https://docs.astral.sh/uv/) —, sem clonar o
-repositório. O `uv` baixa até o Python, se a máquina não tiver.
-
-Cada [versão publicada](https://github.com/MatheusEstatistico/flatcap/releases) traz o pacote
-`flatcap-<versão>-py3-none-any.whl`. Instale pelo endereço dele:
+Requer **Python 3.11 ou mais novo** e o [Git](https://git-scm.com/downloads). O FlatCap é um
+programa de terminal, e o jeito recomendado de instalá-lo é como uma ferramenta isolada — com
+o [`uv`](https://docs.astral.sh/uv/) ou com o [`pipx`](https://pipx.pypa.io) —, direto do
+repositório e sem cloná-lo: o código é baixado, instalado e descartado. O `uv` baixa até o
+Python, se a máquina não tiver.
 
 ```bash
 # com o uv
-uv tool install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+uv tool install git+https://github.com/MatheusEstatistico/flatcap
 
 # ou com o pipx
-pipx install https://github.com/MatheusEstatistico/flatcap/releases/download/v1.13.1/flatcap-1.13.1-py3-none-any.whl
+pipx install git+https://github.com/MatheusEstatistico/flatcap
 ```
 
-Ou direto do repositório, pela etiqueta da versão (precisa do Git na máquina):
-
-```bash
-uv tool install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
-pipx install git+https://github.com/MatheusEstatistico/flatcap@v1.13.1
-```
-
-Para trocar de versão, rode o mesmo comando com o endereço da nova e `--force`. Para
-desinstalar: `uv tool uninstall flatcap` ou `pipx uninstall flatcap`.
+Para atualizar para o que estiver no `main`: `uv tool upgrade flatcap` ou
+`pipx upgrade flatcap`. Para desinstalar: `uv tool uninstall flatcap` ou
+`pipx uninstall flatcap`.
 
 ### Para desenvolver
 
@@ -149,7 +142,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap cruzamento <id>` | Uma tabela cruzada por par da lista `cruzamento:`. |
 | `flatcap associacao <id>` | Qui-quadrado ou Fisher, pela regra de Cochran, para os pares da lista `associacao:`. |
 | `flatcap correlacao <id>` | Pearson, Spearman ou Kendall, pelos pressupostos, para os pares da lista `correlacao:`. |
-| `flatcap comparacao <id>` | Testes t e ANOVAs — contra uma referência, entre grupos ou entre medidas repetidas. |
+| `flatcap comparacao <id>` | Testes t e ANOVAs, ou os de postos — Wilcoxon, Mann-Whitney, Kruskal-Wallis e Friedman —, pelos pressupostos: contra uma referência, entre grupos ou entre medidas repetidas. |
 | `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
 | `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
 | `flatcap template` | Escreve o modelo `.docx` que o relatório usa, para ajustar no Word. |
@@ -255,7 +248,7 @@ associacao:
   - [sexo, desfecho]
 comparacao:
   - [imc, 25]                   # uma amostra, contra a referência
-  - [imc, sexo]                 # dois grupos: o t de Welch
+  - [imc, sexo]                 # dois grupos: o t de Welch ou, sem a normal, o Mann-Whitney
   - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
   - repetidas: [pas_0, pas_1, pas_2]
 ```

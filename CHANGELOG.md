@@ -34,6 +34,16 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 - `wilcoxon`, `mannwhitney`, `kruskal` e `friedman` escritos em `analises:` ensinam que são
   testes da `comparacao`.
 
+### Removido
+- A pasta `.github`: a CI, a publicação de versões no GitHub, o Dependabot e os modelos de
+  issue e de pull request. As conferências rodam na máquina de quem muda o código, e a
+  instalação vem direto do repositório (`uv tool install git+https://…`).
+
+### Corrigido
+- A dica do `doctor` para reinstalar pelo `uv` é `uv tool upgrade --reinstall flatcap`, que
+  reinstala de onde o FlatCap veio. O `uv tool install --reinstall flatcap` procurava o nome
+  no PyPI, onde o FlatCap não está.
+
 ## [1.13.1] — a revisão antes da abertura do código
 
 ### Corrigido
@@ -128,6 +138,3 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 
 ## [0.1.0] — a fundação
 - `flatcap doctor`: a configuração e a conexão com o REDCap.
-
-[1.14.0]: https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.14.0
-[1.13.1]: https://github.com/MatheusEstatistico/flatcap/releases/tag/v1.13.1
