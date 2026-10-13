@@ -162,6 +162,21 @@ class TestDoctor:
         saida = _saida(rodar("doctor"))
         assert "python-docx" in saida
 
+    def test_a_dica_do_uv_reinstala_da_origem_e_nao_do_pypi(self, rodar, sem_modulo):
+        """
+        REGRESSÃO — a dica que procurava o FlatCap no PyPI.
+
+        O `uv tool install --reinstall flatcap` resolve o nome no índice, e o FlatCap
+        não está lá: numa instalação feita por `git+https://…`, o uv responde que o
+        pacote não existe — e, se alguém registrar o nome, instala o pacote dessa
+        pessoa. O `uv tool upgrade --reinstall flatcap` reinstala da origem guardada na
+        instalação. Os dois foram conferidos com o uv contra um clone.
+        """
+        sem_modulo("matplotlib")
+        saida = _sem_moldura(rodar("doctor"))
+        assert "uv tool upgrade --reinstall flatcap" in saida
+        assert "uv tool install --reinstall" not in saida
+
     def test_criar_env_escreve_o_da_conta_e_nao_sobrescreve(self, rodar):
         from flatcap.config import arquivo_env_da_conta
 

@@ -1,5 +1,5 @@
 # SPDX-FileCopyrightText: 2026 Matheus Fernandes
-# SPDX-FileCopyrightText: 1995-2019 The R Core Team
+# SPDX-FileCopyrightText: 1995-2024 The R Core Team
 # SPDX-FileCopyrightText: 1998 B. D. Ripley
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
@@ -1296,7 +1296,7 @@ def _quantil(contagens: Sequence[int], total: int, probabilidade: float) -> int:
     quantil ser o dele também no caso em que a acumulada cai em cima do alvo.
 
     A busca é a do `qsignrank`, em `src/nmath/signrank.c`, e a do `qwilcox`, em
-    `src/nmath/wilcox.c`, do R — (C) 1999-2014 The R Core Team, GPL-2.0-or-later.
+    `src/nmath/wilcox.c`, do R — (C) 1999-2024 The R Core Team, GPL-2.0-or-later.
     Origem: ver o `NOTICE.md`.
     """
     alvo = probabilidade - 10 * sys.float_info.epsilon

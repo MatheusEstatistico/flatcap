@@ -30,14 +30,15 @@ Na ordem, antes de pedir a revisão:
 1. `git diff` — releia o que mudou, inteiro.
 2. `pytest` — a suíte offline. Leva alguns minutos: os gráficos são desenhados a 600 DPI.
 3. `pytest -m e2e` — a ponta a ponta: o `flatcap` como subprocesso contra um REDCap falso.
-4. `ruff check src tests tools` — sem nenhum achado.
+4. `ruff check src tests tools` e `python tools/gerar_doc.py --conferir` — sem nenhum achado.
 5. **Gere um relatório de um projeto de teste e abra o `.docx` no Word**, e os `.png` que a
    mudança tocar. Quatro dos cinco defeitos de formatação da Fase 6 não teriam sido pegos por
    asserção nenhuma — os testes `test_o_que_so_se_ve_*` estão lá para lembrar.
 6. Só então o commit, com uma mensagem que diga o porquê, e não só o quê.
 
-O `pre-commit` roda o `ruff` e as conferências de arquivo em cada commit; a CI roda os passos
-2 a 4 no Linux, no Windows e no macOS.
+O `pre-commit` roda o `ruff` e as conferências de arquivo em cada commit. Os passos 2 a 4 rodam
+só na sua máquina — o repositório não tem integração contínua —, e são eles que mantêm o
+`main` de pé.
 
 ## As regras da casa
 
@@ -54,8 +55,8 @@ O `pre-commit` roda o `ruff` e as conferências de arquivo em cada commit; a CI 
   CLI a captura. Qualquer outra exceção é bug, e deve subir inteira.
 - **Os comentários explicam o porquê**, e o docstring de cada módulo conta as decisões que o
   moldaram. A [documentação](docs/Doc.Flatcap.md) é gerada a partir deles:
-  `python tools/gerar_doc.py` depois de mudar um comentário, e a CI confere que ela está em
-  dia.
+  `python tools/gerar_doc.py` depois de mudar um comentário, e o `--conferir` do passo 4
+  acusa o esquecimento.
 - **Cabeçalho SPDX** em todo arquivo novo de código:
 
   ```python
@@ -72,6 +73,13 @@ no docstring e uma linha no [`NOTICE.md`](NOTICE.md).
 
 ## Relatar um defeito ou propor uma ideia
 
-Pelas [issues](https://github.com/MatheusEstatistico/flatcap/issues), com os modelos que
-aparecem ao abrir uma. Vulnerabilidade de segurança **não** vai numa issue: ver o
-[`SECURITY.md`](SECURITY.md).
+Pelas [issues](https://github.com/MatheusEstatistico/flatcap/issues).
+
+- **Num defeito**, diga a versão (a primeira linha do `flatcap --version`), o sistema, o
+  comando, o que aconteceu e o que você esperava, e como reproduzi-lo com um banco inventado:
+  as colunas, alguns valores e o `dicionario.csv` que bastam. Antes de colar a saída do
+  terminal, confira que ela não mostra nome, matrícula ou valor do banco.
+- **Numa ideia**, diga o problema — o que hoje é manual, lento ou fácil de errar —, a
+  proposta e, para uma análise nova, a função do R que é a referência.
+
+Vulnerabilidade de segurança **não** vai numa issue: ver o [`SECURITY.md`](SECURITY.md).

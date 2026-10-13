@@ -45,7 +45,6 @@ tests/fixtures/** -text
 *.gz      binary
 *.whl     binary
 
-# Fora do código-fonte que o GitHub empacota em cada versão (git archive):
-# a configuração das ferramentas do repositório.
-.github/**              export-ignore
+# Fora do zip do código-fonte que o GitHub monta (git archive): a configuração das
+# ferramentas do repositório.
 .pre-commit-config.yaml export-ignore
