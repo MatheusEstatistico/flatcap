@@ -68,7 +68,7 @@ class TestChavesAusentes:
 class TestUrlDaApi:
     def test_o_link_do_survey_e_barrado_com_o_formato_certo(self, tmp_path, root):
         caminho = _env(
-            tmp_path, REDCAP_API_URL="https://redcap.link/estatistico",
+            tmp_path, REDCAP_API_URL="https://redcap.link/exemplo",
             REDCAP_TOKEN="0" * 32, FLATCAP_ROOT=str(root),
         )
         with pytest.raises(ConfigError) as erro:

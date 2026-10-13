@@ -43,6 +43,9 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 - A dica do `doctor` para reinstalar pelo `uv` é `uv tool upgrade --reinstall flatcap`, que
   reinstala de onde o FlatCap veio. O `uv tool install --reinstall flatcap` procurava o nome
   no PyPI, onde o FlatCap não está.
+- Os anos do R no `hipoteses.py`: o cabeçalho passa a `1995-2024 The R Core Team`, e o
+  docstring do `_quantil`, a `1999-2024` — os do `signrank.c` e do `wilcox.c`, de onde vem o
+  quantil das distribuições exatas.
 
 ## [1.13.1] — a revisão antes da abertura do código
 
