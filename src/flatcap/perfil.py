@@ -235,7 +235,7 @@ _formato_de_data = formato_de_data
 _NUMERO_PTBR = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$|^[+-]?\d+(?:,\d+)?$")
 # `1,234.56` e `1234.56` — o jeito que sai de ferramenta em inglês.
 _NUMERO_EN = re.compile(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^[+-]?\d+(?:\.\d+)?$")
-_VIRGULA_DECIMAL = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})*,\d+$")
+_VIRGULA_DECIMAL = re.compile(r"^[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$")
 _ESPACOS = re.compile(r"\s+")
 
 _MARCA_GERACAO = "<!-- flatcap perfil"
@@ -798,6 +798,11 @@ def _achados_textuais(nome: str, textos: list[str]) -> tuple[Achado, ...]:
     if proporcao >= PROPORCAO_PARA_AFIRMAR:
         com_virgula = [texto for texto in numericos if _VIRGULA_DECIMAL.match(texto)]
         if com_virgula:
+            # Num `.csv` separado por `;` a vírgula já é lida como decimal (`banco.py`),
+            # coluna inteira ou nada. Se a coluna chegou aqui como texto, o motivo
+            # costuma ser o valor que não é número, e é ele que precisa aparecer.
+            outros = list(dict.fromkeys(texto for texto in textos if not _e_numero(texto)))
+            quais = f": {' · '.join(outros[:3])}" if outros else ""
             achados.append(
                 Achado(
                     codigo="virgula_decimal",
@@ -806,9 +811,12 @@ def _achados_textuais(nome: str, textos: list[str]) -> tuple[Achado, ...]:
                     titulo="números com vírgula decimal, lidos como texto",
                     detalhe=(
                         "A coluna é numérica, mas a vírgula faz o leitor tratar cada valor "
-                        "como palavra: nenhuma média sai daqui. No Excel isso costuma ser "
-                        "célula formatada como texto, ou o arquivo salvo em uma "
-                        "configuração regional e aberto em outra."
+                        "como palavra: nenhuma média sai daqui. Num `.xlsx`, é célula "
+                        "formatada como texto; num `.csv` separado por vírgula, o arquivo "
+                        "salvo numa configuração regional e aberto em outra. Num `.csv` "
+                        "separado por `;` a vírgula é lida como decimal, a coluna inteira "
+                        "ou nada — se ela chegou aqui como texto, algum valor dela não é "
+                        f"número{quais}."
                     ),
                     exemplos=tuple(com_virgula[:LIMITE_EXEMPLOS]),
                 )

@@ -77,6 +77,11 @@ def com_virgula_decimal() -> pd.DataFrame:
     É o caso que faz a Fase 5 **recusar** a rodada inteira, e a recusa é a
     decisão central daquela fase: converter em silêncio é como uma média sai de
     80% dos casos sem que nada na tabela diga que os outros 20% não entraram.
+
+    Gravado num `.csv` separado por `;`, ele **não** chega como texto desde a
+    1.14.1: a vírgula ali é a convenção do arquivo, e o `banco.py` a lê como
+    decimal. O teste que precisa da recusa o grava em `.xlsx`, onde `22,5` é uma
+    célula de texto de verdade.
     """
     quadro = completo()
     quadro["imc"] = [f"{valor:.1f}".replace(".", ",") for valor in quadro["imc"]]
@@ -593,11 +598,13 @@ def minusculo(linhas: int = 3) -> pd.DataFrame:
 
 def csv_do_excel_ptbr(caminho, quadro: pd.DataFrame | None = None):
     """
-    `;` entre campos e cp1252 — o que sai do Excel em português.
+    `;` entre campos, vírgula decimal e cp1252 — o que sai do Excel em português.
     """
     quadro = completo() if quadro is None else quadro
     caminho.write_bytes(
-        quadro.to_csv(sep=";", index=False, lineterminator="\r\n").encode("cp1252")
+        quadro.to_csv(sep=";", decimal=",", index=False, lineterminator="\r\n").encode(
+            "cp1252"
+        )
     )
     return caminho
 

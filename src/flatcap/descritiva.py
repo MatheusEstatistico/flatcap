@@ -33,12 +33,18 @@ de cena — e o `perfil.md` já traz os quartis de cada numérica exatamente par
 conversa.
 
 **Numérica que chegou como texto: recusa.** Se o dicionário diz `numerica` e a
-coluna veio como texto — vírgula decimal, número entre aspas, `12 (repetido)` no
-meio —, o comando não gera nada e diz quais são as colunas. A alternativa seria
-converter em silêncio, e converter em silêncio é como uma média sai de 80% dos
-casos sem que nada na tabela diga que os outros 20% não entraram. O caminho é o
-que a Fase 3 já tem: o cliente corrige, você registra a versão nova com
-`flatcap dados adicionar`, e a descritiva roda sobre ela.
+coluna veio como texto — número em célula de texto no `.xlsx`, `12 (repetido)` no
+meio, vírgula decimal ao lado de um `não sei` —, o comando não gera nada e diz
+quais são as colunas. A alternativa seria converter em silêncio, e converter em
+silêncio é como uma média sai de 80% dos casos sem que nada na tabela diga que os
+outros 20% não entraram. O caminho é o que a Fase 3 já tem: o cliente corrige,
+você registra a versão nova com `flatcap dados adicionar`, e a descritiva roda
+sobre ela.
+
+    A vírgula decimal do `.csv` do Excel em português não chega aqui como texto
+    desde a 1.14.1: o `banco.py` a lê como número, a coluna inteira ou nada, e
+    registra quais colunas leu assim. Até a 1.14.0 ela era recusada, e todo
+    projeto que chegava nesse formato — o mais comum — parava na descritiva.
 
     A exceção é a data, e a razão é do formato, não da regra. Em um `.csv` não
     existe tipo data: o `pandas` infere número a partir do texto e nunca infere
@@ -1281,6 +1287,7 @@ def montar_manifesto(
             "planilha": leitura.aba,
             "separador": leitura.separador,
             "codificacao": leitura.codificacao,
+            "virgula_decimal": list(leitura.virgula_decimal),
             "integridade": _integridade(banco.confere),
         },
         dicionario={
@@ -1458,6 +1465,8 @@ def recusar_incompativeis(
 
     Recusar devolve a decisão para onde ela pertence: o arquivo é do cliente, a
     correção é dele, e a Fase 3 tem o lugar certo para a versão corrigida entrar.
+    A coluna inteira em vírgula decimal de um `.csv` separado por `;` não chega
+    aqui: o `banco.py` já a leu como número, sem perder nenhum valor.
     Se a coluna não vai ser corrigida, o dicionário aceita `categorica` ou
     `ignorar` — as duas são decisões suas, escritas, e nenhuma delas é silenciosa.
 

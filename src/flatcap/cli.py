@@ -1064,6 +1064,13 @@ def _cabecalho_do_perfil(perfil: Perfil) -> Text:
             Text.assemble(("  ·  ", "dim"), (f"separador {legivel}", "dim"),
                                         ("  ·  ", "dim"), (str(perfil.leitura.codificacao), "dim"))
         )
+    if perfil.leitura.virgula_decimal:
+        # As colunas que o leitor converteu: é uma decisão dele, e decisão do leitor
+        # sai escrita, como o separador e a codificação. Ver o `banco.py`.
+        quantas = len(perfil.leitura.virgula_decimal)
+        cabecalho.append(
+            Text.assemble(("  ·  ", "dim"), (f"vírgula decimal em {quantas} coluna(s)", "dim"))
+        )
 
     cabecalho.append("\n")
     if perfil.confere is True:

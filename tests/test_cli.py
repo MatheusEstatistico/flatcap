@@ -490,12 +490,32 @@ class TestDescritiva:
         assert not list(pasta.glob("*.png"))
 
     def test_numerica_como_texto_sai_com_um(self, rodar, projeto_com_banco):
-        projeto_com_banco(bancos.com_virgula_decimal())
+        # No `.xlsx`, `22,5` é célula de texto: o perfil sugere `numerica`, e a
+        # descritiva recusa. (No `.csv` com `;`, ela é lida como número.)
+        projeto_com_banco(bancos.com_virgula_decimal(), nome="00_redcap_2026-09-01_banco.xlsx")
         rodar("perfil", RECORD_ID, "--sim")
-        # o perfil sugere `numerica` para a coluna de vírgula decimal
         resultado = rodar("descritiva", RECORD_ID)
         assert resultado.exit_code == 1
         assert "Descritiva" in _saida(resultado)
+
+    def test_o_csv_do_excel_em_portugues_vai_do_perfil_a_descritiva(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: o `.csv` com `;` e vírgula decimal — o formato mais
+        comum de chegar — parava na descritiva, que recusava `imc` como "numérica que
+        chegou como texto". Agora ele passa, e o perfil diz que leu a vírgula.
+        """
+        raiz = projeto_com_banco(bancos.com_virgula_decimal())
+        perfil = rodar("perfil", RECORD_ID, "--sim")
+        assert perfil.exit_code == 0
+        assert "vírgula decimal em 1 coluna(s)" in _saida(perfil)
+        assert "vírgula decimal em 1 coluna(s)" in (raiz / "perfil.md").read_text(
+            encoding="utf-8"
+        )
+        assert rodar("descritiva", RECORD_ID, "--sim").exit_code == 0
+        resumo = raiz / PASTA_ANALISES / PASTA_DESCRITIVA / "resumo_imc.csv"
+        assert "média;" in resumo.read_text(encoding="utf-8-sig")
 
     def test_sem_dicionario_sai_com_um(self, rodar, projeto_com_banco):
         projeto_com_banco()

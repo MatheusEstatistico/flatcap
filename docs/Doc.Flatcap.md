@@ -3279,7 +3279,7 @@ vem de fora, e o que vem de fora não monta caminho.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*840 linhas.*
+*907 linhas.*
 
 Abrir o banco de dados de um projeto.
 
@@ -3334,9 +3334,23 @@ troca a quebra por um espaço — `Idade`, `Peso (kg)` —, e o que ele trocou v
 `Leitura` até o `perfil.md`. Um nome que ficaria igual ao de outra coluna fica como
 veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisão.
 
+**E a vírgula decimal de um `.csv` que não é separado por vírgula**, também desde a
+1.14.1. É o formato que o Excel em português salva — `;` entre campos, `70,5` na
+célula —, e nele a vírgula não é defeito: é a convenção do arquivo. Até a 1.14.0 o
+leitor entregava a coluna como texto, o perfil mandava o cliente "corrigir" um
+arquivo certo, e toda análise recusava a coluna. A razão é a mesma da exceção das
+datas na descritiva: exigir do cliente o conserto de um formato que o Excel dele
+sempre escreve é exigir o impossível. A conversão tem três condições que a mantêm
+honesta. É **da coluna inteira ou de nada**: um valor que não seja número à
+brasileira — `não sei`, `12.5`, `70,5 kg` — deixa a coluna como veio, e o perfil
+aponta o que está torto como sempre apontou. Só vale **quando a vírgula não separa
+campos**: num `.csv` com `,`, um `"70,5"` entre aspas é outra história, e fica
+texto. E **fica escrita**: as colunas convertidas viajam na `Leitura` até o
+cabeçalho do `perfil.md` e o manifesto de cada análise.
+
 ### `EXTENSOES_SUPORTADAS`
 
-*linha 79*
+*linha 93*
 
 > O nome por onde este módulo é conhecido desde a Fase 4. A lista desceu para o
 > `projeto.py` porque o `dados.py` passou a precisar dela para saber o que, na
@@ -3344,7 +3358,7 @@ veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisã
 
 ### `_CONVERSAO`
 
-*linha 84*
+*linha 98*
 
 > Formato que aparece na prática, que a gente reconhece e mesmo assim não abre.
 > A mensagem diz o que fazer, porque "formato não suportado" sozinho não ajuda
@@ -3352,7 +3366,7 @@ veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisã
 
 ### `FORMATOS_DATA`
 
-*linha 107*
+*linha 121*
 
 > Os formatos de data escritos à mão, na ordem em que são testados. Moram aqui, e
 > não em quem os usa, porque este é o módulo que sabe como o arquivo do cliente
@@ -3361,11 +3375,11 @@ veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisã
 > resposta. Duas listas de formatos é como um comando lê `03/04` como 3 de abril
 > e o outro como 4 de março.
 
-- *linha 125* — `PROPORCAO_PARA_AFIRMAR = 0.9` — a partir daqui dá para afirmar "a coluna é isto"
+- *linha 139* — `PROPORCAO_PARA_AFIRMAR = 0.9` — a partir daqui dá para afirmar "a coluna é isto"
 
 ### `class BancoError(RuntimeError)`
 
-*linha 128*
+*linha 142*
 
 Falha ao abrir o banco, já traduzida para o usuário.
 
@@ -3375,44 +3389,44 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class BancoNaoRegistradoError(BancoError)`
 
-*linha 138*
+*linha 152*
 
 O projeto existe, mas nenhuma versão do banco foi registrada na ficha.
 
 ### `class BancoAusenteError(BancoError)`
 
-*linha 144*
+*linha 158*
 
 A ficha registra a versão vigente e ela não está no disco.
 
 ### `class FormatoNaoSuportadoError(BancoError)`
 
-*linha 150*
+*linha 164*
 
 O arquivo existe e o FlatCap não abre esse formato.
 
 ### `class BancoIlegivelError(BancoError)`
 
-*linha 156*
+*linha 170*
 
 O formato é suportado, mas o arquivo não abriu — corrompido, protegido por
 senha, ou não é o que a extensão diz.
 
 ### `class BancoVazioError(BancoError)`
 
-*linha 163*
+*linha 177*
 
 O arquivo abriu e não tem linha nenhuma, ou não tem coluna nenhuma.
 
 ### `class AbaInexistenteError(BancoError)`
 
-*linha 169*
+*linha 183*
 
 A planilha pedida em `--aba` não existe na pasta de trabalho.
 
 ### `class Leitura`
 
-*linha 176*
+*linha 190*
 
 Como o arquivo foi lido. Vai inteiro para o cabeçalho do `perfil.md`.
 
@@ -3422,30 +3436,34 @@ ele tomou a errada é vê-las escritas. Um `perfil.md` de 800 linhas gerado a
 partir da aba "Dicionário" em vez da aba "Dados" parece perfeitamente
 normal até alguém reparar no cabeçalho.
 
-- *linha 192* — `avisos: tuple[str, ...] = ()` — o que o leitor teve de relevar para abrir
+- *linha 206* — `avisos: tuple[str, ...] = ()` — o que o leitor teve de relevar para abrir
 
-*linha 193*
+*linha 207*
 
 > Os nomes de coluna que o leitor limpou, como `(antes, depois)`. Ver o fim da
 > docstring do módulo e o `nome_de_coluna`.
 
+*linha 210*
+
+> As colunas lidas com vírgula decimal. Ver o fim da docstring do módulo.
+
 #### `def formato(self)`
 
-*linha 198*
+*linha 214*
 
 #### `def outras_abas(self)`
 
-*linha 202*
+*linha 218*
 
 #### `def descrever(self)`
 
-*linha 205*
+*linha 221*
 
 Uma linha dizendo de onde os dados vieram, com o que for pertinente.
 
 ### `class Banco`
 
-*linha 221*
+*linha 239*
 
 O banco aberto, com a procedência junto.
 
@@ -3455,23 +3473,23 @@ de cima leem e não escrevem.
 
 #### `def linhas(self)`
 
-*linha 237*
+*linha 255*
 
 #### `def colunas(self)`
 
-*linha 241*
+*linha 259*
 
 #### `def tamanho_legivel(self)`
 
-*linha 245*
+*linha 263*
 
 ### `def caminho_da_versao(raiz, versao)`
 
-*linha 249*
+*linha 267*
 
 Onde está, no disco, o arquivo de uma versão registrada.
 
-*No módulo, linha 260:*
+*No módulo, linha 278:*
 
 > `versao_vigente` desceu para o `ficha.py` na Fase 6 e continua acessível daqui
 > como `banco.versao_vigente`, porque é deste módulo que os chamadores a importam
@@ -3482,7 +3500,7 @@ Onde está, no disco, o arquivo de uma versão registrada.
 
 ### `def abrir(raiz, aba, conferir)`
 
-*linha 268*
+*linha 286*
 
 Abre a versão vigente do banco de um projeto.
 
@@ -3502,13 +3520,13 @@ Raises:
 
 ### `def abrir_arquivo(caminho, aba)`
 
-*linha 331*
+*linha 349*
 
 Lê um arquivo solto, sem passar pela ficha. Devolve o quadro e como ele foi lido.
 
 ### `_QUEBRA_NO_NOME`
 
-*linha 365*
+*linha 384*
 
 > A quebra de linha dentro de um nome de coluna, com os espaços em volta dela: o
 > `\n` do Alt+Enter, o `\r\n` que alguns exportadores deixam, e os separadores de
@@ -3516,7 +3534,7 @@ Lê um arquivo solto, sem passar pela ficha. Devolve o quadro e como ele foi lid
 
 ### `def nome_de_coluna(nome)`
 
-*linha 371*
+*linha 390*
 
 O nome de uma coluna como o FlatCap o usa: numa linha só e sem espaço nas pontas.
 
@@ -3525,7 +3543,7 @@ nome fica: `pressão sistólica` é o nome que o cliente escolheu.
 
 ### `def _limpar_nomes(quadro)`
 
-*linha 381*
+*linha 400*
 
 Aplica o `nome_de_coluna` ao cabeçalho, no lugar, e devolve o que mudou.
 
@@ -3535,11 +3553,33 @@ denuncia como coluna sem nome), e o que ficaria igual ao de outra coluna — `Se
 e `Sexo ` são duas colunas no arquivo, e renomear a segunda juntaria as duas
 numa variável só. Essa colisão é o `cabecalho_repetido` do `perfil`.
 
+*No módulo, linha 430:*
+
+> Um número escrito à brasileira, inteiro numa célula: `70,5`, `-0,25`, `1.234,56`,
+> `1,5E-05` — e o inteiro `70`, que divide a coluna com eles. O ponto só vale como
+> separador de milhar, em grupos de três: `12.5` não casa, e a coluna fica como veio.
+
+### `def _ler_virgula_decimal(quadro, separador)`
+
+*linha 436*
+
+Converte, no lugar, as colunas de texto que são inteiras números com vírgula
+decimal, e devolve os nomes delas. Ver o fim da docstring do módulo.
+
+Só num `.csv` cujo separador não é a vírgula — no `.xlsx` o número já vem número,
+e um `"22,5"` lá é uma célula de texto, que o perfil denuncia. A coluna precisa
+ter pelo menos uma vírgula, e todo valor preenchido precisa casar com
+`_NUMERO_PT_BR`; se um só não casa, nada muda.
+
+### `def _numero_pt_br(texto)`
+
+*linha 474*
+
 ### Leitura por formato
 
 ### `def _ler_xlsx(caminho, aba)`
 
-*linha 414*
+*linha 481*
 
 Lê uma planilha. Sem `--aba`, lê a primeira e diz quais ficaram de fora.
 
@@ -3558,11 +3598,11 @@ documentada. O que interessa a quem acabou de receber o arquivo do cliente é
 sempre a mesma frase, e não o nome da exceção. O `try` cobre só as duas
 chamadas de leitura, para que bug daqui de dentro continue subindo inteiro.
 
-- *linha 445* — `except AbaInexistenteError:` — noqa: BLE001 - ver a justificativa acima
+- *linha 512* — `except AbaInexistenteError:` — noqa: BLE001 - ver a justificativa acima
 
 ### `def _ler_csv(caminho)`
 
-*linha 451*
+*linha 518*
 
 Lê um `.csv` descobrindo a codificação e o separador.
 
@@ -3577,29 +3617,29 @@ quando o palpite está errado (byte inválido estoura), o que a torna um teste d
 verdade. `latin-1` fica por último porque decodifica qualquer byte sem
 reclamar: tentada antes, aceitaria um arquivo UTF-8 e devolveria "JosÃ©".
 
-- *linha 474* — `avis` — O `pandas` avisa por `warnings` que perdeu campo, e um `warning` impresso
+- *linha 541* — `avis` — O `pandas` avisa por `warnings` que perdeu campo, e um `warning` impresso
 
-- *linha 475* — `try:` — no meio da saída de um comando é um recado que o usuário aprende a
+- *linha 542* — `try:` — no meio da saída de um comando é um recado que o usuário aprende a
 
-*linha 476*
+*linha 543*
 
 > ignorar. Capturado aqui, ele vira um aviso do FlatCap e viaja até o
 > `perfil.md` e o manifesto da descritiva, junto do resto.
 
-- *linha 484* — `sep=separador,` — tolera linha com número de campos diferente do cabeçalho
+- *linha 551* — `sep=separador,` — tolera linha com número de campos diferente do cabeçalho
 
-*linha 486*
+*linha 553*
 
 > Sem isto, uma linha com mais campos do que o cabeçalho faz o
 > `pandas` promover a primeira coluna a índice — e a tabela inteira
 > anda uma casa para a esquerda sem que nada avise. Melhor perder o
 > campo sobrando, que fica avisado, do que deslocar tudo em silêncio.
 
-- *linha 505* — `"Download interromp` — noqa: BLE001 - mesma justificativa do `.xlsx`
+- *linha 572* — `"Download interromp` — noqa: BLE001 - mesma justificativa do `.xlsx`
 
 ### `def _decodificar(bruto)`
 
-*linha 516*
+*linha 583*
 
 Descobre a codificação da amostra. Devolve o nome e o texto decodificado.
 
@@ -3614,11 +3654,11 @@ Recuar até a última linha inteira remove a única fonte de falso negativo
 sem enfraquecer o teste: um `.csv` é feito de linhas, e nenhum caractere
 atravessa um `\n`.
 
-- *linha 538* — `for nome` — `strict` de propósito: o erro é o que descarta o palpite.
+- *linha 605* — `for nome` — `strict` de propósito: o erro é o que descarta o palpite.
 
 ### `def _confirmar_no_arquivo_inteiro(conteudo, codificacao)`
 
-*linha 546*
+*linha 613*
 
 Confirma no arquivo inteiro a codificação que a amostra escolheu.
 
@@ -3634,7 +3674,7 @@ UTF-8; `latin-1` aceita qualquer byte.
 
 ### `def _ate_a_ultima_linha(bruto)`
 
-*linha 571*
+*linha 638*
 
 O prefixo cortado no último `\n`, ou ele inteiro se não houver nenhum.
 
@@ -3644,7 +3684,7 @@ encurtar até zero seria pior do que arriscar o corte.
 
 ### `def _separador(amostra)`
 
-*linha 583*
+*linha 650*
 
 Descobre o separador pela primeira linha não vazia.
 
@@ -3664,21 +3704,21 @@ coluna, e é assim que ele é lido.
 
 ### `def _item_da_versao(itens, versao)`
 
-*linha 625*
+*linha 692*
 
 ### `def _mensagem_sem_versao(nao_registrados)`
 
-*linha 632*
+*linha 699*
 
 O projeto existe e o banco não. Duas situações diferentes, dois caminhos.
 
 ### `def _mensagem_formato(caminho)`
 
-*linha 652*
+*linha 719*
 
 ### `def formato_de_data(textos, proporcao)`
 
-*linha 674*
+*linha 741*
 
 Descobre se uma coluna de texto é uma data escrita à mão, e em que formato.
 
@@ -3693,7 +3733,7 @@ exigência é que **um único** formato explique a coluna quase toda. Coluna com
 dois formatos misturados não é convertida por ninguém: é devolvida como
 indecidível, que é o que ela é.
 
-*No módulo, linha 707:*
+*No módulo, linha 774:*
 
 > Como um valor do banco se escreve como texto
 >
@@ -3705,13 +3745,13 @@ indecidível, que é o que ela é.
 > propunha `1.0|2.0`, a dica mandava escrever `1.0=Feminino`, e a descritiva, que
 > escreve `1`, saía com `Feminino 0` e `1 15` na mesma tabela.
 
-*No módulo, linha 718:*
+*No módulo, linha 785:*
 
 > As casas de sempre, e o teto das que uma variável de escala pequena pode ganhar.
 
 ### `def casas_do_resumo(resumo, minimo)`
 
-*linha 723*
+*linha 790*
 
 Quantas casas decimais mostram uma variável numérica: as `minimo` de sempre, ou
 mais quando a escala dela é pequena demais para elas.
@@ -3735,16 +3775,16 @@ isso a conta é por variável, e não por número.
 
 #### `def modulo(chave)`
 
-*linha 748*
+*linha 815*
 
-*linha 756*
+*linha 823*
 
 > Um desvio de 1e-17 numa coluna de valores iguais é resto de ponto flutuante, e
 > não escala: contado, ele pediria doze casas para mostrar `0,3`.
 
 ### `def texto_de_numero(valor, casas)`
 
-*linha 774*
+*linha 841*
 
 Número no formato brasileiro, sem separador de milhar e sem zero à toa.
 
@@ -3754,7 +3794,7 @@ impede o `0,5` da tabela de virar `0.5` no dicionário.
 
 ### `def serie_de_texto(serie)`
 
-*linha 794*
+*linha 861*
 
 Os valores preenchidos como texto, do jeito que eles devem aparecer na tabela.
 
@@ -3773,7 +3813,7 @@ imprime quando a coluna de código tem uma célula vazia. Desceu para cá na
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 830*
+*linha 897*
 
 ## `flatcap/dicionario.py`
 
@@ -4282,7 +4322,7 @@ listas são separadas por `|`.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1718 linhas.*
+*1726 linhas.*
 
 O perfil do banco — o que você leva para a reunião.
 
@@ -4647,13 +4687,19 @@ O código de faltante disfarçado de número — 99, 999 — é o achado clássi
 Os detectores do roteiro que se aplicam a coluna de texto, mais os que
 aparecem sempre junto com eles.
 
+*linha 801*
+
+> Num `.csv` separado por `;` a vírgula já é lida como decimal (`banco.py`),
+> coluna inteira ou nada. Se a coluna chegou aqui como texto, o motivo
+> costuma ser o valor que não é número, e é ele que precisa aparecer.
+
 ### `def _achados_de_preenchimento(nome, faltantes, linhas, unicos)`
 
-*linha 908*
+*linha 916*
 
 ### `def _achados_mistos(nome, serie)`
 
-*linha 961*
+*linha 969*
 
 Tipos misturados na mesma coluna: número e texto convivendo.
 
@@ -4667,7 +4713,7 @@ das duas versões e erra na outra, em silêncio.
 
 ### `def _sugerir(nome, serie, textos, unicos, faltantes, linhas)`
 
-*linha 1019*
+*linha 1027*
 
 A sugestão que vai para o `dicionario.csv`, e o motivo dela.
 
@@ -4675,7 +4721,7 @@ A ordem das regras é a decisão: a primeira que casa vence. O motivo viaja
 junto porque uma sugestão sem justificativa não dá para conferir — e conferir
 é literalmente o que se pede que você faça com este arquivo.
 
-*linha 1046*
+*linha 1054*
 
 > Três testes, e os dois últimos são o que segura o palpite. Só "poucos
 > valores distintos" classificaria como código toda coluna numérica de um
@@ -4685,7 +4731,7 @@ junto porque uma sugestão sem justificativa não dá para conferir — e confer
 
 ### `def _categorias_sugeridas(tipo, categorias, unicos, achados)`
 
-*linha 1093*
+*linha 1101*
 
 A ordem proposta para `categorias_ordem`: da mais frequente para a menos.
 
@@ -4713,34 +4759,34 @@ Fica em branco quando algum valor contém `|`, que é o separador da lista.
 
 ### `def _e_numerica(serie)`
 
-*linha 1137*
+*linha 1145*
 
 ### `def _e_data(serie)`
 
-*linha 1143*
+*linha 1151*
 
 ### `def _e_booleana(serie)`
 
-*linha 1147*
+*linha 1155*
 
 ### `def _tipos_de(serie)`
 
-*linha 1151*
+*linha 1159*
 
 Quantos tipos de Python convivem na coluna. Um só, quase sempre.
 
 ### `def _tipo_lido(serie)`
 
-*linha 1160*
+*linha 1168*
 
 Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
-*linha 1165*
+*linha 1173*
 
 > Coluna sem nenhum valor chega como `float64` por convenção do pandas, e
 > anunciá-la como "decimal" seria descrever a convenção, não o banco.
 
-*linha 1174*
+*linha 1182*
 
 > `_tipos_de` e não `serie.dtype == object`: o dtype responde "como o pandas
 > guardou isto", e a pergunta é "quantas naturezas convivem aqui". No pandas
@@ -4751,17 +4797,17 @@ Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
 ### `def _so_inteiros(preenchidos)`
 
-*linha 1185*
+*linha 1193*
 
 ### `def _textos(preenchidos)`
 
-*linha 1196*
+*linha 1204*
 
 Os valores como texto, sem tirar espaço: o espaço sobrando é um dos achados.
 
 ### `def _exemplos(preenchidos)`
 
-*linha 1205*
+*linha 1213*
 
 Alguns valores para reconhecer a coluna.
 
@@ -4772,7 +4818,7 @@ documento que vai para a mesa da reunião custa uma pergunta.
 
 ### `def _contagem(preenchidos)`
 
-*linha 1226*
+*linha 1234*
 
 Valores e quantas vezes cada um aparece, do mais frequente para o menos.
 
@@ -4789,35 +4835,35 @@ tabela nunca encontrava.
 
 ### `def _resumo_numerico(preenchidos)`
 
-*linha 1246*
+*linha 1254*
 
-- *linha 1251* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
+- *linha 1259* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
 
 ### Auxiliares de texto
 
 ### `def _e_numero(texto)`
 
-*linha 1267*
+*linha 1275*
 
 ### `def _variacoes_de_grafia(textos)`
 
-*linha 1274*
+*linha 1282*
 
 Agrupa valores que só diferem em acento, caixa ou espaço.
 
 ### `def _chave(texto)`
 
-*linha 1290*
+*linha 1298*
 
 A forma canônica de um texto: sem acento, sem caixa, sem espaço sobrando.
 
 ### `def _parece_identificador(nome)`
 
-*linha 1299*
+*linha 1307*
 
 ### `def _nomes_repetidos(nomes)`
 
-*linha 1304*
+*linha 1312*
 
 Nomes de coluna que colidem, das duas formas em que isso acontece.
 
@@ -4828,15 +4874,15 @@ são nomes diferentes para o `pandas` e a mesma variável para o cliente.
 
 ### `def _encurtar(texto, limite)`
 
-*linha 1334*
+*linha 1342*
 
 ### `def _porcentagem(fracao)`
 
-*linha 1339*
+*linha 1347*
 
 ### `def _numero(valor, casas)`
 
-*linha 1343*
+*linha 1351*
 
 Número no formato brasileiro, sem zero à toa: `52,5` e não `52,50`.
 
@@ -4848,15 +4894,15 @@ dela é pequena. Até a 1.14.0 eram sempre duas, e uma concentração na casa de
 
 ### `def texto_do_perfil(perfil, fusao)`
 
-*linha 1365*
+*linha 1373*
 
 Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_cabecalho(perfil)`
 
-*linha 1381*
+*linha 1389*
 
-*linha 1383*
+*linha 1391*
 
 > `rotulo_do_projeto` e não `raiz.name`: desde a 1.1.0 o nome da pasta é
 > `Projeto 006`, que não identifica ninguém — e este título encabeça o
@@ -4864,18 +4910,18 @@ Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_avisos(perfil)`
 
-*linha 1427*
+*linha 1435*
 
 ### `def _md_checklist(perfil)`
 
-*linha 1437*
+*linha 1445*
 
 A parte que existe para ser lida em voz alta na reunião.
 
 Vem antes das tabelas de propósito: é o que exige decisão. As tabelas são
 consulta, e consulta se procura quando precisa.
 
-*linha 1467*
+*linha 1475*
 
 > Mais folgado do que na tabela: aqui o exemplo é o que faz o
 > cliente encontrar o valor na planilha, e cortado pela metade
@@ -4883,11 +4929,11 @@ consulta, e consulta se procura quando precisa.
 
 ### `def _md_variaveis(perfil)`
 
-*linha 1477*
+*linha 1485*
 
 ### `def _md_categoricas(perfil, fusao)`
 
-*linha 1515*
+*linha 1523*
 
 Os valores observados de cada categórica, que é o que se olha para preencher
 `categorias_ordem`.
@@ -4900,17 +4946,17 @@ vira ler a tabela em voz alta. Enquanto ele não responde, a coluna não existe
 
 ### `def _md_numericas(perfil)`
 
-*linha 1584*
+*linha 1592*
 
 O resumo de cada numérica, que é o que se olha para decidir as faixas.
 
 ### `def _md_dicionario(perfil, fusao)`
 
-*linha 1617*
+*linha 1625*
 
 ### `def _celula(texto)`
 
-*linha 1667*
+*linha 1675*
 
 Um valor do banco dentro de uma célula de tabela markdown.
 
@@ -4920,7 +4966,7 @@ toma com colchete e o `rich`.
 
 ### `def _geracao_anterior(caminho)`
 
-*linha 1678*
+*linha 1686*
 
 Quando o `perfil.md` que está no disco foi gerado.
 
@@ -4930,7 +4976,7 @@ com as suas anotações da reunião, é outra.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1703*
+*linha 1711*
 
 ## `flatcap/manifesto.py`
 
@@ -5712,7 +5758,7 @@ página justificada lê como um cartaz.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1874 linhas.*
+*1883 linhas.*
 
 A descritiva — o passo 2a do fluxo, o que se repete em todos os projetos.
 
@@ -5746,12 +5792,18 @@ de cena — e o `perfil.md` já traz os quartis de cada numérica exatamente par
 conversa.
 
 **Numérica que chegou como texto: recusa.** Se o dicionário diz `numerica` e a
-coluna veio como texto — vírgula decimal, número entre aspas, `12 (repetido)` no
-meio —, o comando não gera nada e diz quais são as colunas. A alternativa seria
-converter em silêncio, e converter em silêncio é como uma média sai de 80% dos
-casos sem que nada na tabela diga que os outros 20% não entraram. O caminho é o
-que a Fase 3 já tem: o cliente corrige, você registra a versão nova com
-`flatcap dados adicionar`, e a descritiva roda sobre ela.
+coluna veio como texto — número em célula de texto no `.xlsx`, `12 (repetido)` no
+meio, vírgula decimal ao lado de um `não sei` —, o comando não gera nada e diz
+quais são as colunas. A alternativa seria converter em silêncio, e converter em
+silêncio é como uma média sai de 80% dos casos sem que nada na tabela diga que os
+outros 20% não entraram. O caminho é o que a Fase 3 já tem: o cliente corrige,
+você registra a versão nova com `flatcap dados adicionar`, e a descritiva roda
+sobre ela.
+
+    A vírgula decimal do `.csv` do Excel em português não chega aqui como texto
+    desde a 1.14.1: o `banco.py` a lê como número, a coluna inteira ou nada, e
+    registra quais colunas leu assim. Até a 1.14.0 ela era recusada, e todo
+    projeto que chegava nesse formato — o mais comum — parava na descritiva.
 
     A exceção é a data, e a razão é do formato, não da regra. Em um `.csv` não
     existe tipo data: o `pandas` infere número a partir do texto e nunca infere
@@ -5795,7 +5847,7 @@ calculadas e não recalcula nada. Não conhece o formato do manifesto — quem c
 escolhe qual arquivo é o banco: isso é do `banco.py` desde a Fase 4, e é o que
 garante que a descritiva e o relatório falem da mesma versão.
 
-*No módulo, linha 141:*
+*No módulo, linha 147:*
 
 > Nada nesta fase sorteia coisa nenhuma — uma descritiva é contagem, e contagem
 > não tem aleatoriedade. A semente existe declarada e registrada no manifesto
@@ -5810,24 +5862,24 @@ garante que a descritiva e o relatório falem da mesma versão.
 
 ### `LIMITE_BARRAS`
 
-*linha 152*
+*linha 158*
 
 > Regras de apresentação. Todas com nome, aqui em cima, pelo mesmo motivo da Fase
 > 4: número solto no meio de uma função é decisão que ninguém consegue rever.
 
-- *linha 154* — `LIMITE_BARRAS = 15` — acima disso o gráfico junta a cauda em "Outras"
+- *linha 160* — `LIMITE_BARRAS = 15` — acima disso o gráfico junta a cauda em "Outras"
 
-- *linha 155* — `LIMITE_COLUNAS_TEMPO = 30` — acima disso a distribuição no tempo sai sem gráfico
+- *linha 161* — `LIMITE_COLUNAS_TEMPO = 30` — acima disso a distribuição no tempo sai sem gráfico
 
-- *linha 156* — `MESES_PARA_MENSAL = 24` — período até 24 meses é contado por mês; acima, por ano
+- *linha 162* — `MESES_PARA_MENSAL = 24` — período até 24 meses é contado por mês; acima, por ano
 
-- *linha 157* — `MINIMO_PARA_FAIXAS = 4` — abaixo disso, quartil não descreve nada
+- *linha 163* — `MINIMO_PARA_FAIXAS = 4` — abaixo disso, quartil não descreve nada
 
-- *linha 158* — `CASAS_RESUMO = 2` — casas das estatísticas; mais na escala pequena (casas_do_resumo)
+- *linha 164* — `CASAS_RESUMO = 2` — casas das estatísticas; mais na escala pequena (casas_do_resumo)
 
 ### `class DescritivaError(RuntimeError)`
 
-*linha 176*
+*linha 182*
 
 Falha ao gerar a descritiva, já traduzida para o usuário.
 
@@ -5842,13 +5894,13 @@ recusas abaixo são o conteúdo da decisão.
 
 ### `class DicionarioAusenteError(DescritivaError)`
 
-*linha 191*
+*linha 197*
 
 O projeto não tem `dicionario.csv`. A descritiva não tem o que obedecer.
 
 ### `class DicionarioDesatualizadoError(DescritivaError)`
 
-*linha 197*
+*linha 203*
 
 O banco tem colunas que o dicionário desconhece.
 
@@ -5858,7 +5910,7 @@ nela denuncia a metade que ficou de fora.
 
 ### `class VariavelIncompativelError(DescritivaError)`
 
-*linha 207*
+*linha 213*
 
 O dicionário promete um tipo que a coluna não tem.
 
@@ -5868,13 +5920,13 @@ a primeira é o jeito mais lento possível de arrumar um banco.
 
 ### `class NadaParaAnalisarError(DescritivaError)`
 
-*linha 217*
+*linha 223*
 
 Nenhuma variável do dicionário entra na descritiva.
 
 ### O que sai no disco
 
-*No módulo, linha 226:*
+*No módulo, linha 232:*
 
 > `Tabela` e `Grafico` moram no `manifesto.py` desde a Fase 7, e são reexportados
 > daqui — `from .descritiva import Tabela` continua funcionando.
@@ -5889,17 +5941,17 @@ Nenhuma variável do dicionário entra na descritiva.
 
 ### `class VariavelDescrita`
 
-*linha 239*
+*linha 245*
 
 Uma variável do dicionário, já descrita: as tabelas e os gráficos que ela gera.
 
 #### `def preenchidos(self)`
 
-*linha 256*
+*linha 262*
 
 ### `class ForaDaDescritiva`
 
-*linha 261*
+*linha 267*
 
 Uma variável do dicionário que não gerou artefato, e por quê.
 
@@ -5908,55 +5960,55 @@ reparou que ela existia" são coisas diferentes, e só a primeira é uma decisã
 
 ### `class Descritiva`
 
-*linha 275*
+*linha 281*
 
 O banco inteiro descrito. É daqui que saem os arquivos e o terminal.
 
 #### `def raiz(self)`
 
-*linha 288*
+*linha 294*
 
 #### `def linhas(self)`
 
-*linha 292*
+*linha 298*
 
 #### `def tabelas(self)`
 
-*linha 296*
+*linha 302*
 
 #### `def graficos(self)`
 
-*linha 300*
+*linha 306*
 
 #### `def por_tipo(self, tipo)`
 
-*linha 303*
+*linha 309*
 
 ### `class PlanoDescritiva`
 
-*linha 308*
+*linha 314*
 
 Tudo o que o `descritiva` faria, decidido e ainda não escrito.
 
 #### `def raiz(self)`
 
-*linha 321*
+*linha 327*
 
 #### `def tabelas(self)`
 
-*linha 325*
+*linha 331*
 
 #### `def graficos(self)`
 
-*linha 329*
+*linha 335*
 
 #### `def arquivos(self)`
 
-*linha 333*
+*linha 339*
 
 ### `class ResultadoDescritiva`
 
-*linha 339*
+*linha 345*
 
 O que a execução de fato escreveu.
 
@@ -5964,7 +6016,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_descritiva(raiz, aba, conferir, com_graficos, agora)`
 
-*linha 352*
+*linha 358*
 
 Abre o banco, lê o dicionário, calcula tudo e monta o plano. Não escreve nada.
 
@@ -5982,7 +6034,7 @@ Raises:
     FichaError, BancoError, DicionarioInvalidoError e as quatro recusas
     declaradas acima.
 
-*linha 383*
+*linha 389*
 
 > `pasta_da_analise` e não a concatenação à mão: a mesma pergunta é feita
 > pela normalidade e pelo relatório, e é o `projeto.py` que responde por
@@ -5991,7 +6043,7 @@ Raises:
 
 ### `def executar_descritiva(plano)`
 
-*linha 400*
+*linha 406*
 
 Escreve o plano no disco. Não decide mais nada.
 
@@ -6004,21 +6056,21 @@ Cada etapa registra como voltar atrás. Uma falha no meio desfaz o que já foi
 feito, inclusive devolvendo a pasta arquivada ao lugar — senão a rodada
 anterior teria sumido em troca de nada.
 
-*linha 426*
+*linha 432*
 
 > `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi
 > este comando que a criou. O `rmdir` é registrado **antes** dos
 > arquivos e o desfazer roda ao contrário, então os arquivos saem
 > primeiro e a pasta sai vazia, que é a única forma de ela sair.
 
-*linha 443*
+*linha 449*
 
 > O `matplotlib` entra aqui dentro, e não no topo do arquivo: ele custa
 > perto de meio segundo para carregar, e `--sem-graficos` não deve
 > pagar por ele. É a mesma decisão que a Fase 4 tomou com o `pandas` na
 > CLI.
 
-*linha 468*
+*linha 474*
 
 > Qualquer falha, e não só `OSError` e `DescritivaError`. O que roda
 > aqui dentro inclui o `matplotlib`, que estoura com exceções próprias
@@ -6029,7 +6081,7 @@ anterior teria sumido em troca de nada.
 
 ### `def descrever(banco, ficha, linhas_do_dicionario, quando)`
 
-*linha 490*
+*linha 496*
 
 Descreve o banco obedecendo ao dicionário. Função pura.
 
@@ -6041,19 +6093,19 @@ Raises:
 
     VariavelIncompativelError, NadaParaAnalisarError
 
-- *linha 523* — `if serie is None:` — pragma: no cover - `_recusar_incompativeis` já barrou
+- *linha 529* — `if serie is None:` — pragma: no cover - `_recusar_incompativeis` já barrou
 
 ### Uma variável
 
 ### `def _descrever_variavel(linha, serie, slug, total)`
 
-*linha 558*
+*linha 564*
 
 Despacha para o tipo declarado no dicionário. Devolve `None` para coluna vazia.
 
 ### `def _descrever_categorica(linha, serie, slug, total, faltantes)`
 
-*linha 575*
+*linha 581*
 
 Frequência absoluta e relativa, com e sem faltantes, mais o gráfico de barras.
 
@@ -6069,7 +6121,7 @@ versão em que aquela categoria não apareceu. E valor que está no banco e não
 foi declarado entra no fim, com aviso — é assim que um `"Sim "` com espaço se
 denuncia sozinho.
 
-*linha 627*
+*linha 633*
 
 > O código conta, o rótulo imprime.
 >
@@ -6082,7 +6134,7 @@ denuncia sozinho.
 > rótulo. São duas coisas diferentes, e reaproveitar o nome fazia o miolo da
 > função mais importante do módulo depender de qual das duas era a da linha.
 
-*linha 646*
+*linha 652*
 
 > Dois códigos com o mesmo rótulo viram **uma linha só, somada**. Não é
 > tolerância a erro de digitação: é a promessa que o cabeçalho deste módulo
@@ -6093,7 +6145,7 @@ denuncia sozinho.
 > O aviso abaixo é o que impede o agrupamento acidental de passar: ele nomeia
 > quais códigos foram somados em qual rótulo, e aparece na tela e no manifesto.
 
-*linha 735*
+*linha 741*
 
 > O mapa vai para o manifesto de propósito: é ele que responde, seis
 > meses depois, de onde saiu a palavra «Feminino» em uma tabela cuja
@@ -6101,7 +6153,7 @@ denuncia sozinho.
 
 ### `def _descrever_numerica(linha, serie, slug, total, faltantes)`
 
-*linha 747*
+*linha 753*
 
 Resumo, tabela por faixas e histograma.
 
@@ -6111,31 +6163,31 @@ escreve sobre uma numérica, e tê-los aqui é o que impede a Fase 6 de reabrir 
 banco para recalcular — que é a porta pela qual o relatório passa a discordar
 da tabela.
 
-*linha 764*
+*linha 770*
 
 > As casas da variável, e não as duas de sempre: numa concentração na casa de
 > 0,003, duas casas faziam o resumo inteiro sair `0`. Ver `banco.casas_do_resumo`.
 
-*linha 795*
+*linha 801*
 
 > O corte escrito no dicionário sai como foi escrito: `0,00255` impresso com
 > as casas da variável seria um corte que ninguém pediu.
 
-*linha 808*
+*linha 814*
 
 > Os do dicionário vão inteiros: o relatório os compara com o dicionário
 > de hoje, e `0,00255` gravado como `0.0026` era um "dicionário mudou" falso.
 
 ### `def _descrever_data(linha, serie, slug, total, faltantes)`
 
-*linha 858*
+*linha 864*
 
 O período (de quando a quando) e como os casos se distribuem dentro dele.
 
 Devolve `None` quando não sobrou nenhuma data válida, como a coluna vazia:
 sem data não há período a descrever.
 
-*linha 870*
+*linha 876*
 
 > Sem nenhuma data válida não há período: `minimo` e `maximo` saem `NaT`
 > e `(maximo - minimo).days` estoura. Hoje é inalcançável — a recusa de
@@ -6148,7 +6200,7 @@ sem data não há período a descrever.
 
 ### `def _cortes_das_faixas(linha, valores)`
 
-*linha 987*
+*linha 993*
 
 Os cortes que valem para esta variável, e de onde eles vieram.
 
@@ -6168,7 +6220,7 @@ decisão de tratá-la como tal é sua, no dicionário.
 
 ### `def _tabela_de_faixas(linha, slug, valores, cortes, origem, total, faltantes, casas)`
 
-*linha 1033*
+*linha 1039*
 
 Conta os casos em cada faixa, com uma convenção só e escrita no arquivo.
 
@@ -6183,7 +6235,7 @@ erro que ninguém confere.
 
 ### `def _histograma(valores)`
 
-*linha 1130*
+*linha 1136*
 
 As classes do histograma, calculadas aqui e não no `graficos.py`.
 
@@ -6201,7 +6253,7 @@ os dois com os mesmos cortes é publicar a mesma informação duas vezes.
 
 ### `def _grafico_de_barras(linha, slug, pares, preenchidos, faltantes)`
 
-*linha 1178*
+*linha 1184*
 
 O gráfico da categórica: uma barra por categoria, na ordem da tabela.
 
@@ -6217,11 +6269,11 @@ linha da tabela.
 
 ### `def montar_manifesto(descritiva, linhas, com_graficos)`
 
-*linha 1227*
+*linha 1233*
 
 Traduz a descritiva para o índice que a Fase 6 vai ler.
 
-*linha 1248*
+*linha 1254*
 
 > Uma seção da descritiva usa exatamente uma coluna, e é por isso que
 > o campo parecia redundante até existir a segunda análise. Ele é
@@ -6229,13 +6281,13 @@ Traduz a descritiva para o índice que a Fase 6 vai ler.
 > "quais colunas esta rodada usou?" a **toda** rodada — e uma pergunta
 > que só algumas respondem é uma pergunta que não se pode fazer.
 
-*linha 1263*
+*linha 1269*
 
 > Cliente **e** projeto. Desde a 1.1.0 `raiz.name` é `Projeto 006`,
 > e o manifesto é o recibo da rodada: um recibo que não diz de quem
 > é o trabalho não serve para conferir coisa nenhuma depois.
 
-*linha 1290*
+*linha 1297*
 
 > Mesmo campo, mesmo esquema que o manifesto da normalidade. Dois
 > blocos `dicionario` com chaves diferentes obrigariam quem lê os
@@ -6244,11 +6296,11 @@ Traduz a descritiva para o índice que a Fase 6 vai ler.
 
 ### `def _artefatos(variavel, com_graficos)`
 
-*linha 1315*
+*linha 1322*
 
 ### `def _ambiente(com_graficos)`
 
-*linha 1338*
+*linha 1345*
 
 As versões que produziram estes números.
 
@@ -6268,7 +6320,7 @@ Escrita aqui, a pergunta «mudou a máquina ou mudou o código?» tem resposta.
 
 ### `def conferir_dicionario(raiz, banco, ausente, desatualizado, analise)`
 
-*linha 1375*
+*linha 1382*
 
 Lê o `dicionario.csv` e confere que ele descreve **este** banco.
 
@@ -6292,14 +6344,14 @@ O `analise` entra só no texto, e entra porque a frase muda de dono: "a
 descritiva não tem o que obedecer" é a mesma informação que "a normalidade não
 tem o que obedecer", e nenhuma das duas deve dizer o nome da outra.
 
-*linha 1420*
+*linha 1427*
 
 > Entre aspas quando o nome tem espaço nas pontas ou quebra de linha: `Idade `
 > impresso solto é indistinguível de `Idade`, e a diferença é a recusa inteira.
 
 ### `_dicionario_do_projeto`
 
-*linha 1439*
+*linha 1446*
 
 > O nome privado que o resto deste módulo usa. Mesma manobra do
 > `perfil._formato_de_data`: a função mudou de visibilidade, e nenhum chamador
@@ -6307,7 +6359,7 @@ tem o que obedecer", e nenhuma das duas deve dizer o nome da outra.
 
 ### `def recusar_incompativeis(quadro, analisaveis, erro)`
 
-*linha 1445*
+*linha 1452*
 
 Recusa o comando inteiro quando o dicionário promete um tipo que a coluna não tem.
 
@@ -6319,6 +6371,8 @@ a conversão aconteceu antes de a contagem começar.
 
 Recusar devolve a decisão para onde ela pertence: o arquivo é do cliente, a
 correção é dele, e a Fase 3 tem o lugar certo para a versão corrigida entrar.
+A coluna inteira em vírgula decimal de um `.csv` separado por `;` não chega
+aqui: o `banco.py` já a leu como número, sem perder nenhum valor.
 Se a coluna não vai ser corrigida, o dicionário aceita `categorica` ou
 `ignorar` — as duas são decisões suas, escritas, e nenhuma delas é silenciosa.
 
@@ -6336,21 +6390,21 @@ abriria. A regra é a mesma; o escopo é de quem chama.
 
 ### `def _mensagem_incompativel(problemas)`
 
-*linha 1517*
+*linha 1526*
 
 ### `def _mensagem_nada_a_analisar(linhas)`
 
-*linha 1546*
+*linha 1555*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 1559*
+*linha 1568*
 
 ### Arquivamento
 
 ### `def arquivamento(raiz, pasta, quando, analise)`
 
-*linha 1568*
+*linha 1577*
 
 Onde a rodada anterior vai parar, se houver uma.
 
@@ -6372,13 +6426,13 @@ da análise na frente da data.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1605*
+*linha 1614*
 
 ### Leitura da série
 
 ### `def _coluna(quadro, nome)`
 
-*linha 1625*
+*linha 1634*
 
 A coluna do banco pelo nome, ou `None`.
 
@@ -6389,15 +6443,15 @@ descreve.
 
 ### `def _e_numerica(serie)`
 
-*linha 1640*
+*linha 1649*
 
 ### `def _e_data(serie)`
 
-*linha 1646*
+*linha 1655*
 
 ### `_serie_de_texto`
 
-*linha 1650*
+*linha 1659*
 
 > A `serie_de_texto` desceu para o `banco.py` na 1.13.1, para o perfil propor as
 > categorias com a mesma escrita das análises. Ela continua importável daqui —
@@ -6406,7 +6460,7 @@ descreve.
 
 ### `def _como_data(serie)`
 
-*linha 1657*
+*linha 1666*
 
 A coluna como data. Devolve a série, o formato usado e quantos não converteram.
 
@@ -6415,7 +6469,7 @@ Já passou por `_recusar_incompativeis`, então ou a coluna é data no arquivo
 
 ### `def resumo_numerico(valores)`
 
-*linha 1674*
+*linha 1683*
 
 Mínimo, quartis, mediana, máximo, média e desvio padrão de uma coluna já sem os
 faltantes.
@@ -6427,7 +6481,7 @@ seguinte, `26,4` — a manobra do `numero` e do `percentual`.
 
 ### `def _contar_periodos(datas, passo)`
 
-*linha 1698*
+*linha 1707*
 
 Conta os casos por mês ou por ano, sem buracos.
 
@@ -6439,7 +6493,7 @@ esconde justamente o que se queria ver.
 
 ### `def numero(valor, casas)`
 
-*linha 1725*
+*linha 1734*
 
 Número no formato brasileiro, sem separador de milhar.
 
@@ -6455,7 +6509,7 @@ desceu para lá e escreve os números com ela.
 
 ### `def percentual(parte, total)`
 
-*linha 1745*
+*linha 1754*
 
 Percentual com casas fixas: `5,0` e `100,0`, nunca `5` e `100`.
 
@@ -6471,34 +6525,34 @@ seguinte.
 
 ### `def _arredondar(valor)`
 
-*linha 1770*
+*linha 1779*
 
 O número do manifesto: quatro casas, ou quatro algarismos significativos quando
 ele é menor que 0,1 — com quatro casas, o desvio de 0,00062 era gravado `0.0006`.
 
 ### `def _casas_escritas(textos)`
 
-*linha 1785*
+*linha 1794*
 
 As casas do corte mais preciso que o dicionário escreveu: `0,00255` tem cinco.
 
 ### `def _data(valor)`
 
-*linha 1796*
+*linha 1805*
 
-- *linha 1799* — `except (ValueError, TypeError):` — pragma: no cover - já validado antes
+- *linha 1808* — `except (ValueError, TypeError):` — pragma: no cover - já validado antes
 
 ### `def _integridade(confere)`
 
-*linha 1803*
+*linha 1812*
 
 ### `def _subtitulo(preenchidos, faltantes)`
 
-*linha 1811*
+*linha 1820*
 
 ### `def _distintos(valores, quantos)`
 
-*linha 1818*
+*linha 1827*
 
 Alguns valores diferentes, na ordem em que aparecem.
 
@@ -6508,11 +6562,11 @@ existe justamente para mostrar a mistura.
 
 ### `def _encurtar(texto, limite)`
 
-*linha 1836*
+*linha 1845*
 
 ### `def slug(nome, usados)`
 
-*linha 1841*
+*linha 1850*
 
 O pedaço do nome do arquivo que vem da variável.
 
@@ -6535,7 +6589,7 @@ O `usados` é por rodada — o desempate vale dentro de uma pasta, não entre el
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1450 linhas.*
+*1451 linhas.*
 
 A normalidade — a primeira análise da Fase 7.
 
@@ -7121,11 +7175,11 @@ banco inteiro; o `n` que varia é o de cada variável, e ele está na tabela e n
 
 ### `def _artefatos(normalidade, com_graficos)`
 
-*linha 1129*
+*linha 1130*
 
 ### `def _ambiente(com_graficos)`
 
-*linha 1151*
+*linha 1152*
 
 As versões que produziram estes números.
 
@@ -7144,7 +7198,7 @@ matplotlib resolveu, que pode não ser a que o `graficos.py` pediu.
 
 ### `def _variaveis_pedidas(raiz)`
 
-*linha 1189*
+*linha 1190*
 
 A lista `normalidade:` do `projeto.yaml`, quando ela existir.
 
@@ -7163,7 +7217,7 @@ e não valeu.
 
 ### `def _conferir_pedidas(pedidas, numericas, linhas)`
 
-*linha 1226*
+*linha 1227*
 
 Recusa a rodada quando a lista da ficha nomeia algo que não serve.
 
@@ -7175,21 +7229,21 @@ banco) ou existe e não é `numerica` (o tipo está errado em um dos dois lugare
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 1279*
+*linha 1280*
 
 ### `def _mensagem_nada_a_analisar(linhas)`
 
-*linha 1287*
+*linha 1288*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1309*
+*linha 1310*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 1335*
+*linha 1336*
 
 A coluna do banco pelo nome, ou `None`.
 
@@ -7198,7 +7252,7 @@ repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _finito(valor)`
 
-*linha 1348*
+*linha 1349*
 
 O número, ou `None` quando ele não é um número.
 
@@ -7208,11 +7262,11 @@ dentro de uma célula do Word.
 
 ### `def _arredondar(valor)`
 
-*linha 1363*
+*linha 1364*
 
 ### `def _forma(valor)`
 
-*linha 1369*
+*linha 1370*
 
 Assimetria e curtose com sinal, sempre com as mesmas casas.
 
@@ -7223,11 +7277,11 @@ alinha. É o mesmo argumento dos percentuais da Fase 5.
 
 ### `def _estatistica(valor)`
 
-*linha 1383*
+*linha 1384*
 
 ### `def valor_p(valor)`
 
-*linha 1389*
+*linha 1390*
 
 O valor-p, com três casas e nunca como zero.
 
@@ -7242,17 +7296,17 @@ documento sai com `< 0,001` numa tabela e `0,000` na seguinte.
 
 ### `def _integridade(confere)`
 
-*linha 1412*
+*linha 1413*
 
 ### `def _subtitulo(preenchidos, faltantes)`
 
-*linha 1420*
+*linha 1421*
 
 ## `flatcap/cruzamento.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1085 linhas.*
+*1086 linhas.*
 
 O cruzamento — uma tabela por par de variáveis categóricas.
 
@@ -7706,7 +7760,7 @@ relatório certas para uma seção que não é de uma variável.
 `n` é o banco inteiro e `faltantes` é quem não respondeu uma das duas, que é o
 que a linha `(sem informação)` da tabela mostra.
 
-*linha 935*
+*linha 936*
 
 > Mesmo esquema do bloco da descritiva e da normalidade: três rodadas
 > com três blocos `dicionario` diferentes obrigariam quem lê a saber de
@@ -7714,7 +7768,7 @@ que a linha `(sem informação)` da tabela mostra.
 
 ### `def _ambiente()`
 
-*linha 961*
+*linha 962*
 
 As versões que produziram estes números.
 
@@ -7728,21 +7782,21 @@ por ele.
 
 ### `def _mensagem_sem_pares(linhas)`
 
-*linha 986*
+*linha 987*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 1013*
+*linha 1014*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1021*
+*linha 1022*
 
 ### Leitura da série
 
 ### `def _coluna(quadro, nome)`
 
-*linha 1039*
+*linha 1040*
 
 A coluna do banco pelo nome, ou `None`.
 
@@ -7754,13 +7808,13 @@ cópias discordarem sobre um número.
 
 ### `def _integridade(confere)`
 
-*linha 1055*
+*linha 1056*
 
 ## `flatcap/associacao.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-FileCopyrightText: 1995-2026 The R Core Team` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1826 linhas.*
+*1827 linhas.*
 
 A associação — qui-quadrado ou exato de Fisher, escolhido pela regra de Cochran.
 
@@ -8624,7 +8678,7 @@ contingência inteira, vão em `detalhes`.
 
 ### `def _ambiente()`
 
-*linha 1664*
+*linha 1665*
 
 As versões que produziram estes números.
 
@@ -8636,28 +8690,28 @@ bloco ter a forma dos outros.
 
 ### `def _mensagem_sem_pares(linhas)`
 
-*linha 1689*
+*linha 1690*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 1716*
+*linha 1717*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1724*
+*linha 1725*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 1749*
+*linha 1750*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras
 análises: nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _formatar_v(valor)`
 
-*linha 1760*
+*linha 1761*
 
 O V com casas fixas: `0,10` e não `0,1`.
 
@@ -8667,17 +8721,17 @@ uma é uma coluna que não alinha.
 
 ### `def _arredondar(valor)`
 
-*linha 1773*
+*linha 1774*
 
 ### `def _integridade(confere)`
 
-*linha 1779*
+*linha 1780*
 
 ## `flatcap/correlacao.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-FileCopyrightText: 1995-2024 The R Core Team` · `SPDX-FileCopyrightText: 2003-2024 The R Foundation` · `SPDX-FileCopyrightText: 1975 Royal Statistical Society` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*2285 linhas.*
+*2286 linhas.*
 
 A correlação — Pearson, Spearman ou Kendall, escolhido pelos pressupostos de cada par.
 
@@ -9636,7 +9690,7 @@ de uma variável. O que decidiu cada método vai em `detalhes`.
 
 ### `def _ambiente(com_graficos)`
 
-*linha 2040*
+*linha 2041*
 
 As versões que produziram estes números.
 
@@ -9648,46 +9702,46 @@ a biblioteca que o `--sem-graficos` existe para evitar.
 
 ### `def _mensagem_sem_pares(linhas)`
 
-*linha 2071*
+*linha 2072*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 2099*
+*linha 2100*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 2107*
+*linha 2108*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 2136*
+*linha 2137*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras
 análises: nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _rotulo(linha)`
 
-*linha 2147*
+*linha 2148*
 
 ### `def _p_na_frase(p, com_nome)`
 
-*linha 2151*
+*linha 2152*
 
 O p dentro de uma frase: `p = 0,412`, ou `p < 0,001` — nunca `p = < 0,001`.
 
 ### `def _estatistica_em_texto(coeficiente)`
 
-*linha 2161*
+*linha 2162*
 
 ### `def _normal_como_detalhe(normal)`
 
-*linha 2170*
+*linha 2171*
 
 ### `def _formatar_coeficiente(valor)`
 
-*linha 2181*
+*linha 2182*
 
 O coeficiente com duas casas fixas e o sinal quando é negativo: `0,45` e
 `-0,45`, nunca `-0,00`.
@@ -9698,19 +9752,19 @@ ler a célula como número quando alguém abrir o `.csv`.
 
 ### `def _formatar_intervalo(intervalo_)`
 
-*linha 2198*
+*linha 2199*
 
 ### `def _encurtar(texto, limite)`
 
-*linha 2205*
+*linha 2206*
 
 ### `def _arredondar(valor)`
 
-*linha 2209*
+*linha 2210*
 
 ### `def _significativos(valor)`
 
-*linha 2216*
+*linha 2217*
 
 O p no manifesto, com seis algarismos significativos, e não seis casas.
 
@@ -9719,7 +9773,7 @@ Com seis casas, um p de 2,5e-08 é gravado como `0.0` — o número que o
 
 ### `def _integridade(confere)`
 
-*linha 2229*
+*linha 2230*
 
 ## `flatcap/hipoteses.py`
 
@@ -10491,7 +10545,7 @@ por variável —, e um `nan` que chegasse viraria um t `nan` sem aviso nenhum.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*4005 linhas.*
+*4006 linhas.*
 
 A comparação — uma variável contra um valor de referência, entre os grupos de outra,
 ou entre medidas repetidas nos mesmos casos —, com o teste que os pressupostos pedem:
@@ -11948,18 +12002,18 @@ variável. O que decidiu cada teste vai em `detalhes`, sob o nome do delineament
 
 ### `def _regras()`
 
-*linha 3474*
+*linha 3475*
 
 As regras desta versão, escritas por extenso no manifesto — as mesmas das notas
 das tabelas, sem os números de uma rodada.
 
 #### `def escolha(delineamento, onde, depois)`
 
-*linha 3479*
+*linha 3480*
 
 ### `def _ambiente()`
 
-*linha 3615*
+*linha 3616*
 
 As versões que produziram estes números.
 
@@ -11969,38 +12023,38 @@ bloco ter a forma dos outros.
 
 ### `def _shapiro_no_manifesto(normal)`
 
-*linha 3637*
+*linha 3638*
 
 ### Mensagens
 
 ### `def _mensagem_sem_itens(linhas)`
 
-*linha 3651*
+*linha 3652*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 3688*
+*linha 3689*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 3696*
+*linha 3697*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 3724*
+*linha 3725*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras análises:
 nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _rotulo(linha)`
 
-*linha 3735*
+*linha 3736*
 
 ### `def _nome(valor)`
 
-*linha 3739*
+*linha 3740*
 
 Um nome, como a ficha o trouxe; vazio quando não é um nome.
 
@@ -12009,11 +12063,11 @@ da lista também não — é o `[[imc, 25]]` digitado com um colchete a mais.
 
 ### `def _simplificado(texto)`
 
-*linha 3751*
+*linha 3752*
 
 ### `def _chave(texto)`
 
-*linha 3756*
+*linha 3757*
 
 O método como ele se procura no `METODOS`: sem acento, minúsculo, e só letras e
 algarismos — `Mann-Whitney`, `mann whitney` e `MANN_WHITNEY` são o mesmo —, com as
@@ -12021,49 +12075,49 @@ outras grafias do `_SINONIMOS` trocadas pela da casa.
 
 ### `def _concorda(teste, participio)`
 
-*linha 3766*
+*linha 3767*
 
 `t de Welch escrito`, `ANOVA escrita`: o participio no gênero do teste.
 
 ### `def _com_artigo(teste, maiuscula)`
 
-*linha 3771*
+*linha 3772*
 
 `o t de Welch`, `a ANOVA` — e, no começo da frase, `O t de Welch`, `A ANOVA`.
 
 ### `def _em_frase(itens)`
 
-*linha 3777*
+*linha 3778*
 
 `A`, `A e B`, `A, B e C`.
 
 ### `def _ou(nomes)`
 
-*linha 3785*
+*linha 3786*
 
 `` `t` ``, `` `t` ou `student` ``, com as crases.
 
 ### `def _unidades(delineamento)`
 
-*linha 3793*
+*linha 3794*
 
 O que se compara no delineamento, no singular e no plural.
 
 ### `def _nenhum(delineamento, quantos)`
 
-*linha 3798*
+*linha 3799*
 
 `nenhum dos dois grupos`, `nenhum dos 3 grupos`, `nenhuma das 3 medidas`.
 
 ### `def _p_na_frase(p)`
 
-*linha 3805*
+*linha 3806*
 
 O p dentro de uma frase: `p = 0,412`, ou `p < 0,001` — nunca `p = < 0,001`.
 
 ### `def _estatistica_em_texto(resultado)`
 
-*linha 3813*
+*linha 3814*
 
 `t = 2,16; 56 gl`, `F = 6,39; 2 e 57 gl` — e, nas medidas repetidas, o ε de
 Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`. No
@@ -12072,14 +12126,14 @@ Wilcoxon e no Mann-Whitney, o caminho do p, que muda com o n e com os empates:
 
 ### `def _media_e_desvio(resumo, casas)`
 
-*linha 3828*
+*linha 3829*
 
 `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
 pelo mesmo `numero()` e com as mesmas casas.
 
 ### `def _mediana_e_quartis(resumo, casas)`
 
-*linha 3838*
+*linha 3839*
 
 `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
 escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
@@ -12087,11 +12141,11 @@ colchetes e o `a` do intervalo.
 
 ### `def _intervalo(intervalo, casas)`
 
-*linha 3850*
+*linha 3851*
 
 ### `def _diferenca(resultado, casas)`
 
-*linha 3857*
+*linha 3858*
 
 `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
 fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
@@ -12099,7 +12153,7 @@ locação no Mann-Whitney. Sem o intervalo de 95%, o traço na célula inteira.
 
 ### `def _fixo(valor, casas)`
 
-*linha 3869*
+*linha 3870*
 
 Casas fixas — as duas de sempre, ou as da variável quando a escala dela é pequena
 —, o hífen do teclado no negativo, e nunca `-0,00` — o formato do coeficiente da
@@ -12108,7 +12162,7 @@ direção.
 
 ### `def _referencia_em_texto(valor, ponto)`
 
-*linha 3882*
+*linha 3883*
 
 A referência como foi escrita, sem os zeros do fim: `25`, `24,9`, `0,125`.
 
@@ -12117,28 +12171,28 @@ o que funciona.
 
 ### `def _descrever_valor(valor)`
 
-*linha 3893*
+*linha 3894*
 
 ### `def _descrever_solto(valor)`
 
-*linha 3905*
+*linha 3906*
 
 Um valor como ele apareceria dentro dos colchetes da ficha.
 
 ### `def _arredondar(valor)`
 
-*linha 3914*
+*linha 3915*
 
 ### `def _significativos(valor)`
 
-*linha 3921*
+*linha 3922*
 
 O p no manifesto, com seis algarismos significativos, e não seis casas — o da
 correlação. Com seis casas, um p de 2,5e-08 seria gravado como `0.0`.
 
 ### `def _integridade(confere)`
 
-*linha 3932*
+*linha 3933*
 
 ## `flatcap/analises.py`
 
@@ -14231,7 +14285,7 @@ apertada — sem verticais, é o espaço que separa as colunas.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*3689 linhas.*
+*3696 linhas.*
 
 Interface de linha de comando do FlatCap.
 
@@ -14527,26 +14581,31 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 Quem, qual arquivo, e se dá para confiar nele. Nessa ordem.
 
+*linha 1068*
+
+> As colunas que o leitor converteu: é uma decisão dele, e decisão do leitor
+> sai escrita, como o separador e a codificação. Ver o `banco.py`.
+
 ### `def _tabela_do_perfil(perfil)`
 
-*linha 1081*
+*linha 1088*
 
 Uma linha por variável. Valores do banco entram como `Text`, nunca como string
 crua, pelo mesmo motivo do `listar`.
 
 ### `def _achados_no_terminal(perfil)`
 
-*linha 1117*
+*linha 1124*
 
 Os achados agrupados pelo que fazer com eles, do mais urgente para o menos.
 
 ### `def _lista_de_achados(achados)`
 
-*linha 1154*
+*linha 1161*
 
 ### `def _arvore_do_perfil(plano)`
 
-*linha 1169*
+*linha 1176*
 
 Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
@@ -14554,7 +14613,7 @@ Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
 ### `def descritiva(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1208*
+*linha 1215*
 
 Gera a análise descritiva obedecendo ao dicionario.csv.
 
@@ -14571,7 +14630,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1250*
+*linha 1257*
 
 > Mesmo motivo do `perfil`: o `pandas` custa perto de meio segundo para
 > carregar e o `matplotlib` outro tanto. O `listar`, que roda várias vezes por
@@ -14579,7 +14638,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_descritiva(plano)`
 
-*linha 1301*
+*linha 1308*
 
 O que a descritiva mostra antes de escrever — no comando dela e no `analisar`.
 
@@ -14590,13 +14649,13 @@ análises seguintes têm a sua `_mostrar_*` pelo mesmo motivo.
 
 ### `def _cabecalho_da_descritiva(plano)`
 
-*linha 1319*
+*linha 1326*
 
 Quem, qual banco, se dá para confiar nele, e quanto do dicionário entra.
 
 ### `def _tabela_da_descritiva(descritiva)`
 
-*linha 1363*
+*linha 1370*
 
 Uma linha por variável, com os arquivos que ela gera.
 
@@ -14605,7 +14664,7 @@ responde "de qual variável saiu este .csv?" antes de o .csv existir.
 
 ### `def _fora_da_descritiva(descritiva)`
 
-*linha 1400*
+*linha 1407*
 
 As variáveis que não geraram artefato, e por quê.
 
@@ -14614,7 +14673,7 @@ relatório" e "ninguém reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_da_descritiva(plano)`
 
-*linha 1426*
+*linha 1433*
 
 Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
@@ -14622,7 +14681,7 @@ Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
 ### `def normalidade(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1481*
+*linha 1488*
 
 Testa a normalidade das variáveis numéricas do dicionario.csv.
 
@@ -14641,7 +14700,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1525*
+*linha 1532*
 
 > Mesmo motivo do `perfil` e da `descritiva`: `pandas`, `scipy` e `matplotlib`
 > custam perto de um segundo somados, e o `listar`, que roda várias vezes por
@@ -14649,19 +14708,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_normalidade(plano)`
 
-*linha 1576*
+*linha 1583*
 
 O que a normalidade mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_normalidade(plano)`
 
-*linha 1590*
+*linha 1597*
 
 Quem, qual banco, se dá para confiar nele, e quantas variáveis entram.
 
 ### `def _tabela_da_normalidade(normalidade)`
 
-*linha 1636*
+*linha 1643*
 
 Uma linha por variável, na mesma ordem e com os mesmos números do `.csv`.
 
@@ -14670,7 +14729,7 @@ e uma tabela que o escondesse deixaria a coluna `p` parecer uma resposta. Pelo
 mesmo motivo a assimetria e a curtose vêm **antes** do W e do p, e não depois:
 elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
-*linha 1656*
+*linha 1663*
 
 > A tabela do terminal lê as mesmas células do `.csv` que vai para o disco, e
 > não reformata número nenhum: dois formatadores para a mesma grandeza é como
@@ -14678,7 +14737,7 @@ elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
 ### `def _nota_da_normalidade(normalidade)`
 
-*linha 1685*
+*linha 1692*
 
 A frase que impede a tabela de ser lida como um veredito.
 
@@ -14689,7 +14748,7 @@ vira leitura de conferência.
 
 ### `def _fora_da_normalidade(normalidade)`
 
-*linha 1733*
+*linha 1740*
 
 As variáveis que não entraram, e por quê.
 
@@ -14699,7 +14758,7 @@ lista é o que impede a pergunta "por que `sexo` não está na tabela?".
 
 ### `def _arvore_da_normalidade(plano)`
 
-*linha 1760*
+*linha 1767*
 
 Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
@@ -14707,7 +14766,7 @@ Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
 ### `def cruzamento(identificador, aba, rapido, sim, env)`
 
-*linha 1821*
+*linha 1828*
 
 Cruza pares de variáveis categóricas: uma tabela por par.
 
@@ -14729,26 +14788,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1864*
+*linha 1871*
 
 > O `pandas` entra aqui dentro, como em todo comando que abre o banco: o
 > `listar`, que roda várias vezes por dia, não deve pagar por ele.
 
 ### `def _mostrar_cruzamento(plano)`
 
-*linha 1908*
+*linha 1915*
 
 O que o cruzamento mostra antes de escrever — no comando dele e no `analisar`.
 
 ### `def _cabecalho_do_cruzamento(plano)`
 
-*linha 1920*
+*linha 1927*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_do_cruzamento(par)`
 
-*linha 1962*
+*linha 1969*
 
 A tabela de um par, com as mesmas células do `.csv`.
 
@@ -14757,7 +14816,7 @@ deste comando, e a simulação existe para você ler o que vai para o documento
 antes de escrevê-lo. A linha do `Total` em negrito e a `(sem informação)`
 apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
-*linha 1973*
+*linha 1980*
 
 > `Text` no título e nos cabeçalhos, e não a string: são rótulos do
 > dicionário, e um `Idade [anos]` perderia o colchete como marcação do rich —
@@ -14765,7 +14824,7 @@ apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
 ### `def _arvore_do_cruzamento(plano)`
 
-*linha 1996*
+*linha 2003*
 
 Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
@@ -14773,7 +14832,7 @@ Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
 ### `def associacao(identificador, aba, rapido, sim, env)`
 
-*linha 2040*
+*linha 2047*
 
 Testa a associação entre pares de variáveis categóricas.
 
@@ -14798,26 +14857,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2086*
+*linha 2093*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_associacao(plano)`
 
-*linha 2130*
+*linha 2137*
 
 O que a associação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_associacao(plano)`
 
-*linha 2142*
+*linha 2149*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_associacao(associacao)`
 
-*linha 2184*
+*linha 2191*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14826,11 +14885,11 @@ dois formatadores para o mesmo p é como o terminal diz `0.042` enquanto o
 arquivo diz `0,042`. O p abaixo de 0,05 sai em negrito: é o destaque de quem
 lê a simulação, e ele fica no terminal — o documento não marca nada.
 
-- *linha 2197* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
+- *linha 2204* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
 
 ### `def _nota_da_associacao(associacao)`
 
-*linha 2220*
+*linha 2227*
 
 Por que cada par foi para o teste em que foi, e quantos testes são.
 
@@ -14840,7 +14899,7 @@ ir para o documento.
 
 ### `def _arvore_da_associacao(plano)`
 
-*linha 2257*
+*linha 2264*
 
 Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
@@ -14848,7 +14907,7 @@ Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
 ### `def correlacao(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 2300*
+*linha 2307*
 
 Correlaciona pares de variáveis: Pearson, Spearman ou Kendall.
 
@@ -14876,7 +14935,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2353*
+*linha 2360*
 
 > O `pandas`, o `scipy` e o `matplotlib` entram aqui dentro, como em todo
 > comando que abre o banco: o `listar`, que roda várias vezes por dia, não deve
@@ -14884,19 +14943,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_correlacao(plano)`
 
-*linha 2400*
+*linha 2407*
 
 O que a correlação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_correlacao(plano)`
 
-*linha 2412*
+*linha 2419*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_correlacao(correlacao)`
 
-*linha 2454*
+*linha 2461*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14906,11 +14965,11 @@ o arquivo diz `0,31`. O p abaixo de 0,05 sai em negrito, e o método escrito na
 ficha contra a regra sai em amarelo: são destaques de quem lê a simulação, e
 ficam no terminal — o documento não marca nada.
 
-- *linha 2468* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
+- *linha 2475* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
 
 ### `def _nota_da_correlacao(correlacao)`
 
-*linha 2493*
+*linha 2500*
 
 Por que cada par foi para o método em que foi, e quantos testes são.
 
@@ -14921,7 +14980,7 @@ a regra teria escolhido.
 
 ### `def _arvore_da_correlacao(plano)`
 
-*linha 2537*
+*linha 2544*
 
 Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
@@ -14929,7 +14988,7 @@ Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
 ### `def comparacao(identificador, aba, rapido, sim, env)`
 
-*linha 2595*
+*linha 2602*
 
 Compara: contra um valor de referência, entre grupos ou entre medidas.
 
@@ -14963,26 +15022,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2650*
+*linha 2657*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_comparacao(plano)`
 
-*linha 2694*
+*linha 2701*
 
 O que a comparação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_comparacao(plano)`
 
-*linha 2707*
+*linha 2714*
 
 Quem, qual banco, se dá para confiar nele, e quantos itens entram.
 
 ### `def _tabelas_da_comparacao(comparacao)`
 
-*linha 2749*
+*linha 2756*
 
 Uma tabela por delineamento, com as mesmas células do `.csv`.
 
@@ -14996,14 +15055,14 @@ O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com o método escrito
 contra a regra sai com a coluna `teste` em amarelo: são destaques de quem lê a
 simulação, e ficam no terminal — o documento não marca nada.
 
-*linha 2766*
+*linha 2773*
 
 > n, referência e p-valor: números, à direita. Pelo nome, e não pela posição —
 > cada delineamento tem as suas colunas.
 
 ### `def _nota_da_comparacao(comparacao)`
 
-*linha 2810*
+*linha 2817*
 
 Por que cada item foi para o teste em que foi, e quantos testes são.
 
@@ -15014,7 +15073,7 @@ escolheu um teste que ainda não existe, a frase sai em amarelo.
 
 ### `def _arvore_da_comparacao(plano)`
 
-*linha 2850*
+*linha 2857*
 
 Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
@@ -15022,42 +15081,42 @@ Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
 ### `class _Tela`
 
-*linha 2898*
+*linha 2905*
 
 O que o terminal sabe de uma análise: como mostrá-la antes de escrever, a frase
 de depois de escrita e a linha dela na tabela do lote.
 
 ### `def _sem_teste(quantos)`
 
-*linha 2909*
+*linha 2916*
 
 ### `def _resumo_da_descritiva(plano)`
 
-*linha 2913*
+*linha 2920*
 
 ### `def _resumo_da_normalidade(plano)`
 
-*linha 2920*
+*linha 2927*
 
 ### `def _resumo_do_cruzamento(plano)`
 
-*linha 2928*
+*linha 2935*
 
 ### `def _resumo_da_associacao(plano)`
 
-*linha 2933*
+*linha 2940*
 
 ### `def _resumo_da_correlacao(plano)`
 
-*linha 2941*
+*linha 2948*
 
 ### `def _resumo_da_comparacao(plano)`
 
-*linha 2949*
+*linha 2956*
 
 ### `_NA_TELA`
 
-*linha 2957*
+*linha 2964*
 
 > Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
 > iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
@@ -15066,7 +15125,7 @@ de depois de escrita e a linha dela na tabela do lote.
 
 ### `def analisar(identificador, aba, sem_graficos, rapido, resumo, sim, env)`
 
-*linha 2984*
+*linha 2991*
 
 Roda, de uma vez, as análises da lista `analises:` do projeto.yaml.
 
@@ -15091,21 +15150,21 @@ Para rodar uma análise só, o comando dela continua valendo.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3039*
+*linha 3046*
 
 > O `analises.py` não traz o `pandas`; quem traz é cada análise, no `preparar_*`
 > dela. O import fica aqui dentro pelo mesmo motivo dos outros comandos.
 
-*linha 3066*
+*linha 3073*
 
 > Um painel por recusa, com o título da análise — o mesmo painel que o
 > comando dela abriria —, e o fecho do lote por último.
 
 #### `def ao_escrever(feita)`
 
-*linha 3105*
+*linha 3112*
 
-*linha 3117*
+*linha 3124*
 
 > Ctrl+C no meio do lote. O `click` diria só «Aborted!», e aqui a pergunta
 > que sobra é qual análise ficou escrita e qual ficou pela metade — a mesma
@@ -15113,19 +15172,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _notas(erro)`
 
-*linha 3142*
+*linha 3149*
 
 As notas que o `executar_analises` prende ao erro: onde o lote parou.
 
 ### `def _regua_da_etapa(posicao, total, etapa)`
 
-*linha 3149*
+*linha 3156*
 
 A linha que abre a saída de cada análise, com a posição dela no lote.
 
 ### `def _cabecalho_do_lote(plano)`
 
-*linha 3160*
+*linha 3167*
 
 Quem, qual banco, se dá para confiar nele, e quantas análises a lista pede.
 
@@ -15134,7 +15193,7 @@ versão vigente da ficha.
 
 ### `def _tabela_do_lote(plano)`
 
-*linha 3204*
+*linha 3211*
 
 Uma linha por análise, na ordem da lista: o que entra nela, quantos arquivos, e
 se a rodada é a primeira ou refaz uma anterior.
@@ -15145,7 +15204,7 @@ par que não tinha casos para o teste.
 
 ### `def _avisos_das_etapas(plano)`
 
-*linha 3232*
+*linha 3239*
 
 Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
 
@@ -15154,7 +15213,7 @@ seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
 
 ### `def _arvore_do_lote(plano)`
 
-*linha 3253*
+*linha 3260*
 
 Desenha o que `executar_analises` escreveria, lendo o próprio plano.
 
@@ -15166,7 +15225,7 @@ logo acima. Aqui é o lote inteiro de uma vez — o que vai para
 
 ### `def relatorio(identificador, template, titulo, rapido, sim, env)`
 
-*linha 3299*
+*linha 3306*
 
 Monta o relatório .docx a partir das análises já rodadas.
 
@@ -15193,7 +15252,7 @@ escrito dentro dele.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3352*
+*linha 3359*
 
 > Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê os
 > manifestos e os `.csv` das rodadas, e é só isso. O `python-docx` entra só
@@ -15201,7 +15260,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def template(saida, sim, env)`
 
-*linha 3434*
+*linha 3441*
 
 Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
 
@@ -15218,7 +15277,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_relatorio(plano)`
 
-*linha 3506*
+*linha 3513*
 
 Quem, de quais análises, sobre qual banco, com qual modelo e qual título.
 
@@ -15231,7 +15290,7 @@ de executar, que é exatamente o que a simulação existe para evitar.
 
 ### `def _tabela_do_relatorio(relatorio)`
 
-*linha 3547*
+*linha 3554*
 
 Uma linha por seção do documento, com os arquivos que entram nela.
 
@@ -15243,7 +15302,7 @@ pergunta deixou de ser «o que entrou?» e passou a ser «o que entrou, e de
 qual rodada?». O nome aparece uma vez por bloco, e não repetido em toda
 linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
-*linha 3568*
+*linha 3575*
 
 > `rodadas` vazio é o `Relatorio` montado à mão — em teste, ou por uma
 > camada de cima que não passou pela varredura. A tabela continua saindo,
@@ -15251,7 +15310,7 @@ linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
 ### `def _alertas_no_terminal(relatorio)`
 
-*linha 3605*
+*linha 3612*
 
 Os avisos que também vão para dentro do documento.
 
@@ -15260,7 +15319,7 @@ que sobra depois de o arquivo ser anexado a um e-mail.
 
 ### `def _fora_do_relatorio(relatorio)`
 
-*linha 3632*
+*linha 3639*
 
 As variáveis que **nenhuma** análise descreveu, e por quê.
 
@@ -15275,7 +15334,7 @@ reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_do_relatorio(plano)`
 
-*linha 3664*
+*linha 3671*
 
 Desenha o que `executar_relatorio` escreveria, lendo o próprio plano.
 

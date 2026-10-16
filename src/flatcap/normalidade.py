@@ -1092,6 +1092,7 @@ def montar_manifesto(
             "planilha": leitura.aba,
             "separador": leitura.separador,
             "codificacao": leitura.codificacao,
+            "virgula_decimal": list(leitura.virgula_decimal),
             "integridade": _integridade(banco.confere),
         },
         dicionario={

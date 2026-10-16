@@ -53,6 +53,20 @@ relatório saía com tabelas de uma coluna só. O leitor tira o espaço das pont
 troca a quebra por um espaço — `Idade`, `Peso (kg)` —, e o que ele trocou viaja na
 `Leitura` até o `perfil.md`. Um nome que ficaria igual ao de outra coluna fica como
 veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisão.
+
+**E a vírgula decimal de um `.csv` que não é separado por vírgula**, também desde a
+1.14.1. É o formato que o Excel em português salva — `;` entre campos, `70,5` na
+célula —, e nele a vírgula não é defeito: é a convenção do arquivo. Até a 1.14.0 o
+leitor entregava a coluna como texto, o perfil mandava o cliente "corrigir" um
+arquivo certo, e toda análise recusava a coluna. A razão é a mesma da exceção das
+datas na descritiva: exigir do cliente o conserto de um formato que o Excel dele
+sempre escreve é exigir o impossível. A conversão tem três condições que a mantêm
+honesta. É **da coluna inteira ou de nada**: um valor que não seja número à
+brasileira — `não sei`, `12.5`, `70,5 kg` — deixa a coluna como veio, e o perfil
+aponta o que está torto como sempre apontou. Só vale **quando a vírgula não separa
+campos**: num `.csv` com `,`, um `"70,5"` entre aspas é outra história, e fica
+texto. E **fica escrita**: as colunas convertidas viajam na `Leitura` até o
+cabeçalho do `perfil.md` e o manifesto de cada análise.
 """
 
 from __future__ import annotations
@@ -193,6 +207,8 @@ class Leitura:
     # Os nomes de coluna que o leitor limpou, como `(antes, depois)`. Ver o fim da
     # docstring do módulo e o `nome_de_coluna`.
     nomes_ajustados: tuple[tuple[str, str], ...] = ()
+    # As colunas lidas com vírgula decimal. Ver o fim da docstring do módulo.
+    virgula_decimal: tuple[str, ...] = ()
 
     @property
     def formato(self) -> str:
@@ -214,6 +230,8 @@ class Leitura:
             partes.append(f"separador {legivel}")
         if self.codificacao:
             partes.append(f"codificação {self.codificacao}")
+        if self.virgula_decimal:
+            partes.append(f"vírgula decimal em {len(self.virgula_decimal)} coluna(s)")
         return " · ".join(partes)
 
 
@@ -344,8 +362,9 @@ def abrir_arquivo(caminho: Path, aba: str | None = None) -> tuple[pd.DataFrame, 
         quadro, leitura = _ler_csv(caminho)
 
     ajustados = _limpar_nomes(quadro)
-    if ajustados:
-        leitura = replace(leitura, nomes_ajustados=ajustados)
+    virgula = _ler_virgula_decimal(quadro, leitura.separador)
+    if ajustados or virgula:
+        leitura = replace(leitura, nomes_ajustados=ajustados, virgula_decimal=virgula)
 
     if quadro.shape[1] == 0:
         raise BancoVazioError(
@@ -406,6 +425,54 @@ def _limpar_nomes(quadro: pd.DataFrame) -> tuple[tuple[str, str], ...]:
     if ajustados:
         quadro.columns = nomes
     return tuple(ajustados)
+
+
+# Um número escrito à brasileira, inteiro numa célula: `70,5`, `-0,25`, `1.234,56`,
+# `1,5E-05` — e o inteiro `70`, que divide a coluna com eles. O ponto só vale como
+# separador de milhar, em grupos de três: `12.5` não casa, e a coluna fica como veio.
+_NUMERO_PT_BR = re.compile(r"[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d+)?(?:[eE][+-]?\d+)?")
+
+
+def _ler_virgula_decimal(quadro: pd.DataFrame, separador: str | None) -> tuple[str, ...]:
+    """
+    Converte, no lugar, as colunas de texto que são inteiras números com vírgula
+    decimal, e devolve os nomes delas. Ver o fim da docstring do módulo.
+
+    Só num `.csv` cujo separador não é a vírgula — no `.xlsx` o número já vem número,
+    e um `"22,5"` lá é uma célula de texto, que o perfil denuncia. A coluna precisa
+    ter pelo menos uma vírgula, e todo valor preenchido precisa casar com
+    `_NUMERO_PT_BR`; se um só não casa, nada muda.
+    """
+    if not separador or separador == ",":
+        return ()
+
+    lidas: list[str] = []
+    for posicao in range(quadro.shape[1]):
+        serie = quadro.iloc[:, posicao]
+        if (
+            pd.api.types.is_numeric_dtype(serie)
+            or pd.api.types.is_bool_dtype(serie)
+            or pd.api.types.is_datetime64_any_dtype(serie)
+        ):
+            continue
+        preenchidos = serie.dropna()
+        if preenchidos.empty or not all(isinstance(valor, str) for valor in preenchidos):
+            continue
+        textos = [valor.strip() for valor in preenchidos]
+        if not any("," in texto for texto in textos):
+            continue
+        if not all(_NUMERO_PT_BR.fullmatch(texto) for texto in textos):
+            continue
+        numeros = serie.map(
+            lambda valor: _numero_pt_br(valor) if isinstance(valor, str) else valor
+        )
+        quadro.isetitem(posicao, pd.to_numeric(numeros).astype("float64"))
+        lidas.append(str(quadro.columns[posicao]))
+    return tuple(lidas)
+
+
+def _numero_pt_br(texto: str) -> float:
+    return float(texto.strip().replace(".", "").replace(",", "."))
 
 
 # Leitura por formato

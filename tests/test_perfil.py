@@ -163,6 +163,28 @@ class TestDetectoresCorrigir:
         assert achado.variavel == "imc"
         assert achado.exemplos, "sem exemplo o cliente procura; com exemplo ele acha"
 
+    def test_a_virgula_decimal_aponta_o_valor_que_nao_e_numero(self, perfilado):
+        """
+        Num `.csv` separado por `;` a vírgula decimal já é lida como número, a coluna
+        inteira ou nada. Se a coluna chegou como texto, o motivo costuma ser o valor
+        que não é número — e o achado o mostra, em vez de culpar a formatação.
+        """
+        quadro = bancos.com_virgula_decimal()
+        quadro.loc[0, "imc"] = "não sei"
+        achado = next(a for a in perfilado(quadro).achados if a.codigo == "virgula_decimal")
+        assert achado.detalhe.endswith("algum valor dela não é número: não sei.")
+
+    def test_1234_virgula_5_tambem_e_virgula_decimal(self, perfilado):
+        """
+        REGRESSÃO da 1.14.0: `1234,5`, sem o ponto de milhar, era diagnosticado como
+        "célula formatada como texto" — o `numero_como_texto` —, e não como vírgula.
+        """
+        quadro = bancos.completo()
+        quadro["renda"] = [f"{1500 + 37.5 * i:.1f}".replace(".", ",") for i in range(len(quadro))]
+        codigos = _codigos(perfilado(quadro))
+        assert "virgula_decimal" in codigos
+        assert "numero_como_texto" not in codigos
+
     def test_numero_como_texto(self, perfilado):
         perfil = perfilado(bancos.com_numero_como_texto())
         assert "numero_como_texto" in _codigos(perfil)
