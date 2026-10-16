@@ -84,6 +84,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -219,6 +220,15 @@ class Tabela:
         deixa `variavel` vazia, e a linha `# variável:` simplesmente não sai. O
         `relatorio.ler_tabela` já descarta essa linha na leitura, então os dois
         casos chegam iguais ao documento.
+
+        **Cada comentário ocupa uma linha só**, e a quebra de linha que vier no meio
+        dele vira espaço. O título leva o rótulo do dicionário e as notas levam
+        categorias do banco, e qualquer um dos dois pode trazer uma quebra — o
+        Alt+Enter numa célula do Excel, um texto colado do Word. Até a 1.14.0 a
+        segunda metade saía numa linha sem `#`, e o relatório a lia como o cabeçalho
+        da tabela: o `.docx` saía com uma tabela de uma coluna, com `# variável:`
+        dentro, e sem aviso nenhum. O corpo da tabela não precisa disso: o `csv` põe
+        entre aspas a célula que tem quebra, e a leitura a devolve inteira.
         """
         buffer = io.StringIO(newline="")
         escritor = csv.writer(
@@ -231,11 +241,23 @@ class Tabela:
         for linha in self.linhas:
             escritor.writerow(list(linha))
 
-        cabecalho = [f"# {self.titulo}"]
+        cabecalho = [f"# {_uma_linha(self.titulo)}"]
         if self.variavel:
-            cabecalho.append(f"# variável: {self.variavel}")
-        cabecalho += [f"# {nota}" for nota in self.notas]
+            cabecalho.append(f"# variável: {_uma_linha(self.variavel)}")
+        cabecalho += [f"# {_uma_linha(nota)}" for nota in self.notas]
         return f"{_BOM}" + "\n".join(cabecalho) + "\n" + buffer.getvalue()
+
+
+# Toda quebra de linha, com os espaços em volta dela: o `\n`, o `\r\n`, e os
+# separadores que o `str.splitlines` também reconhece — o `\x0b` e o ` ` que
+# chegam colando do Word. A mesma lista do `banco.nome_de_coluna`, que este módulo
+# não importa: o `banco.py` carrega o `pandas`, e este não pode.
+_QUEBRAS = re.compile(r"\s*[\n\r\v\f\x1c\x1d\x1e\x85  ]+\s*")
+
+
+def _uma_linha(texto: str) -> str:
+    """O texto de um comentário numa linha só: a quebra e o espaço em volta viram um espaço."""
+    return _QUEBRAS.sub(" ", str(texto))
 
 
 @dataclass(frozen=True)

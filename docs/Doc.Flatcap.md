@@ -4895,7 +4895,7 @@ com as suas anotações da reunião, é outra.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*625 linhas.*
+*650 linhas.*
 
 O `manifesto.json` — o índice de uma rodada de análise, e o contrato entre uma
 análise e quem escreve os arquivos dela.
@@ -4976,7 +4976,7 @@ quando um campo novo aparecer.
 
 ### `ANALISE_DESCRITIVA`
 
-*linha 98*
+*linha 99*
 
 > O nome da análise de cada rodada. Vive aqui, e não em cada módulo, porque é o
 > valor que o `relatorio.py` vai casar com a lista `analises:` da ficha — e duas
@@ -4985,7 +4985,7 @@ quando um campo novo aparecer.
 
 ### `ORDEM_PADRAO_DAS_ANALISES`
 
-*linha 109*
+*linha 110*
 
 > A ordem em que as análises aparecem no documento quando a ficha não manda.
 >
@@ -5023,7 +5023,7 @@ quando um campo novo aparecer.
 
 ### `SEMENTE`
 
-*linha 151*
+*linha 152*
 
 > A semente.
 >
@@ -5037,32 +5037,32 @@ quando um campo novo aparecer.
 
 ### `_BOM`
 
-*linha 162*
+*linha 163*
 
 > O BOM, o mesmo do `dicionario.csv` e pela mesma razão: é ele que faz o Excel em
 > português abrir o arquivo em UTF-8 em vez de cp1252.
 
 ### `class ManifestoError(RuntimeError)`
 
-*linha 167*
+*linha 168*
 
 Falha ao ler o `manifesto.json`, já traduzida para o usuário.
 
 ### `class ManifestoInvalidoError(ManifestoError)`
 
-*linha 173*
+*linha 174*
 
 O arquivo existe e não dá para interpretar — ou é de um formato mais novo.
 
 #### `def __init__(self, mensagem, caminho)`
 
-*linha 178*
+*linha 179*
 
 ### O contrato de saída de uma análise
 
 ### `class Tabela`
 
-*linha 187*
+*linha 188*
 
 Uma tabela pronta para virar `.csv`. Texto, não `DataFrame`.
 
@@ -5078,7 +5078,7 @@ segunda pagar o `pandas` só para conhecer uma `dataclass` de texto.
 
 #### `def texto(self)`
 
-*linha 210*
+*linha 211*
 
 O arquivo inteiro, com o cabeçalho explicativo em linhas de comentário.
 
@@ -5091,9 +5091,31 @@ deixa `variavel` vazia, e a linha `# variável:` simplesmente não sai. O
 `relatorio.ler_tabela` já descarta essa linha na leitura, então os dois
 casos chegam iguais ao documento.
 
+**Cada comentário ocupa uma linha só**, e a quebra de linha que vier no meio
+dele vira espaço. O título leva o rótulo do dicionário e as notas levam
+categorias do banco, e qualquer um dos dois pode trazer uma quebra — o
+Alt+Enter numa célula do Excel, um texto colado do Word. Até a 1.14.0 a
+segunda metade saía numa linha sem `#`, e o relatório a lia como o cabeçalho
+da tabela: o `.docx` saía com uma tabela de uma coluna, com `# variável:`
+dentro, e sem aviso nenhum. O corpo da tabela não precisa disso: o `csv` põe
+entre aspas a célula que tem quebra, e a leitura a devolve inteira.
+
+*No módulo, linha 251:*
+
+> Toda quebra de linha, com os espaços em volta dela: o `\n`, o `\r\n`, e os
+> separadores que o `str.splitlines` também reconhece — o `\x0b` e o ` ` que
+> chegam colando do Word. A mesma lista do `banco.nome_de_coluna`, que este módulo
+> não importa: o `banco.py` carrega o `pandas`, e este não pode.
+
+### `def _uma_linha(texto)`
+
+*linha 258*
+
+O texto de um comentário numa linha só: a quebra e o espaço em volta viram um espaço.
+
 ### `class Grafico`
 
-*linha 242*
+*linha 264*
 
 Um gráfico decidido e ainda não desenhado.
 
@@ -5111,9 +5133,9 @@ que é a mesma pergunta que ela responde no histograma: quantos casos há ali.
 Uma `dataclass` por espécie daria um despacho por tipo no `graficos.py`, que é
 mais código para dizer o que o campo `especie` já diz.
 
-- *linha 262* — `especie: str` — barras | histograma | colunas | qq | dispersao
+- *linha 284* — `"""` — barras | histograma | colunas | qq | dispersao
 
-*linha 273*
+*linha 295*
 
 > O Q-Q da Fase 7. `reta` é (intercepto, inclinação) — a reta de referência,
 > calculada por quem sabe estatística e não por quem desenha.
@@ -5122,7 +5144,7 @@ mais código para dizer o que o campo `especie` já diz.
 
 ### `class Artefato`
 
-*linha 284*
+*linha 306*
 
 Um arquivo escrito por uma análise.
 
@@ -5132,15 +5154,15 @@ isso que ela é um campo próprio e não uma dedução a partir da extensão.
 
 #### `def e_tabela(self)`
 
-*linha 299*
+*linha 321*
 
 #### `def e_figura(self)`
 
-*linha 303*
+*linha 325*
 
 ### `class ItemDoManifesto`
 
-*linha 308*
+*linha 330*
 
 Uma seção da rodada, com os arquivos que ela gerou.
 
@@ -5156,11 +5178,11 @@ sem o campo, devolve a própria `variavel` — que é o que ele sempre quis dize
 
 #### `def preenchidos(self)`
 
-*linha 335*
+*linha 357*
 
 #### `def colunas_usadas(self)`
 
-*linha 339*
+*linha 361*
 
 As colunas do banco que este item usou.
 
@@ -5171,11 +5193,11 @@ qual versão do FlatCap o arquivo veio.
 
 #### `def artefato(self, especie)`
 
-*linha 352*
+*linha 374*
 
 ### `class Manifesto`
 
-*linha 360*
+*linha 382*
 
 Uma rodada inteira de uma análise.
 
@@ -5189,19 +5211,19 @@ que ele era.
 
 #### `def total_artefatos(self)`
 
-*linha 387*
+*linha 409*
 
 #### `def tabelas(self)`
 
-*linha 391*
+*linha 413*
 
 #### `def figuras(self)`
 
-*linha 395*
+*linha 417*
 
 #### `def colunas_usadas(self)`
 
-*linha 399*
+*linha 421*
 
 Todas as colunas do banco que esta rodada tocou, sem repetir e em ordem.
 
@@ -5211,15 +5233,15 @@ ainda são analisáveis no dicionário de hoje?".
 
 #### `def item(self, variavel)`
 
-*linha 414*
+*linha 436*
 
 #### `def por_tipo(self, tipo)`
 
-*linha 420*
+*linha 442*
 
 #### `def como_dicionario(self)`
 
-*linha 423*
+*linha 445*
 
 A forma serializável, na ordem em que ela sai no arquivo.
 
@@ -5231,7 +5253,7 @@ que são as duas perguntas de quem o abre sem contexto.
 
 ### `def texto_do_manifesto(manifesto)`
 
-*linha 472*
+*linha 494*
 
 O conteúdo do arquivo. Sem tocar no disco, para o `--sim` poder mostrá-lo.
 
@@ -5244,7 +5266,7 @@ por programa não se importa.
 
 ### `def ler(caminho)`
 
-*linha 490*
+*linha 512*
 
 Lê o `manifesto.json` de uma rodada.
 
@@ -5255,18 +5277,19 @@ Raises:
 
 ### `def de_dicionario(corpo, caminho)`
 
-*linha 528*
+*linha 550*
 
 Converte o JSON já decodificado em `Manifesto`.
 
-*linha 576*
+*linha 598*
 
 > Manifesto escrito antes da Fase 7 não tem o campo, e era de uma
-> descritiva: era a única análise que existia.
+
+- *linha 599* — `retu` — descritiva: era a única análise que existia.
 
 ### `def _data_e_hora(valor, caminho)`
 
-*linha 594*
+*linha 616*
 
 ## `flatcap/graficos.py`
 
