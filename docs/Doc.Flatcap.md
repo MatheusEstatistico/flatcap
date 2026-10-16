@@ -634,7 +634,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*487 linhas.*
+*516 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1117,6 +1117,35 @@ em vez de levar ao Mann-Whitney quem pediu o posto sinalizado; as outras grafias
 — `U de Mann-Whitney`, `Wilcoxon rank sum`, `Kruskal-Wallis` — valem.
 
 O `relatorio.py` não mudou uma linha.
+
+### 1.14.1 — o que chega do Excel
+
+As quatro correções de gravidade alta da varredura do repositório público, cada uma
+com o seu teste de regressão. Nenhuma funcionalidade nova; as quatro são entradas comuns
+que o FlatCap lia errado.
+
+**A vírgula decimal do `.csv` do Excel em português é lida como número.** É o formato
+mais comum de chegar — `;` entre campos, `70,5` na célula —, e a coluna chegava como
+texto: o perfil mandava o cliente "corrigir" um arquivo certo, e toda análise recusava a
+coluna. A decisão "a leitura é fiel ao que o cliente mandou" continua valendo para todo o
+resto; aqui ela cede pela razão que já fazia a data escrita como texto ser convertida —
+exigir do cliente o conserto de um formato que o Excel dele sempre escreve é exigir o
+impossível. A conversão é da coluna inteira ou de nada, só vale onde a vírgula não separa
+campos, e fica escrita no perfil e no manifesto. As condições estão no `banco.py`.
+
+**Número de escala pequena não sai mais zero.** As estatísticas tinham duas casas fixas, e
+uma concentração na casa de 0,003 saía `0` no resumo inteiro, com faixas `[0 a 0)`, e a
+comparação imprimia "média 0 (0)" nos dois grupos ao lado de uma diferença "0,00 (0,00 a
+0,00)" e de um p < 0,001. O `banco.casas_do_resumo` decide as casas de cada variável pela
+escala dela; de 0,01 para cima nada muda.
+
+**O nome de coluna sai numa linha e sem espaço nas pontas.** `Idade ` travava o projeto: o
+perfil gravava o nome com o espaço, a leitura do dicionário o aparava, a descritiva não
+achava a coluna e mandava rodar o perfil, que a acrescentava de novo — e na volta a
+variável aparecia duas vezes. `Peso` e `(kg)` em duas linhas partiam o comentário das
+tabelas, e o relatório saía com tabelas de uma coluna só, sem aviso. O leitor limpa os
+dois, e o comentário das tabelas sai sempre numa linha só, mesmo quando o rótulo ou uma
+categoria trazem a quebra.
 
 ## `flatcap/config.py`
 
