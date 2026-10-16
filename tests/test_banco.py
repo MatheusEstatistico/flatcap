@@ -147,6 +147,45 @@ class TestLeituraDeCsv:
         assert str(quadro["nome"].iloc[0]) == "Ana"
         assert leitura.avisos, "o campo descartado precisa virar aviso, não silêncio"
 
+    def test_o_nome_da_coluna_sai_numa_linha_e_sem_espaco_nas_pontas(self, tmp_path):
+        """
+        REGRESSÃO da 1.14.0. `Idade ` travava o projeto num laço entre o perfil e a
+        descritiva, e `Peso` + `(kg)` em duas linhas (o Alt+Enter do Excel) partia o
+        comentário das tabelas. O que mudou viaja na `Leitura`, para o perfil contar.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text(
+            'id;Idade ;"Peso\n(kg)"; sexo;pressão sistólica\n1;30;70,5;F;120\n',
+            encoding="utf-8",
+        )
+        quadro, leitura = abrir_arquivo(caminho)
+        assert list(quadro.columns) == ["id", "Idade", "Peso (kg)", "sexo", "pressão sistólica"]
+        assert leitura.nomes_ajustados == (
+            ("Idade ", "Idade"),
+            ("Peso\n(kg)", "Peso (kg)"),
+            (" sexo", "sexo"),
+        )
+
+    def test_o_nome_que_colidiria_com_outro_fica_como_veio(self, tmp_path):
+        """
+        `sexo` e `sexo ` são duas colunas no arquivo. Limpar a segunda juntaria as
+        duas numa variável só — a colisão é o `cabecalho_repetido` do perfil.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text("sexo;sexo ;idade \nF;M;30\n", encoding="utf-8")
+        quadro, leitura = abrir_arquivo(caminho)
+        assert list(quadro.columns) == ["sexo", "sexo ", "idade"]
+        assert leitura.nomes_ajustados == (("idade ", "idade"),)
+
+    def test_o_nome_de_coluna_do_xlsx_tambem(self, tmp_path):
+        caminho = tmp_path / "b.xlsx"
+        bancos.completo().rename(columns={"idade": " idade\n(anos) "}).to_excel(
+            caminho, index=False
+        )
+        quadro, leitura = abrir_arquivo(caminho)
+        assert "idade (anos)" in quadro.columns
+        assert leitura.nomes_ajustados == ((" idade\n(anos) ", "idade (anos)"),)
+
     def test_csv_sem_nenhuma_linha_de_dados(self, tmp_path):
         caminho = tmp_path / "b.csv"
         caminho.write_text("nome;idade\n", encoding="utf-8", newline="\n")

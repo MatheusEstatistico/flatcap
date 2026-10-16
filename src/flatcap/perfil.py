@@ -475,7 +475,9 @@ def perfilar(banco: Banco, ficha: Ficha, quando: datetime | None = None) -> Perf
     )
 
     duplicadas = int(quadro.duplicated().sum())
-    achados = _achados_gerais(quadro, colunas, duplicadas, linhas)
+    achados = _achados_gerais(
+        quadro, colunas, duplicadas, linhas, banco.leitura.nomes_ajustados
+    )
     achados += tuple(achado for coluna in colunas for achado in coluna.achados)
 
     return Perfil(
@@ -606,10 +608,18 @@ def _perfilar_coluna(serie: pd.Series, nome: object, posicao: int, linhas: int) 
 
 
 def _achados_gerais(
-    quadro: pd.DataFrame, colunas: tuple[Coluna, ...], duplicadas: int, linhas: int
+    quadro: pd.DataFrame,
+    colunas: tuple[Coluna, ...],
+    duplicadas: int,
+    linhas: int,
+    ajustados: tuple[tuple[str, str], ...] = (),
 ) -> tuple[Achado, ...]:
     """
     O que se vê olhando o banco inteiro, e não uma coluna de cada vez.
+
+    `ajustados` são os nomes de coluna que o leitor limpou (`banco.nome_de_coluna`):
+    o quadro já chega com o nome novo, e é por aqui que o antigo continua aparecendo
+    no checklist.
     """
     achados: list[Achado] = []
 
@@ -664,19 +674,29 @@ def _achados_gerais(
             )
         )
 
+    # Os que o leitor limpou, com o nome de antes e o de agora; e os que ficaram como
+    # vieram porque a limpeza os faria colidir com outra coluna.
+    limpos = [f"{antes!r} → {depois}" for antes, depois in ajustados]
     com_espaco = [nome for nome in nomes if nome != nome.strip() or "\n" in nome]
-    if com_espaco:
+    if limpos or com_espaco:
         achados.append(
             Achado(
                 codigo="cabecalho_com_espaco",
                 gravidade=NOTA,
-                titulo=f"{len(com_espaco)} nome(s) de coluna com espaço ou quebra de linha",
-                detalhe=(
-                    "O nome vai para o `dicionario.csv` exatamente como está aqui, "
-                    "inclusive o espaço — que é invisível na tela e faz a variável parecer "
-                    "não encontrada. Vale pedir a limpeza."
+                titulo=(
+                    f"{len(limpos) + len(com_espaco)} nome(s) de coluna com espaço ou "
+                    "quebra de linha"
                 ),
-                exemplos=tuple(repr(nome) for nome in com_espaco[:LIMITE_EXEMPLOS]),
+                detalhe=(
+                    "O leitor tirou o espaço das pontas e trocou a quebra de linha por "
+                    "um espaço: é com o nome da direita que a variável aparece no "
+                    f"`{ARQUIVO_DICIONARIO}`, nas listas do `projeto.yaml` e no "
+                    "relatório. Um nome que ficaria igual ao de outra coluna fica como "
+                    "veio, e vale pedir a limpeza."
+                ),
+                exemplos=tuple(
+                    (limpos + [repr(nome) for nome in com_espaco])[:LIMITE_EXEMPLOS]
+                ),
             )
         )
 

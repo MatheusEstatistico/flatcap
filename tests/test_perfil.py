@@ -265,6 +265,23 @@ class TestDetectoresNota:
         quadro = bancos.completo().rename(columns={"sexo": "sexo "})
         assert "cabecalho_com_espaco" in _codigos(perfilado(quadro))
 
+    def test_o_nome_que_o_leitor_limpou_aparece_com_o_de_antes(self, tmp_path):
+        """
+        Desde a 1.14.1 o leitor limpa o nome (`banco.nome_de_coluna`), e o quadro já
+        chega com `idade`. A nota continua — é ela que conta ao cliente que o
+        cabeçalho veio com `idade ` — e mostra os dois nomes.
+        """
+        from dataclasses import replace
+
+        banco = _banco(bancos.completo(), tmp_path)
+        banco = replace(
+            banco, leitura=replace(banco.leitura, nomes_ajustados=(("idade ", "idade"),))
+        )
+        perfil = perfilar(banco, _ficha(tmp_path))
+        achado = next(a for a in perfil.achados if a.codigo == "cabecalho_com_espaco")
+        assert achado.gravidade == NOTA
+        assert achado.exemplos == ("'idade ' → idade",)
+
     def test_banco_limpo_nao_dispara_nada_alem_da_data(self, perfilado):
         """
         A data escrita como texto é inevitável num `.csv`. Fora ela, o banco de

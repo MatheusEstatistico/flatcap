@@ -307,8 +307,13 @@ def ler_arquivo(caminho: Path) -> tuple[Linha, ...]:
     vistas: dict[str, int] = {}
 
     for numero, registro in registros:
-        variavel = (registro.get("variavel") or "").strip()
-        if not variavel:
+        # O nome não é aparado: ele é a chave que casa a linha com a coluna do banco,
+        # e o `perfil` o grava exatamente como a coluna se chama — `Idade `, com o
+        # espaço. Até a 1.14.0 a leitura aparava, a descritiva procurava `Idade`, o
+        # perfil acrescentava `Idade ` de novo, e o projeto entrava num laço sem
+        # saída. É a regra do `"Sim "` das categorias, aplicada ao nome.
+        variavel = registro.get("variavel") or ""
+        if not variavel.strip():
             continue
 
         if variavel in vistas:

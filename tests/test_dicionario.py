@@ -266,6 +266,22 @@ class TestIdaEVolta:
         caminho = _escrever(tmp_path, texto_do_dicionario((linha,)))
         assert ler_arquivo(caminho)[0].categorias_ordem == ("Sim ", "Não")
 
+    def test_nome_com_espaco_no_fim_sobrevive(self, tmp_path):
+        """
+        REGRESSÃO da 1.14.0. O `perfil` grava o nome da coluna como ele está no banco
+        — `Idade `, com o espaço — e a leitura o aparava: a descritiva procurava
+        `Idade`, não achava a coluna, mandava rodar o perfil, e o perfil acrescentava
+        `Idade ` de novo. Na rodada seguinte, a variável aparecia duas vezes e o
+        projeto não tinha mais saída. É a mesma razão da categoria acima.
+        """
+        linha = Linha(variavel="Idade ", tipo=NUMERICA)
+        caminho = _escrever(tmp_path, texto_do_dicionario((linha,)))
+        assert ler_arquivo(caminho)[0].variavel == "Idade "
+
+    def test_linha_com_nome_so_de_espacos_continua_ignorada(self, tmp_path):
+        caminho = _escrever(tmp_path, CABECALHO + "  ;;numerica;;;sim\nidade;;numerica;;;sim\n")
+        assert [linha.variavel for linha in ler_arquivo(caminho)] == ["idade"]
+
     def test_o_arquivo_sai_com_bom_para_o_excel_ptbr(self, tmp_path):
         """
         Sem o BOM, `Condição` vira `CondiÃ§Ã£o` no arquivo que você mais edita à

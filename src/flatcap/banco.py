@@ -43,14 +43,25 @@ Não conserta nada. Vírgula decimal, número guardado como texto e data escrita
 mão continuam exatamente como estão no arquivo: quem lê passando `decimal=","`
 não vê o problema, e o problema é justamente o produto da Fase 4. A leitura é
 fiel ao que o cliente mandou, e é o `perfil.py` que aponta o que está torto.
+
+**A exceção é o nome da coluna**, desde a 1.14.1. O espaço nas pontas (`Idade `) e
+a quebra de linha do Alt+Enter do Excel (`Peso` e `(kg)` em duas linhas) não são
+um dado que o cliente mandou: são acidentes do cabeçalho, invisíveis na tela, e
+cada um quebrava uma coisa diferente. O espaço travava o projeto num laço entre o
+`perfil` e a descritiva; a quebra de linha partia o comentário das tabelas, e o
+relatório saía com tabelas de uma coluna só. O leitor tira o espaço das pontas e
+troca a quebra por um espaço — `Idade`, `Peso (kg)` —, e o que ele trocou viaja na
+`Leitura` até o `perfil.md`. Um nome que ficaria igual ao de outra coluna fica como
+veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisão.
 """
 
 from __future__ import annotations
 
 import csv
 import math
+import re
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pandas as pd
@@ -178,6 +189,9 @@ class Leitura:
     separador: str | None = None
     codificacao: str | None = None
     avisos: tuple[str, ...] = ()  # o que o leitor teve de relevar para abrir
+    # Os nomes de coluna que o leitor limpou, como `(antes, depois)`. Ver o fim da
+    # docstring do módulo e o `nome_de_coluna`.
+    nomes_ajustados: tuple[tuple[str, str], ...] = ()
 
     @property
     def formato(self) -> str:
@@ -328,6 +342,10 @@ def abrir_arquivo(caminho: Path, aba: str | None = None) -> tuple[pd.DataFrame, 
     else:
         quadro, leitura = _ler_csv(caminho)
 
+    ajustados = _limpar_nomes(quadro)
+    if ajustados:
+        leitura = replace(leitura, nomes_ajustados=ajustados)
+
     if quadro.shape[1] == 0:
         raise BancoVazioError(
             f"O arquivo `{caminho.name}` abriu sem nenhuma coluna.\n"
@@ -341,6 +359,52 @@ def abrir_arquivo(caminho: Path, aba: str | None = None) -> tuple[pd.DataFrame, 
         )
 
     return quadro, leitura
+
+
+# A quebra de linha dentro de um nome de coluna, com os espaços em volta dela: o
+# `\n` do Alt+Enter, o `\r\n` que alguns exportadores deixam, e os separadores de
+# linha que o `str.splitlines` também reconhece — os que chegam colando do Word.
+_QUEBRA_NO_NOME = re.compile(r"\s*[\n\r\v\f\x1c\x1d\x1e\x85  ]+\s*")
+
+
+def nome_de_coluna(nome: str) -> str:
+    """
+    O nome de uma coluna como o FlatCap o usa: numa linha só e sem espaço nas pontas.
+
+    `"Idade "` vira `Idade`; `"Peso\\n(kg)"` vira `Peso (kg)`. O espaço de dentro do
+    nome fica: `pressão sistólica` é o nome que o cliente escolheu.
+    """
+    return _QUEBRA_NO_NOME.sub(" ", nome).strip()
+
+
+def _limpar_nomes(quadro: pd.DataFrame) -> tuple[tuple[str, str], ...]:
+    """
+    Aplica o `nome_de_coluna` ao cabeçalho, no lugar, e devolve o que mudou.
+
+    Três casos ficam como vieram: o nome que não é texto (o `2023` de um cabeçalho
+    do Excel), o que ficaria vazio (um cabeçalho que é só um espaço, que o `perfil`
+    denuncia como coluna sem nome), e o que ficaria igual ao de outra coluna — `Sexo`
+    e `Sexo ` são duas colunas no arquivo, e renomear a segunda juntaria as duas
+    numa variável só. Essa colisão é o `cabecalho_repetido` do `perfil`.
+    """
+    nomes = list(quadro.columns)
+    ocupados = {str(nome) for nome in nomes}
+    ajustados: list[tuple[str, str]] = []
+
+    for posicao, nome in enumerate(nomes):
+        if not isinstance(nome, str):
+            continue
+        limpo = nome_de_coluna(nome)
+        if not limpo or limpo == nome or limpo in ocupados:
+            continue
+        ocupados.discard(nome)
+        ocupados.add(limpo)
+        nomes[posicao] = limpo
+        ajustados.append((nome, limpo))
+
+    if ajustados:
+        quadro.columns = nomes
+    return tuple(ajustados)
 
 
 # Leitura por formato

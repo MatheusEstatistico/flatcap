@@ -503,6 +503,54 @@ class TestDescritiva:
         assert resultado.exit_code == 1
         assert "flatcap perfil" in _saida(resultado)
 
+    def test_coluna_com_espaco_no_fim_do_nome_nao_trava_o_projeto(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: `Idade ` no banco travava o projeto num laço. A
+        descritiva dizia que o dicionário não conhecia a coluna, o perfil a
+        acrescentava de novo, e na volta a variável aparecia duas vezes.
+        """
+        raiz = projeto_com_banco(bancos.completo().rename(columns={"idade": "idade "}))
+        for comando in ("perfil", "descritiva", "perfil", "descritiva"):
+            resultado = rodar(comando, RECORD_ID, "--sim")
+            assert resultado.exit_code == 0, _saida(resultado)
+        dicionario = (raiz / "dicionario.csv").read_text(encoding="utf-8-sig")
+        assert dicionario.count("\nidade;") == 1
+        assert "idade ;" not in dicionario
+        assert (raiz / PASTA_ANALISES / PASTA_DESCRITIVA / "resumo_idade.csv").is_file()
+
+    def test_quebra_de_linha_no_nome_da_coluna_nao_estraga_o_relatorio(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: o `Peso` e `(kg)` do Alt+Enter no cabeçalho partiam o
+        comentário do `resumo_*.csv` em duas linhas, a segunda sem `#`, e o relatório
+        a tomava pelo cabeçalho da tabela — duas tabelas de uma coluna só no `.docx`,
+        com `# variável: Peso` dentro, e o comando terminando com "Relatório escrito".
+        """
+        from docx import Document
+
+        raiz = projeto_com_banco(bancos.completo().rename(columns={"imc": "imc\n(kg/m²)"}))
+        for comando in ("perfil", "descritiva", "relatorio"):
+            resultado = rodar(comando, RECORD_ID, "--sim")
+            assert resultado.exit_code == 0, _saida(resultado)
+
+        (resumo,) = (raiz / PASTA_ANALISES / PASTA_DESCRITIVA).glob("resumo_imc*.csv")
+        linhas = resumo.read_text(encoding="utf-8-sig").splitlines()
+        assert "# variável: imc (kg/m²)" in linhas
+        cabecalho = next(linha for linha in linhas if not linha.startswith("#"))
+        assert cabecalho == "estatistica;valor"
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        for tabela in documento.tables:
+            if len(tabela.rows) == 1:  # a caixa de aviso, de uma célula só
+                continue
+            assert len(tabela.columns) >= 2
+            assert not any(
+                celula.text.startswith("#") for linha in tabela.rows for celula in linha.cells
+            )
+
     def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_banco):
         projeto_com_banco()
         rodar("perfil", RECORD_ID, "--sim")

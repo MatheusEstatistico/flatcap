@@ -1394,7 +1394,12 @@ def conferir_dicionario(
     conhecidas = {linha.variavel for linha in linhas}
     novas = [str(nome) for nome in banco.quadro.columns if str(nome) not in conhecidas]
     if novas:
-        quais = "\n".join(f"  {nome}" for nome in novas[:20])
+        # Entre aspas quando o nome tem espaço nas pontas ou quebra de linha: `Idade `
+        # impresso solto é indistinguível de `Idade`, e a diferença é a recusa inteira.
+        quais = "\n".join(
+            f"  {nome!r}" if nome != nome.strip() or "\n" in nome else f"  {nome}"
+            for nome in novas[:20]
+        )
         resto = f"\n  ... e mais {len(novas) - 20}" if len(novas) > 20 else ""
         raise desatualizado(
             f"O banco tem {len(novas)} coluna(s) que o {ARQUIVO_DICIONARIO} "
