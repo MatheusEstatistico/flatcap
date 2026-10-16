@@ -26,6 +26,7 @@ from flatcap.banco import (
     FormatoNaoSuportadoError,
     abrir,
     abrir_arquivo,
+    casas_do_resumo,
     formato_de_data,
     versao_vigente,
 )
@@ -359,6 +360,39 @@ class TestAbrir:
         raiz = projeto_com_banco(bancos.com_virgula_decimal())
         banco = abrir(raiz)
         assert str(banco.quadro["imc"].iloc[0]) == "22,5"
+
+
+# ── As casas decimais de uma variável ───────────────────────────────────────
+
+
+class TestCasasDoResumo:
+    """
+    As duas casas de sempre enquanto elas mostram a variável; mais, quando a escala
+    dela é pequena demais para elas. É o conserto do resumo que saía todo `0` numa
+    concentração na casa de 0,003.
+    """
+
+    @pytest.mark.parametrize(
+        ("resumo", "casas"),
+        [
+            ({"desvio": 10.5, "mediana": 70.0, "minimo": 41.0, "maximo": 98.0}, 2),  # peso
+            ({"desvio": 0.08, "mediana": 1.70, "minimo": 1.5, "maximo": 1.9}, 2),  # altura
+            ({"desvio": 0.0006, "mediana": 0.0031, "minimo": 0.002, "maximo": 0.0044}, 5),
+            ({"desvio": 0.008, "mediana": 0.03, "minimo": 0.01, "maximo": 0.05}, 4),
+            ({"desvio": 0.0, "mediana": 0.0, "minimo": 0.0, "maximo": 0.004}, 4),
+            ({"desvio": 3e-17, "mediana": 0.3, "minimo": 0.3, "maximo": 0.3}, 2),  # resto
+            ({"desvio": 0.0, "mediana": 0.0, "minimo": 0.0, "maximo": 0.0}, 2),
+        ],
+    )
+    def test_as_casas_pela_escala(self, resumo, casas):
+        assert casas_do_resumo(resumo) == casas
+
+    def test_sem_resumo_sao_as_de_sempre(self):
+        assert casas_do_resumo(None) == 2
+        assert casas_do_resumo({}) == 2
+
+    def test_o_teto(self):
+        assert casas_do_resumo({"desvio": 1e-30, "mediana": 1e-30, "maximo": 1e-30}) == 12
 
 
 # ── Formato de data ─────────────────────────────────────────────────────────

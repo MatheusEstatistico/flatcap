@@ -72,7 +72,15 @@ from pathlib import Path
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, Leitura, abrir, formato_de_data, serie_de_texto
+from .banco import (
+    CASAS_DECIMAIS,
+    Banco,
+    Leitura,
+    abrir,
+    casas_do_resumo,
+    formato_de_data,
+    serie_de_texto,
+)
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -1204,9 +1212,10 @@ def _exemplos(preenchidos: pd.Series) -> tuple[str, ...]:
     documento que vai para a mesa da reunião custa uma pergunta.
     """
     numerica = _e_numerica(preenchidos)
+    casas = casas_do_resumo(dict(_resumo_numerico(preenchidos))) if numerica else 0
     vistos: list[str] = []
     for valor in preenchidos:
-        texto = _encurtar(_numero(float(valor)) if numerica else str(valor))
+        texto = _encurtar(_numero(float(valor), casas) if numerica else str(valor))
         if texto not in vistos:
             vistos.append(texto)
         if len(vistos) >= LIMITE_EXEMPLOS:
@@ -1331,18 +1340,22 @@ def _porcentagem(fracao: float) -> str:
     return f"{fracao * 100:.0f}%".replace(".", ",")
 
 
-def _numero(valor: float) -> str:
+def _numero(valor: float, casas: int = CASAS_DECIMAIS) -> str:
     """
     Número no formato brasileiro, sem zero à toa: `52,5` e não `52,50`.
+
+    Com as casas da coluna (`banco.casas_do_resumo`): duas, ou mais quando a escala
+    dela é pequena. Até a 1.14.0 eram sempre duas, e uma concentração na casa de
+    0,003 aparecia na reunião como `0 · 0,01` nos exemplos e `0` no resumo.
     """
     if not math.isfinite(valor):
         return "—"
 
-    arredondado = round(valor, 2)
+    arredondado = round(valor, casas)
     if arredondado == int(arredondado) and abs(arredondado) < 1e15:
         return f"{int(arredondado):,}".replace(",", ".")
 
-    inteiro, _, decimal = f"{arredondado:,.2f}".rstrip("0").partition(".")
+    inteiro, _, decimal = f"{arredondado:,.{casas}f}".rstrip("0").partition(".")
     return f"{inteiro.replace(',', '.')},{decimal}"
 
 
@@ -1584,8 +1597,9 @@ def _md_numericas(perfil: Perfil) -> str:
     ]
     for coluna in numericas:
         resumo = coluna.resumo_numerico
+        casas = casas_do_resumo(resumo)
         valores = " | ".join(
-            _numero(resumo[chave])
+            _numero(resumo[chave], casas)
             for chave in ("minimo", "q1", "mediana", "q3", "maximo", "media", "desvio")
         )
         linhas.append(f"| `{_celula(coluna.nome)}` | {coluna.preenchidos} | {valores} |")

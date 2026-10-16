@@ -379,6 +379,21 @@ class TestMedidas:
         resumo = _coluna(perfilado(bancos.completo()), "idade").resumo_numerico
         assert set(resumo) == {"minimo", "q1", "mediana", "q3", "maximo", "media", "desvio"}
 
+    def test_numero_pequeno_nao_vira_zero(self, perfilado):
+        """
+        REGRESSÃO da 1.14.0. Com duas casas fixas, uma concentração na casa de 0,003
+        chegava à reunião como `0 · 0,01` nos exemplos e `0` no resumo das numéricas.
+        """
+        from flatcap.dicionario import fundir
+
+        quadro = bancos.completo()
+        quadro["conc"] = [round(0.0021 + 0.0001 * i, 4) for i in range(len(quadro))]
+        perfil = perfilado(quadro)
+        assert _coluna(perfil, "conc").exemplos[:3] == ("0,0021", "0,0022", "0,0023")
+        texto = texto_do_perfil(perfil, fundir((), ()))
+        linha = next(linha for linha in texto.splitlines() if linha.startswith("| `conc` | 24"))
+        assert "| 0,0021 |" in linha and "| 0,00071 |" in linha
+
     def test_nome_de_coluna_repetido_nao_derruba_o_perfil(self, perfilado):
         """
         O perfil precisa medir justamente o banco que mais precisa de

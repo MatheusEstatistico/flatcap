@@ -1544,6 +1544,24 @@ class TestTabelaDoisGrupos:
             ("", "Masculino", "28", media_dp(masculino), "", "", ""),
         )
 
+    def test_numero_pequeno_nao_vira_zero(self):
+        """
+        REGRESSÃO da 1.14.0. Numa concentração na casa de 0,003, a tabela dizia que a
+        média dos dois grupos era «0 (0)» e que a diferença era «0,00 (0,00 a 0,00)» —
+        ao lado de um p < 0,001. Agora a variável sai com as casas que a escala dela
+        pede, as mesmas do `resumo_<variável>.csv`. Os números são os do
+        `t.test(a, b)` do R: diferença −0,0011, IC de −0,001384 a −0,000816.
+        """
+        a = [0.0031, 0.0029, 0.0035, 0.0027, 0.0033, 0.0030, 0.0028, 0.0034, 0.0032, 0.0026]
+        b = [0.0042, 0.0040, 0.0046, 0.0038, 0.0044, 0.0041, 0.0039, 0.0045, 0.0043, 0.0037]
+        quadro, linhas = _dois(a, b)
+        comparada = _grupos((("y", "g"),), quadro, linhas).variaveis[0]
+        cabeca, grupo_a, grupo_b = linhas_da_tabela(comparada)
+        assert comparada.metodo == T_DE_WELCH
+        assert cabeca[4] == "-0,00110 (-0,00138 a -0,00082)"
+        assert grupo_a[3] == "0,00305 (0,0003)"
+        assert grupo_b[3] == "0,00415 (0,0003)"
+
     def test_sem_teste_a_diferenca_e_o_p_saem_com_o_traco(self):
         """Um grupo só: sem teste nenhum escolhido, e o resumo de sempre, a média."""
         cabeca, *grupos = linhas_da_tabela(_grupos((("imc", "unico"),)).variaveis[0])

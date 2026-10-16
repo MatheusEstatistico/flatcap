@@ -342,6 +342,51 @@ class TestNumerica:
         assert detalhes["origem"] is None
         assert "categórica disfarçada" in detalhes["motivo"]
 
+    def test_numero_pequeno_nao_vira_zero(self, descrita):
+        """
+        REGRESSÃO da 1.14.0. Duas casas fixas faziam uma concentração na casa de 0,003
+        sair `0` no resumo inteiro — mínimo, quartis, média e desvio —, e as faixas
+        sair `[0 a 0)`. Agora a variável ganha as casas que a escala dela pede: aqui,
+        com desvio de 0,0007, cinco.
+        """
+        quadro = bancos.completo()
+        quadro["conc"] = [round(0.0021 + 0.0001 * i, 4) for i in range(len(quadro))]
+        descritiva = descrita(quadro, (Linha(variavel="conc", tipo=NUMERICA),))
+        resumo = _linhas_da_tabela(_tabela(descritiva, "resumo_conc.csv"))
+        assert resumo["mínimo"][1] == "0,0021"
+        assert resumo["mediana"][1] == "0,00325"
+        assert resumo["máximo"][1] == "0,0044"
+        assert resumo["média"][1] == "0,00325"
+        assert resumo["desvio padrão"][1] == "0,00071"
+        faixas = [linha[0] for linha in _tabela(descritiva, "faixas_conc.csv").linhas[:4]]
+        assert faixas[0] == "[0,0021 a 0,00268)"
+        assert len(set(faixas)) == 4
+
+    def test_a_escala_de_sempre_continua_com_duas_casas(self, descrita):
+        """A idade, o peso e o IMC continuam saindo como sempre saíram."""
+        resumo = _linhas_da_tabela(
+            _tabela(
+                descrita(bancos.completo(), (Linha(variavel="imc", tipo=NUMERICA),)),
+                "resumo_imc.csv",
+            )
+        )
+        assert all(len(valor.partition(",")[2]) <= 2 for _, valor in resumo.values())
+
+    def test_o_corte_do_dicionario_sai_como_foi_escrito(self, descrita):
+        """
+        `0,00255` no dicionário: o rótulo da faixa o escreve inteiro, e o manifesto o
+        guarda inteiro — com quatro casas ele virava `0.0026`, e o relatório, que
+        compara os cortes da rodada com o dicionário, acusava um "dicionário mudou"
+        falso em todo documento.
+        """
+        quadro = bancos.completo()
+        quadro["conc"] = [round(0.0021 + 0.0001 * i, 4) for i in range(len(quadro))]
+        linhas = (Linha(variavel="conc", tipo=NUMERICA, faixas=("0", "0,00255", "0,005")),)
+        descritiva = descrita(quadro, linhas)
+        rotulos = [linha[0] for linha in _tabela(descritiva, "faixas_conc.csv").linhas[:2]]
+        assert rotulos == ["[0 a 0,00255)", "[0,00255 a 0,005]"]
+        assert descritiva.variaveis[0].detalhes["faixas"]["cortes"] == [0.0, 0.00255, 0.005]
+
     def test_as_classes_do_histograma_nao_sao_as_faixas_da_tabela(self, descrita):
         """
         A tabela responde "quantos em cada grupo que interessa"; o histograma

@@ -98,7 +98,14 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, abrir, formato_de_data, serie_de_texto, texto_de_numero
+from .banco import (
+    Banco,
+    abrir,
+    casas_do_resumo,
+    formato_de_data,
+    serie_de_texto,
+    texto_de_numero,
+)
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -148,7 +155,7 @@ LIMITE_BARRAS = 15       # acima disso o gráfico junta a cauda em "Outras"
 LIMITE_COLUNAS_TEMPO = 30  # acima disso a distribuição no tempo sai sem gráfico
 MESES_PARA_MENSAL = 24   # período até 24 meses é contado por mês; acima, por ano
 MINIMO_PARA_FAIXAS = 4   # abaixo disso, quartil não descreve nada
-CASAS_RESUMO = 2         # casas decimais das estatísticas
+CASAS_RESUMO = 2         # casas das estatísticas; mais na escala pequena (casas_do_resumo)
 CASAS_PERCENTUAL = 1
 
 FAIXAS_QUARTIS = "quartis"
@@ -754,6 +761,9 @@ def _descrever_numerica(
     avisos: list[str] = []
 
     resumo = _resumo_numerico(valores)
+    # As casas da variável, e não as duas de sempre: numa concentração na casa de
+    # 0,003, duas casas faziam o resumo inteiro sair `0`. Ver `banco.casas_do_resumo`.
+    casas = casas_do_resumo(resumo)
     tabela_resumo = Tabela(
         nome=f"resumo_{slug}.csv",
         especie="resumo",
@@ -763,13 +773,13 @@ def _descrever_numerica(
         linhas=(
             ("n válidos", str(preenchidos)),
             ("faltantes", str(faltantes)),
-            ("mínimo", _numero(resumo["minimo"])),
-            ("q1", _numero(resumo["q1"])),
-            ("mediana", _numero(resumo["mediana"])),
-            ("q3", _numero(resumo["q3"])),
-            ("máximo", _numero(resumo["maximo"])),
-            ("média", _numero(resumo["media"])),
-            ("desvio padrão", _numero(resumo["desvio"])),
+            ("mínimo", _numero(resumo["minimo"], casas)),
+            ("q1", _numero(resumo["q1"], casas)),
+            ("mediana", _numero(resumo["mediana"], casas)),
+            ("q3", _numero(resumo["q3"], casas)),
+            ("máximo", _numero(resumo["maximo"], casas)),
+            ("média", _numero(resumo["media"], casas)),
+            ("desvio padrão", _numero(resumo["desvio"], casas)),
         ),
         notas=(f"denominador: {preenchidos} válidos de {total} linhas.",),
     )
@@ -782,13 +792,24 @@ def _descrever_numerica(
 
     cortes, origem, motivo = _cortes_das_faixas(linha, valores)
     if cortes:
+        # O corte escrito no dicionário sai como foi escrito: `0,00255` impresso com
+        # as casas da variável seria um corte que ninguém pediu.
+        casas_dos_cortes = (
+            max(casas, _casas_escritas(linha.faixas))
+            if origem == FAIXAS_DICIONARIO
+            else casas
+        )
         tabela_faixas, fora_das_faixas = _tabela_de_faixas(
-            linha, slug, valores, cortes, origem, total, faltantes
+            linha, slug, valores, cortes, origem, total, faltantes, casas_dos_cortes
         )
         tabelas.append(tabela_faixas)
         detalhes["faixas"] = {
             "origem": origem,
-            "cortes": [_arredondar(c) for c in cortes],
+            # Os do dicionário vão inteiros: o relatório os compara com o dicionário
+            # de hoje, e `0,00255` gravado como `0.0026` era um "dicionário mudou" falso.
+            "cortes": [
+                float(c) if origem == FAIXAS_DICIONARIO else _arredondar(c) for c in cortes
+            ],
             "abaixo": fora_das_faixas[0],
             "acima": fora_das_faixas[1],
         }
@@ -1017,6 +1038,7 @@ def _tabela_de_faixas(
     origem: str,
     total: int,
     faltantes: int,
+    casas: int = CASAS_RESUMO,
 ) -> tuple[Tabela, tuple[int, int]]:
     """
     Conta os casos em cada faixa, com uma convenção só e escrita no arquivo.
@@ -1036,18 +1058,19 @@ def _tabela_de_faixas(
     for posicao in range(len(cortes) - 1):
         inferior, superior = cortes[posicao], cortes[posicao + 1]
         ultima = posicao == len(cortes) - 2
+        de, ate = _numero(inferior, casas), _numero(superior, casas)
         if ultima:
             dentro = (valores >= inferior) & (valores <= superior)
-            rotulo = f"[{_numero(inferior)} a {_numero(superior)}]"
+            rotulo = f"[{de} a {ate}]"
         else:
             dentro = (valores >= inferior) & (valores < superior)
-            rotulo = f"[{_numero(inferior)} a {_numero(superior)})"
+            rotulo = f"[{de} a {ate})"
         quantos = int(dentro.sum())
         corpo.append(
             (
                 rotulo,
-                _numero(inferior),
-                _numero(superior),
+                de,
+                ate,
                 str(quantos),
                 _percentual(quantos, preenchidos),
                 _percentual(quantos, total),
@@ -1745,10 +1768,29 @@ _percentual = percentual
 
 
 def _arredondar(valor: float | None) -> float | None:
+    """
+    O número do manifesto: quatro casas, ou quatro algarismos significativos quando
+    ele é menor que 0,1 — com quatro casas, o desvio de 0,00062 era gravado `0.0006`.
+    """
     if valor is None:
         return None
     valor = float(valor)
-    return round(valor, 4) if math.isfinite(valor) else None
+    if not math.isfinite(valor):
+        return None
+    if valor == 0:
+        return 0.0
+    return round(valor, max(4, 3 - math.floor(math.log10(abs(valor)))))
+
+
+def _casas_escritas(textos: Sequence[str]) -> int:
+    """
+    As casas do corte mais preciso que o dicionário escreveu: `0,00255` tem cinco.
+    """
+    casas = 0
+    for texto in textos:
+        _, _, decimais = str(texto).strip().replace(",", ".").partition(".")
+        casas = max(casas, len(decimais.rstrip("0")))
+    return casas
 
 
 def _data(valor: Any) -> str:

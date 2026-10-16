@@ -61,6 +61,7 @@ import csv
 import math
 import re
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -712,6 +713,62 @@ def formato_de_data(
 # de código com uma célula vazia — que o `pandas` lê como `float64` —, o perfil
 # propunha `1.0|2.0`, a dica mandava escrever `1.0=Feminino`, e a descritiva, que
 # escreve `1`, saía com `Feminino 0` e `1 15` na mesma tabela.
+
+
+# As casas de sempre, e o teto das que uma variável de escala pequena pode ganhar.
+CASAS_DECIMAIS = 2
+CASAS_NO_MAXIMO = 12
+
+
+def casas_do_resumo(resumo: Mapping[str, float] | None, minimo: int = CASAS_DECIMAIS) -> int:
+    """
+    Quantas casas decimais mostram uma variável numérica: as `minimo` de sempre, ou
+    mais quando a escala dela é pequena demais para elas.
+
+    Até a 1.14.0 as estatísticas saíam sempre com duas casas, e uma concentração na
+    casa de 0,003 virava `0` no resumo inteiro — mínimo, quartis, média e desvio —,
+    as faixas saíam `[0 a 0)`, e a comparação imprimia "média 0 (0)" nos dois grupos
+    e "diferença 0,00 (0,00 a 0,00)" ao lado de um p < 0,001.
+
+    A escala é o menor entre o desvio padrão e a mediana, em valor absoluto — os dois
+    que precisam aparecer: o desvio, para os números da tabela não saírem todos
+    iguais, e a mediana, para o valor típico não sair zero. Enquanto ela for de 0,01
+    para cima, as duas casas de sempre já a mostram, e nada muda — idade, peso, IMC e
+    altura em metros continuam como sempre saíram. Abaixo disso, a variável ganha as
+    casas que mostram dois algarismos da escala: 0,0006 pede cinco.
+
+    `resumo` é o do `descritiva.resumo_numerico` e do `perfil`, com `desvio`,
+    `mediana`, `minimo` e `maximo`; com desvio e mediana zerados, vale o maior valor
+    em módulo. Todas as estatísticas de uma variável saem com as mesmas casas, e por
+    isso a conta é por variável, e não por número.
+    """
+    if not resumo:
+        return minimo
+
+    def modulo(chave: str) -> float:
+        valor = resumo.get(chave)
+        if valor is None:
+            return 0.0
+        valor = abs(float(valor))
+        return valor if math.isfinite(valor) else 0.0
+
+    maior = max(modulo("minimo"), modulo("maximo"))
+    # Um desvio de 1e-17 numa coluna de valores iguais é resto de ponto flutuante, e
+    # não escala: contado, ele pediria doze casas para mostrar `0,3`.
+    desvio = modulo("desvio")
+    if desvio <= 1e-9 * maior:
+        desvio = 0.0
+
+    candidatos = [valor for valor in (desvio, modulo("mediana")) if valor > 0]
+    if not candidatos:
+        candidatos = [maior] if maior > 0 else []
+    if not candidatos:
+        return minimo
+
+    escala = min(candidatos)
+    if escala >= 10.0**-minimo:
+        return minimo
+    return min(CASAS_NO_MAXIMO, max(minimo, 1 - math.floor(math.log10(escala))))
 
 
 def texto_de_numero(valor: float | None, casas: int) -> str:
