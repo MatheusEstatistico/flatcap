@@ -28,6 +28,7 @@ from flatcap.manifesto import (
     ItemDoManifesto,
     Manifesto,
     ManifestoInvalidoError,
+    Tabela,
     de_dicionario,
     ler,
     texto_do_manifesto,
@@ -123,6 +124,41 @@ class TestTexto:
         assert volta.gerado_em == original.gerado_em
         assert [i.variavel for i in volta.itens] == [i.variavel for i in original.itens]
         assert volta.banco == original.banco
+
+
+class TestTabela:
+    def test_quebra_de_linha_nao_sai_do_comentario(self, tmp_path):
+        """
+        REGRESSÃO da 1.14.0. Um título, um nome ou uma nota com quebra de linha — o
+        rótulo digitado com Alt+Enter no dicionário, uma categoria colada do Word —
+        partia o comentário: a segunda metade saía numa linha sem `#`, e o
+        relatório a lia como o cabeçalho da tabela.
+        """
+        from flatcap.relatorio import ler_tabela
+
+        tabela = Tabela(
+            nome="resumo_peso.csv",
+            especie="resumo",
+            variavel="Peso\n(kg)",
+            titulo="Resumo — Peso\r\n(kg)",
+            colunas=("estatistica", "valor"),
+            linhas=(("n válidos", "3"),),
+            notas=("categorias rotuladas: Sim Não\x0bTalvez",),
+        )
+        texto = tabela.texto()
+        linhas = texto.lstrip("﻿").split("\n")
+        assert linhas[:4] == [
+            "# Resumo — Peso (kg)",
+            "# variável: Peso (kg)",
+            "# categorias rotuladas: Sim Não Talvez",
+            "estatistica;valor",
+        ]
+
+        caminho = tmp_path / tabela.nome
+        caminho.write_text(texto, encoding="utf-8")
+        lida = ler_tabela(caminho)
+        assert lida.colunas == ("estatistica", "valor")
+        assert lida.linhas == (("n válidos", "3"),)
 
 
 class TestConsultas:

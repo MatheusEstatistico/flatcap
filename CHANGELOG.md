@@ -7,6 +7,28 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.14.1] — o que chega do Excel
+
+### Corrigido
+- O `.csv` do Excel em português (`;` entre campos e `70,5` na célula) tem as colunas de
+  vírgula decimal lidas como número, a coluna inteira ou nada. O perfil mandava "corrigir"
+  um arquivo certo, e toda análise recusava a coluna. As colunas lidas assim aparecem no
+  cabeçalho do perfil e no manifesto de cada análise.
+- Número de escala pequena — uma concentração na casa de 0,003 — não sai mais zero: a
+  descritiva, a comparação e o perfil escrevem a variável com as casas que a escala dela
+  pede. Idade, peso, IMC e altura em metros continuam com as duas casas de sempre.
+- O corte de faixa escrito no dicionário sai como foi escrito, no rótulo e no manifesto; com
+  mais de quatro casas ele era arredondado, e o relatório acusava um "dicionário mudou"
+  falso.
+- O nome de coluna com espaço nas pontas (`Idade `) não trava mais o projeto num laço entre o
+  perfil e a descritiva, e o com quebra de linha (`Peso` e `(kg)` em duas linhas) não
+  estraga mais as tabelas do relatório: o leitor limpa os dois (`Idade`, `Peso (kg)`), e o
+  perfil mostra o nome de antes.
+- O comentário dos `.csv` das análises sai sempre numa linha só, mesmo quando o rótulo ou uma
+  categoria trazem uma quebra de linha.
+- O achado `virgula_decimal` do perfil mostra o valor que impediu a leitura da coluna, e
+  `1234,5` deixa de ser diagnosticado como "número guardado como texto".
+
 ## [1.14.0] — os testes de postos
 
 ### Acrescentado

@@ -12,6 +12,7 @@ renomeado.
 
 from __future__ import annotations
 
+import pandas as pd
 import pytest
 
 import bancos
@@ -26,6 +27,7 @@ from flatcap.banco import (
     FormatoNaoSuportadoError,
     abrir,
     abrir_arquivo,
+    casas_do_resumo,
     formato_de_data,
     versao_vigente,
 )
@@ -51,6 +53,54 @@ class TestLeituraDeCsv:
         assert leitura.codificacao == "cp1252"
         assert "sexo" in quadro.columns
         assert "José" not in str(quadro.iloc[0, 0])  # só para provar que decodificou
+
+    def test_a_virgula_decimal_do_excel_ptbr_e_lida_como_numero(self, tmp_path):
+        """
+        REGRESSÃO da 1.14.0. `;` entre campos e `22,5` na célula é o que o Excel em
+        português salva, e a vírgula ali é a convenção do arquivo, não um defeito. O
+        leitor entregava a coluna como texto, o perfil mandava o cliente "corrigir"
+        um arquivo certo, e toda análise recusava a coluna.
+        """
+        caminho = bancos.csv_do_excel_ptbr(tmp_path / "b.csv")
+        assert b";22,5;" in caminho.read_bytes()
+        quadro, leitura = abrir_arquivo(caminho)
+        assert pd.api.types.is_float_dtype(quadro["imc"])
+        assert list(quadro["imc"]) == list(bancos.completo()["imc"])
+        assert leitura.virgula_decimal == ("imc",)
+        assert "vírgula decimal em 1 coluna(s)" in leitura.descrever()
+
+    def test_a_virgula_decimal_e_a_coluna_inteira_ou_nada(self, tmp_path):
+        """
+        Um valor que não seja número à brasileira deixa a coluna como veio — e o
+        perfil aponta o que está torto. Converter os que convertem e deixar os outros
+        faltantes é como uma média sai de 80% dos casos sem ninguém saber.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text(
+            "id;peso;renda;cient;nota\n"
+            "1;70,5;1.234,56;1,5E-05;7,5\n"
+            "2;82;999,9;2,0E-05;não sei\n"
+            "3;;12.345,00;;12.5\n",
+            encoding="utf-8",
+        )
+        quadro, leitura = abrir_arquivo(caminho)
+        assert leitura.virgula_decimal == ("peso", "renda", "cient")
+        assert quadro["peso"].tolist()[:2] == [70.5, 82.0]
+        assert pd.isna(quadro["peso"].iloc[2])
+        assert quadro["renda"].tolist() == [1234.56, 999.9, 12345.0]
+        assert quadro["cient"].tolist()[:2] == [1.5e-05, 2e-05]
+        assert quadro["nota"].tolist() == ["7,5", "não sei", "12.5"]
+
+    def test_no_csv_separado_por_virgula_a_virgula_entre_aspas_fica_texto(self, tmp_path):
+        """
+        Com `,` entre campos, `"22,5"` entre aspas é o arquivo salvo numa configuração
+        regional e aberto em outra — o perfil denuncia, e o leitor não adivinha.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text('id,imc\n1,"22,5"\n2,"27,1"\n', encoding="utf-8")
+        quadro, leitura = abrir_arquivo(caminho)
+        assert leitura.virgula_decimal == ()
+        assert quadro["imc"].tolist() == ["22,5", "27,1"]
 
     def test_csv_do_r(self, tmp_path):
         caminho = bancos.csv_do_r(tmp_path / "b.csv")
@@ -126,9 +176,11 @@ class TestLeituraDeCsv:
         era `peso` valendo 5, 2, 0 — e nada na saída denunciava.
         """
         caminho = bancos.csv_de_uma_coluna(tmp_path / "peso.csv")
-        quadro, _ = abrir_arquivo(caminho)
+        quadro, leitura = abrir_arquivo(caminho)
         assert list(quadro.columns) == ["peso"]
-        assert str(quadro["peso"].iloc[0]) == "70,5"
+        # Sem a vírgula como separador, ela é o decimal — desde a 1.14.1, lida como tal.
+        assert quadro["peso"].tolist() == [70.5, 82.3, 61.0]
+        assert leitura.virgula_decimal == ("peso",)
 
     def test_linha_com_campo_a_mais_nao_desloca_as_colunas(self, tmp_path):
         """
@@ -146,6 +198,45 @@ class TestLeituraDeCsv:
         assert list(quadro.columns) == ["nome", "cidade"]
         assert str(quadro["nome"].iloc[0]) == "Ana"
         assert leitura.avisos, "o campo descartado precisa virar aviso, não silêncio"
+
+    def test_o_nome_da_coluna_sai_numa_linha_e_sem_espaco_nas_pontas(self, tmp_path):
+        """
+        REGRESSÃO da 1.14.0. `Idade ` travava o projeto num laço entre o perfil e a
+        descritiva, e `Peso` + `(kg)` em duas linhas (o Alt+Enter do Excel) partia o
+        comentário das tabelas. O que mudou viaja na `Leitura`, para o perfil contar.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text(
+            'id;Idade ;"Peso\n(kg)"; sexo;pressão sistólica\n1;30;70,5;F;120\n',
+            encoding="utf-8",
+        )
+        quadro, leitura = abrir_arquivo(caminho)
+        assert list(quadro.columns) == ["id", "Idade", "Peso (kg)", "sexo", "pressão sistólica"]
+        assert leitura.nomes_ajustados == (
+            ("Idade ", "Idade"),
+            ("Peso\n(kg)", "Peso (kg)"),
+            (" sexo", "sexo"),
+        )
+
+    def test_o_nome_que_colidiria_com_outro_fica_como_veio(self, tmp_path):
+        """
+        `sexo` e `sexo ` são duas colunas no arquivo. Limpar a segunda juntaria as
+        duas numa variável só — a colisão é o `cabecalho_repetido` do perfil.
+        """
+        caminho = tmp_path / "b.csv"
+        caminho.write_text("sexo;sexo ;idade \nF;M;30\n", encoding="utf-8")
+        quadro, leitura = abrir_arquivo(caminho)
+        assert list(quadro.columns) == ["sexo", "sexo ", "idade"]
+        assert leitura.nomes_ajustados == (("idade ", "idade"),)
+
+    def test_o_nome_de_coluna_do_xlsx_tambem(self, tmp_path):
+        caminho = tmp_path / "b.xlsx"
+        bancos.completo().rename(columns={"idade": " idade\n(anos) "}).to_excel(
+            caminho, index=False
+        )
+        quadro, leitura = abrir_arquivo(caminho)
+        assert "idade (anos)" in quadro.columns
+        assert leitura.nomes_ajustados == ((" idade\n(anos) ", "idade (anos)"),)
 
     def test_csv_sem_nenhuma_linha_de_dados(self, tmp_path):
         caminho = tmp_path / "b.csv"
@@ -314,12 +405,55 @@ class TestAbrir:
 
     def test_o_banco_nao_conserta_nada(self, projeto_com_banco):
         """
-        Ninguém passa `decimal=","` aqui: quem lê assim não vê o problema, e o
-        problema é justamente o produto da Fase 4.
+        O número guardado como texto numa planilha continua texto: é o perfil que
+        aponta, e o cliente que corrige. No `.xlsx` a célula `22,5` é texto de
+        verdade — a exceção da vírgula decimal é a do `.csv` separado por `;`.
         """
-        raiz = projeto_com_banco(bancos.com_virgula_decimal())
+        raiz = projeto_com_banco(
+            bancos.com_virgula_decimal(), nome="00_redcap_2026-09-01_banco.xlsx"
+        )
         banco = abrir(raiz)
         assert str(banco.quadro["imc"].iloc[0]) == "22,5"
+        assert banco.leitura.virgula_decimal == ()
+
+    def test_a_virgula_decimal_do_csv_com_ponto_e_virgula_e_numero(self, projeto_com_banco):
+        raiz = projeto_com_banco(bancos.com_virgula_decimal())
+        banco = abrir(raiz)
+        assert banco.quadro["imc"].iloc[0] == 22.5
+        assert banco.leitura.virgula_decimal == ("imc",)
+
+
+# ── As casas decimais de uma variável ───────────────────────────────────────
+
+
+class TestCasasDoResumo:
+    """
+    As duas casas de sempre enquanto elas mostram a variável; mais, quando a escala
+    dela é pequena demais para elas. É o conserto do resumo que saía todo `0` numa
+    concentração na casa de 0,003.
+    """
+
+    @pytest.mark.parametrize(
+        ("resumo", "casas"),
+        [
+            ({"desvio": 10.5, "mediana": 70.0, "minimo": 41.0, "maximo": 98.0}, 2),  # peso
+            ({"desvio": 0.08, "mediana": 1.70, "minimo": 1.5, "maximo": 1.9}, 2),  # altura
+            ({"desvio": 0.0006, "mediana": 0.0031, "minimo": 0.002, "maximo": 0.0044}, 5),
+            ({"desvio": 0.008, "mediana": 0.03, "minimo": 0.01, "maximo": 0.05}, 4),
+            ({"desvio": 0.0, "mediana": 0.0, "minimo": 0.0, "maximo": 0.004}, 4),
+            ({"desvio": 3e-17, "mediana": 0.3, "minimo": 0.3, "maximo": 0.3}, 2),  # resto
+            ({"desvio": 0.0, "mediana": 0.0, "minimo": 0.0, "maximo": 0.0}, 2),
+        ],
+    )
+    def test_as_casas_pela_escala(self, resumo, casas):
+        assert casas_do_resumo(resumo) == casas
+
+    def test_sem_resumo_sao_as_de_sempre(self):
+        assert casas_do_resumo(None) == 2
+        assert casas_do_resumo({}) == 2
+
+    def test_o_teto(self):
+        assert casas_do_resumo({"desvio": 1e-30, "mediana": 1e-30, "maximo": 1e-30}) == 12
 
 
 # ── Formato de data ─────────────────────────────────────────────────────────

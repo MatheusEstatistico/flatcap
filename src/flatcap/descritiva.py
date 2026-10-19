@@ -33,12 +33,18 @@ de cena — e o `perfil.md` já traz os quartis de cada numérica exatamente par
 conversa.
 
 **Numérica que chegou como texto: recusa.** Se o dicionário diz `numerica` e a
-coluna veio como texto — vírgula decimal, número entre aspas, `12 (repetido)` no
-meio —, o comando não gera nada e diz quais são as colunas. A alternativa seria
-converter em silêncio, e converter em silêncio é como uma média sai de 80% dos
-casos sem que nada na tabela diga que os outros 20% não entraram. O caminho é o
-que a Fase 3 já tem: o cliente corrige, você registra a versão nova com
-`flatcap dados adicionar`, e a descritiva roda sobre ela.
+coluna veio como texto — número em célula de texto no `.xlsx`, `12 (repetido)` no
+meio, vírgula decimal ao lado de um `não sei` —, o comando não gera nada e diz
+quais são as colunas. A alternativa seria converter em silêncio, e converter em
+silêncio é como uma média sai de 80% dos casos sem que nada na tabela diga que os
+outros 20% não entraram. O caminho é o que a Fase 3 já tem: o cliente corrige,
+você registra a versão nova com `flatcap dados adicionar`, e a descritiva roda
+sobre ela.
+
+    A vírgula decimal do `.csv` do Excel em português não chega aqui como texto
+    desde a 1.14.1: o `banco.py` a lê como número, a coluna inteira ou nada, e
+    registra quais colunas leu assim. Até a 1.14.0 ela era recusada, e todo
+    projeto que chegava nesse formato — o mais comum — parava na descritiva.
 
     A exceção é a data, e a razão é do formato, não da regra. Em um `.csv` não
     existe tipo data: o `pandas` infere número a partir do texto e nunca infere
@@ -98,7 +104,14 @@ from typing import Any
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, abrir, formato_de_data, serie_de_texto, texto_de_numero
+from .banco import (
+    Banco,
+    abrir,
+    casas_do_resumo,
+    formato_de_data,
+    serie_de_texto,
+    texto_de_numero,
+)
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -148,7 +161,7 @@ LIMITE_BARRAS = 15       # acima disso o gráfico junta a cauda em "Outras"
 LIMITE_COLUNAS_TEMPO = 30  # acima disso a distribuição no tempo sai sem gráfico
 MESES_PARA_MENSAL = 24   # período até 24 meses é contado por mês; acima, por ano
 MINIMO_PARA_FAIXAS = 4   # abaixo disso, quartil não descreve nada
-CASAS_RESUMO = 2         # casas decimais das estatísticas
+CASAS_RESUMO = 2         # casas das estatísticas; mais na escala pequena (casas_do_resumo)
 CASAS_PERCENTUAL = 1
 
 FAIXAS_QUARTIS = "quartis"
@@ -754,6 +767,9 @@ def _descrever_numerica(
     avisos: list[str] = []
 
     resumo = _resumo_numerico(valores)
+    # As casas da variável, e não as duas de sempre: numa concentração na casa de
+    # 0,003, duas casas faziam o resumo inteiro sair `0`. Ver `banco.casas_do_resumo`.
+    casas = casas_do_resumo(resumo)
     tabela_resumo = Tabela(
         nome=f"resumo_{slug}.csv",
         especie="resumo",
@@ -763,13 +779,13 @@ def _descrever_numerica(
         linhas=(
             ("n válidos", str(preenchidos)),
             ("faltantes", str(faltantes)),
-            ("mínimo", _numero(resumo["minimo"])),
-            ("q1", _numero(resumo["q1"])),
-            ("mediana", _numero(resumo["mediana"])),
-            ("q3", _numero(resumo["q3"])),
-            ("máximo", _numero(resumo["maximo"])),
-            ("média", _numero(resumo["media"])),
-            ("desvio padrão", _numero(resumo["desvio"])),
+            ("mínimo", _numero(resumo["minimo"], casas)),
+            ("q1", _numero(resumo["q1"], casas)),
+            ("mediana", _numero(resumo["mediana"], casas)),
+            ("q3", _numero(resumo["q3"], casas)),
+            ("máximo", _numero(resumo["maximo"], casas)),
+            ("média", _numero(resumo["media"], casas)),
+            ("desvio padrão", _numero(resumo["desvio"], casas)),
         ),
         notas=(f"denominador: {preenchidos} válidos de {total} linhas.",),
     )
@@ -782,13 +798,24 @@ def _descrever_numerica(
 
     cortes, origem, motivo = _cortes_das_faixas(linha, valores)
     if cortes:
+        # O corte escrito no dicionário sai como foi escrito: `0,00255` impresso com
+        # as casas da variável seria um corte que ninguém pediu.
+        casas_dos_cortes = (
+            max(casas, _casas_escritas(linha.faixas))
+            if origem == FAIXAS_DICIONARIO
+            else casas
+        )
         tabela_faixas, fora_das_faixas = _tabela_de_faixas(
-            linha, slug, valores, cortes, origem, total, faltantes
+            linha, slug, valores, cortes, origem, total, faltantes, casas_dos_cortes
         )
         tabelas.append(tabela_faixas)
         detalhes["faixas"] = {
             "origem": origem,
-            "cortes": [_arredondar(c) for c in cortes],
+            # Os do dicionário vão inteiros: o relatório os compara com o dicionário
+            # de hoje, e `0,00255` gravado como `0.0026` era um "dicionário mudou" falso.
+            "cortes": [
+                float(c) if origem == FAIXAS_DICIONARIO else _arredondar(c) for c in cortes
+            ],
             "abaixo": fora_das_faixas[0],
             "acima": fora_das_faixas[1],
         }
@@ -1017,6 +1044,7 @@ def _tabela_de_faixas(
     origem: str,
     total: int,
     faltantes: int,
+    casas: int = CASAS_RESUMO,
 ) -> tuple[Tabela, tuple[int, int]]:
     """
     Conta os casos em cada faixa, com uma convenção só e escrita no arquivo.
@@ -1036,18 +1064,19 @@ def _tabela_de_faixas(
     for posicao in range(len(cortes) - 1):
         inferior, superior = cortes[posicao], cortes[posicao + 1]
         ultima = posicao == len(cortes) - 2
+        de, ate = _numero(inferior, casas), _numero(superior, casas)
         if ultima:
             dentro = (valores >= inferior) & (valores <= superior)
-            rotulo = f"[{_numero(inferior)} a {_numero(superior)}]"
+            rotulo = f"[{de} a {ate}]"
         else:
             dentro = (valores >= inferior) & (valores < superior)
-            rotulo = f"[{_numero(inferior)} a {_numero(superior)})"
+            rotulo = f"[{de} a {ate})"
         quantos = int(dentro.sum())
         corpo.append(
             (
                 rotulo,
-                _numero(inferior),
-                _numero(superior),
+                de,
+                ate,
                 str(quantos),
                 _percentual(quantos, preenchidos),
                 _percentual(quantos, total),
@@ -1258,6 +1287,7 @@ def montar_manifesto(
             "planilha": leitura.aba,
             "separador": leitura.separador,
             "codificacao": leitura.codificacao,
+            "virgula_decimal": list(leitura.virgula_decimal),
             "integridade": _integridade(banco.confere),
         },
         dicionario={
@@ -1394,7 +1424,12 @@ def conferir_dicionario(
     conhecidas = {linha.variavel for linha in linhas}
     novas = [str(nome) for nome in banco.quadro.columns if str(nome) not in conhecidas]
     if novas:
-        quais = "\n".join(f"  {nome}" for nome in novas[:20])
+        # Entre aspas quando o nome tem espaço nas pontas ou quebra de linha: `Idade `
+        # impresso solto é indistinguível de `Idade`, e a diferença é a recusa inteira.
+        quais = "\n".join(
+            f"  {nome!r}" if nome != nome.strip() or "\n" in nome else f"  {nome}"
+            for nome in novas[:20]
+        )
         resto = f"\n  ... e mais {len(novas) - 20}" if len(novas) > 20 else ""
         raise desatualizado(
             f"O banco tem {len(novas)} coluna(s) que o {ARQUIVO_DICIONARIO} "
@@ -1430,6 +1465,8 @@ def recusar_incompativeis(
 
     Recusar devolve a decisão para onde ela pertence: o arquivo é do cliente, a
     correção é dele, e a Fase 3 tem o lugar certo para a versão corrigida entrar.
+    A coluna inteira em vírgula decimal de um `.csv` separado por `;` não chega
+    aqui: o `banco.py` já a leu como número, sem perder nenhum valor.
     Se a coluna não vai ser corrigida, o dicionário aceita `categorica` ou
     `ignorar` — as duas são decisões suas, escritas, e nenhuma delas é silenciosa.
 
@@ -1740,10 +1777,29 @@ _percentual = percentual
 
 
 def _arredondar(valor: float | None) -> float | None:
+    """
+    O número do manifesto: quatro casas, ou quatro algarismos significativos quando
+    ele é menor que 0,1 — com quatro casas, o desvio de 0,00062 era gravado `0.0006`.
+    """
     if valor is None:
         return None
     valor = float(valor)
-    return round(valor, 4) if math.isfinite(valor) else None
+    if not math.isfinite(valor):
+        return None
+    if valor == 0:
+        return 0.0
+    return round(valor, max(4, 3 - math.floor(math.log10(abs(valor)))))
+
+
+def _casas_escritas(textos: Sequence[str]) -> int:
+    """
+    As casas do corte mais preciso que o dicionário escreveu: `0,00255` tem cinco.
+    """
+    casas = 0
+    for texto in textos:
+        _, _, decimais = str(texto).strip().replace(",", ".").partition(".")
+        casas = max(casas, len(decimais.rstrip("0")))
+    return casas
 
 
 def _data(valor: Any) -> str:

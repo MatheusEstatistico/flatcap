@@ -72,7 +72,15 @@ from pathlib import Path
 import pandas as pd
 
 from . import __version__
-from .banco import Banco, Leitura, abrir, formato_de_data, serie_de_texto
+from .banco import (
+    CASAS_DECIMAIS,
+    Banco,
+    Leitura,
+    abrir,
+    casas_do_resumo,
+    formato_de_data,
+    serie_de_texto,
+)
 from .dicionario import (
     ARQUIVO_DICIONARIO,
     CATEGORICA,
@@ -227,7 +235,7 @@ _formato_de_data = formato_de_data
 _NUMERO_PTBR = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$|^[+-]?\d+(?:,\d+)?$")
 # `1,234.56` e `1234.56` — o jeito que sai de ferramenta em inglês.
 _NUMERO_EN = re.compile(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^[+-]?\d+(?:\.\d+)?$")
-_VIRGULA_DECIMAL = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})*,\d+$")
+_VIRGULA_DECIMAL = re.compile(r"^[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$")
 _ESPACOS = re.compile(r"\s+")
 
 _MARCA_GERACAO = "<!-- flatcap perfil"
@@ -475,7 +483,9 @@ def perfilar(banco: Banco, ficha: Ficha, quando: datetime | None = None) -> Perf
     )
 
     duplicadas = int(quadro.duplicated().sum())
-    achados = _achados_gerais(quadro, colunas, duplicadas, linhas)
+    achados = _achados_gerais(
+        quadro, colunas, duplicadas, linhas, banco.leitura.nomes_ajustados
+    )
     achados += tuple(achado for coluna in colunas for achado in coluna.achados)
 
     return Perfil(
@@ -606,10 +616,18 @@ def _perfilar_coluna(serie: pd.Series, nome: object, posicao: int, linhas: int) 
 
 
 def _achados_gerais(
-    quadro: pd.DataFrame, colunas: tuple[Coluna, ...], duplicadas: int, linhas: int
+    quadro: pd.DataFrame,
+    colunas: tuple[Coluna, ...],
+    duplicadas: int,
+    linhas: int,
+    ajustados: tuple[tuple[str, str], ...] = (),
 ) -> tuple[Achado, ...]:
     """
     O que se vê olhando o banco inteiro, e não uma coluna de cada vez.
+
+    `ajustados` são os nomes de coluna que o leitor limpou (`banco.nome_de_coluna`):
+    o quadro já chega com o nome novo, e é por aqui que o antigo continua aparecendo
+    no checklist.
     """
     achados: list[Achado] = []
 
@@ -664,19 +682,29 @@ def _achados_gerais(
             )
         )
 
+    # Os que o leitor limpou, com o nome de antes e o de agora; e os que ficaram como
+    # vieram porque a limpeza os faria colidir com outra coluna.
+    limpos = [f"{antes!r} → {depois}" for antes, depois in ajustados]
     com_espaco = [nome for nome in nomes if nome != nome.strip() or "\n" in nome]
-    if com_espaco:
+    if limpos or com_espaco:
         achados.append(
             Achado(
                 codigo="cabecalho_com_espaco",
                 gravidade=NOTA,
-                titulo=f"{len(com_espaco)} nome(s) de coluna com espaço ou quebra de linha",
-                detalhe=(
-                    "O nome vai para o `dicionario.csv` exatamente como está aqui, "
-                    "inclusive o espaço — que é invisível na tela e faz a variável parecer "
-                    "não encontrada. Vale pedir a limpeza."
+                titulo=(
+                    f"{len(limpos) + len(com_espaco)} nome(s) de coluna com espaço ou "
+                    "quebra de linha"
                 ),
-                exemplos=tuple(repr(nome) for nome in com_espaco[:LIMITE_EXEMPLOS]),
+                detalhe=(
+                    "O leitor tirou o espaço das pontas e trocou a quebra de linha por "
+                    "um espaço: é com o nome da direita que a variável aparece no "
+                    f"`{ARQUIVO_DICIONARIO}`, nas listas do `projeto.yaml` e no "
+                    "relatório. Um nome que ficaria igual ao de outra coluna fica como "
+                    "veio, e vale pedir a limpeza."
+                ),
+                exemplos=tuple(
+                    (limpos + [repr(nome) for nome in com_espaco])[:LIMITE_EXEMPLOS]
+                ),
             )
         )
 
@@ -770,6 +798,11 @@ def _achados_textuais(nome: str, textos: list[str]) -> tuple[Achado, ...]:
     if proporcao >= PROPORCAO_PARA_AFIRMAR:
         com_virgula = [texto for texto in numericos if _VIRGULA_DECIMAL.match(texto)]
         if com_virgula:
+            # Num `.csv` separado por `;` a vírgula já é lida como decimal (`banco.py`),
+            # coluna inteira ou nada. Se a coluna chegou aqui como texto, o motivo
+            # costuma ser o valor que não é número, e é ele que precisa aparecer.
+            outros = list(dict.fromkeys(texto for texto in textos if not _e_numero(texto)))
+            quais = f": {' · '.join(outros[:3])}" if outros else ""
             achados.append(
                 Achado(
                     codigo="virgula_decimal",
@@ -778,9 +811,12 @@ def _achados_textuais(nome: str, textos: list[str]) -> tuple[Achado, ...]:
                     titulo="números com vírgula decimal, lidos como texto",
                     detalhe=(
                         "A coluna é numérica, mas a vírgula faz o leitor tratar cada valor "
-                        "como palavra: nenhuma média sai daqui. No Excel isso costuma ser "
-                        "célula formatada como texto, ou o arquivo salvo em uma "
-                        "configuração regional e aberto em outra."
+                        "como palavra: nenhuma média sai daqui. Num `.xlsx`, é célula "
+                        "formatada como texto; num `.csv` separado por vírgula, o arquivo "
+                        "salvo numa configuração regional e aberto em outra. Num `.csv` "
+                        "separado por `;` a vírgula é lida como decimal, a coluna inteira "
+                        "ou nada — se ela chegou aqui como texto, algum valor dela não é "
+                        f"número{quais}."
                     ),
                     exemplos=tuple(com_virgula[:LIMITE_EXEMPLOS]),
                 )
@@ -1184,9 +1220,10 @@ def _exemplos(preenchidos: pd.Series) -> tuple[str, ...]:
     documento que vai para a mesa da reunião custa uma pergunta.
     """
     numerica = _e_numerica(preenchidos)
+    casas = casas_do_resumo(dict(_resumo_numerico(preenchidos))) if numerica else 0
     vistos: list[str] = []
     for valor in preenchidos:
-        texto = _encurtar(_numero(float(valor)) if numerica else str(valor))
+        texto = _encurtar(_numero(float(valor), casas) if numerica else str(valor))
         if texto not in vistos:
             vistos.append(texto)
         if len(vistos) >= LIMITE_EXEMPLOS:
@@ -1311,18 +1348,22 @@ def _porcentagem(fracao: float) -> str:
     return f"{fracao * 100:.0f}%".replace(".", ",")
 
 
-def _numero(valor: float) -> str:
+def _numero(valor: float, casas: int = CASAS_DECIMAIS) -> str:
     """
     Número no formato brasileiro, sem zero à toa: `52,5` e não `52,50`.
+
+    Com as casas da coluna (`banco.casas_do_resumo`): duas, ou mais quando a escala
+    dela é pequena. Até a 1.14.0 eram sempre duas, e uma concentração na casa de
+    0,003 aparecia na reunião como `0 · 0,01` nos exemplos e `0` no resumo.
     """
     if not math.isfinite(valor):
         return "—"
 
-    arredondado = round(valor, 2)
+    arredondado = round(valor, casas)
     if arredondado == int(arredondado) and abs(arredondado) < 1e15:
         return f"{int(arredondado):,}".replace(",", ".")
 
-    inteiro, _, decimal = f"{arredondado:,.2f}".rstrip("0").partition(".")
+    inteiro, _, decimal = f"{arredondado:,.{casas}f}".rstrip("0").partition(".")
     return f"{inteiro.replace(',', '.')},{decimal}"
 
 
@@ -1564,8 +1605,9 @@ def _md_numericas(perfil: Perfil) -> str:
     ]
     for coluna in numericas:
         resumo = coluna.resumo_numerico
+        casas = casas_do_resumo(resumo)
         valores = " | ".join(
-            _numero(resumo[chave])
+            _numero(resumo[chave], casas)
             for chave in ("minimo", "q1", "mediana", "q3", "maximo", "media", "desvio")
         )
         linhas.append(f"| `{_celula(coluna.nome)}` | {coluna.preenchidos} | {valores} |")

@@ -237,7 +237,7 @@ import pandas as pd
 
 from . import __version__
 from .associacao import na_ordem_do_dicionario
-from .banco import Banco, abrir
+from .banco import Banco, abrir, casas_do_resumo
 from .descritiva import arquivamento as arquivamento_da_rodada
 from .descritiva import (
     conferir_dicionario,
@@ -453,7 +453,9 @@ RAZAO_DE_DESVIOS = 2.0
 
 # O intervalo sai com casas fixas: ele não existe na descritiva, e uma célula com
 # `25,8 a 27,02` — um limite com uma casa, outro com duas — não se lê de relance. A
-# média e o desvio não: eles têm de sair letra por letra como no `resumo`.
+# média e o desvio não: eles têm de sair letra por letra como no `resumo`. As casas
+# são duas, ou as da variável quando a escala dela é pequena: até a 1.14.0, uma
+# concentração na casa de 0,003 saía «0,00 (0,00 a 0,00)» ao lado de um p < 0,001.
 CASAS_IC = 2
 
 # O cabeçalho da coluna do resumo, conforme o que ela tem: a média e o desvio nas
@@ -718,6 +720,9 @@ class VariavelComparada:
     rotulo_de_grupo: str = ""
     grupos: tuple[Grupo, ...] = ()
     medidas: tuple[str, ...] = ()
+    # As casas decimais da variável, as do `resumo_<variável>.csv` da descritiva: as
+    # duas de sempre, ou mais numa variável de escala pequena. Ver `_casas_da_coluna`.
+    casas: int = CASAS_IC
 
     @property
     def faltantes(self) -> int:
@@ -927,6 +932,21 @@ class VariavelComparada:
             "shapiro": _shapiro_no_manifesto(self.normal),
             **comum,
         }
+
+
+def _casas_da_coluna(*colunas: pd.Series) -> int:
+    """
+    As casas decimais da variável, decididas como a descritiva as decide: pela coluna
+    inteira, e não pelos casos da comparação — a média da uma amostra sai, letra por
+    letra, a do `resumo_<variável>.csv`, e a de cada grupo sai com as mesmas casas.
+    Nas medidas repetidas, as da medida que pede mais, para a tabela não misturar.
+    """
+    casas = [
+        casas_do_resumo(resumo_numerico(coluna.dropna().astype("float64")))
+        for coluna in colunas
+        if coluna is not None and coluna.notna().any()
+    ]
+    return max(casas, default=CASAS_IC)
 
 
 def _resumo_no_manifesto(resumo: dict[str, float] | None) -> dict[str, float | None]:
@@ -1298,6 +1318,7 @@ def _comparar_uma_amostra(
         "distintos": int(valores.nunique()),
         "delineamento": UMA_AMOSTRA,
         "resumo": resumo_numerico(valores) if validos else None,
+        "casas": _casas_da_coluna(serie),
     }
     nome = f"`{linha.variavel}`"
 
@@ -1594,6 +1615,7 @@ def _comparar_grupos(
         "delineamento": delineamento,
         "variavel_de_grupo": de_grupo.variavel,
         "rotulo_de_grupo": _rotulo(de_grupo),
+        "casas": _casas_da_coluna(serie),
     }
     nome = f"`{linha.variavel}` por `{de_grupo.variavel}`"
 
@@ -1890,6 +1912,7 @@ def _aviso_de_variancias(
         return ""
     maior = max(desvios, key=lambda par: par[1])
     menor = min(desvios, key=lambda par: par[1])
+    casas = max((casas_do_resumo(grupo.resumo) for grupo in grupos), default=CASAS_IC)
     parametrico = REGRA[delineamento][0]
     falta = "" if _disponivel(delineamento, parametrico) else (
         ", que ainda não está no FlatCap,"
@@ -1902,8 +1925,8 @@ def _aviso_de_variancias(
     if razao < RAZAO_DE_DESVIOS:
         return ""
     return (
-        f"{suposto}, e o desvio padrão de {maior[0]} ({numero(maior[1])}) é "
-        f"{numero(razao, 1)} vezes o de {menor[0]} ({numero(menor[1])}). {outro}"
+        f"{suposto}, e o desvio padrão de {maior[0]} ({numero(maior[1], casas)}) é "
+        f"{numero(razao, 1)} vezes o de {menor[0]} ({numero(menor[1], casas)}). {outro}"
     )
 
 
@@ -1996,6 +2019,7 @@ def _comparar_repetidas(
         "distintos": distintos,
         "delineamento": REPETIDAS,
         "medidas": tuple(linha.variavel for linha in medidas),
+        "casas": _casas_da_coluna(*colunas),
     }
     nome = f"`{_pedido_de(pergunta).escrito}`"
 
@@ -2265,7 +2289,7 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
                 variavel.rotulo,
                 str(variavel.validos),
                 _resumo_da_linha(variavel, variavel.resumo),
-                _intervalo(_ic_da_tabela(resultado)),
+                _intervalo(_ic_da_tabela(resultado), variavel.casas),
                 _referencia_em_texto(variavel.referencia or 0.0),
                 variavel.celula_do_teste,
                 p,
@@ -2292,7 +2316,7 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
         variavel.rotulo_de_grupo,
         str(variavel.validos),
         "",
-        _diferenca(resultado),
+        _diferenca(resultado, variavel.casas),
         variavel.celula_do_teste,
         p,
     )
@@ -2322,8 +2346,8 @@ def _resumo_da_linha(variavel: VariavelComparada, resumo: dict[str, float] | Non
     quando não há teste nenhum, que é como a tabela sempre resumiu.
     """
     if _de_postos(variavel):
-        return _mediana_e_quartis(resumo)
-    return _media_e_desvio(resumo)
+        return _mediana_e_quartis(resumo, variavel.casas)
+    return _media_e_desvio(resumo, variavel.casas)
 
 
 def _coluna_do_resumo(variaveis: Sequence[VariavelComparada]) -> str:
@@ -3426,6 +3450,7 @@ def montar_manifesto(comparacao: Comparacao, linhas: Sequence[Linha]) -> Manifes
             "planilha": leitura.aba,
             "separador": leitura.separador,
             "codificacao": leitura.codificacao,
+            "virgula_decimal": list(leitura.virgula_decimal),
             "integridade": _integridade(banco.confere),
         },
         dicionario={
@@ -3801,36 +3826,36 @@ def _estatistica_em_texto(resultado: Resultado) -> str:
     return texto
 
 
-def _media_e_desvio(resumo: dict[str, float] | None) -> str:
+def _media_e_desvio(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
     """
     `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
-    pelo mesmo `numero()`.
+    pelo mesmo `numero()` e com as mesmas casas.
     """
     if not resumo:
         return _AUSENTE
-    return f"{numero(resumo['media'])} ({numero(resumo['desvio'])})"
+    return f"{numero(resumo['media'], casas)} ({numero(resumo['desvio'], casas)})"
 
 
-def _mediana_e_quartis(resumo: dict[str, float] | None) -> str:
+def _mediana_e_quartis(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
     """
     `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
-    escreve, pelo mesmo `numero()`, com os quartis entre colchetes e o `a` do intervalo.
+    escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
+    colchetes e o `a` do intervalo.
     """
     if not resumo:
         return _AUSENTE
-    return (
-        f"{numero(resumo['mediana'])} [{numero(resumo['q1'])} a {numero(resumo['q3'])}]"
-    )
+    mediana, q1, q3 = (numero(resumo[chave], casas) for chave in ("mediana", "q1", "q3"))
+    return f"{mediana} [{q1} a {q3}]"
 
 
-def _intervalo(intervalo: tuple[float, float] | None) -> str:
+def _intervalo(intervalo: tuple[float, float] | None, casas: int = CASAS_IC) -> str:
     if intervalo is None:
         return _AUSENTE
     baixo, alto = intervalo
-    return f"{_fixo(baixo)} a {_fixo(alto)}"
+    return f"{_fixo(baixo, casas)} a {_fixo(alto, casas)}"
 
 
-def _diferenca(resultado: Resultado | None) -> str:
+def _diferenca(resultado: Resultado | None, casas: int = CASAS_IC) -> str:
     """
     `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
     fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
@@ -3839,16 +3864,17 @@ def _diferenca(resultado: Resultado | None) -> str:
     intervalo = _ic_da_tabela(resultado)
     if resultado is None or resultado.estimativa is None or intervalo is None:
         return _AUSENTE
-    return f"{_fixo(resultado.estimativa)} ({_intervalo(intervalo)})"
+    return f"{_fixo(resultado.estimativa, casas)} ({_intervalo(intervalo, casas)})"
 
 
-def _fixo(valor: float) -> str:
+def _fixo(valor: float, casas: int = CASAS_IC) -> str:
     """
-    Duas casas fixas, o hífen do teclado no negativo, e nunca `-0,00` — o formato do
-    coeficiente da correlação: o Excel em português lê a célula como número, e um
-    zero não tem direção.
+    Casas fixas — as duas de sempre, ou as da variável quando a escala dela é pequena
+    —, o hífen do teclado no negativo, e nunca `-0,00` — o formato do coeficiente da
+    correlação: o Excel em português lê a célula como número, e um zero não tem
+    direção.
     """
-    texto = f"{valor:.{CASAS_IC}f}"
+    texto = f"{valor:.{max(casas, CASAS_IC)}f}"
     if float(texto) == 0:
         texto = texto.lstrip("-")
     return texto.replace(".", ",")

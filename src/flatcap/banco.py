@@ -43,14 +43,40 @@ Não conserta nada. Vírgula decimal, número guardado como texto e data escrita
 mão continuam exatamente como estão no arquivo: quem lê passando `decimal=","`
 não vê o problema, e o problema é justamente o produto da Fase 4. A leitura é
 fiel ao que o cliente mandou, e é o `perfil.py` que aponta o que está torto.
+
+**A exceção é o nome da coluna**, desde a 1.14.1. O espaço nas pontas (`Idade `) e
+a quebra de linha do Alt+Enter do Excel (`Peso` e `(kg)` em duas linhas) não são
+um dado que o cliente mandou: são acidentes do cabeçalho, invisíveis na tela, e
+cada um quebrava uma coisa diferente. O espaço travava o projeto num laço entre o
+`perfil` e a descritiva; a quebra de linha partia o comentário das tabelas, e o
+relatório saía com tabelas de uma coluna só. O leitor tira o espaço das pontas e
+troca a quebra por um espaço — `Idade`, `Peso (kg)` —, e o que ele trocou viaja na
+`Leitura` até o `perfil.md`. Um nome que ficaria igual ao de outra coluna fica como
+veio: renomear seria juntar duas variáveis, e o `perfil` já denuncia a colisão.
+
+**E a vírgula decimal de um `.csv` que não é separado por vírgula**, também desde a
+1.14.1. É o formato que o Excel em português salva — `;` entre campos, `70,5` na
+célula —, e nele a vírgula não é defeito: é a convenção do arquivo. Até a 1.14.0 o
+leitor entregava a coluna como texto, o perfil mandava o cliente "corrigir" um
+arquivo certo, e toda análise recusava a coluna. A razão é a mesma da exceção das
+datas na descritiva: exigir do cliente o conserto de um formato que o Excel dele
+sempre escreve é exigir o impossível. A conversão tem três condições que a mantêm
+honesta. É **da coluna inteira ou de nada**: um valor que não seja número à
+brasileira — `não sei`, `12.5`, `70,5 kg` — deixa a coluna como veio, e o perfil
+aponta o que está torto como sempre apontou. Só vale **quando a vírgula não separa
+campos**: num `.csv` com `,`, um `"70,5"` entre aspas é outra história, e fica
+texto. E **fica escrita**: as colunas convertidas viajam na `Leitura` até o
+cabeçalho do `perfil.md` e o manifesto de cada análise.
 """
 
 from __future__ import annotations
 
 import csv
 import math
+import re
 import warnings
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 import pandas as pd
@@ -178,6 +204,11 @@ class Leitura:
     separador: str | None = None
     codificacao: str | None = None
     avisos: tuple[str, ...] = ()  # o que o leitor teve de relevar para abrir
+    # Os nomes de coluna que o leitor limpou, como `(antes, depois)`. Ver o fim da
+    # docstring do módulo e o `nome_de_coluna`.
+    nomes_ajustados: tuple[tuple[str, str], ...] = ()
+    # As colunas lidas com vírgula decimal. Ver o fim da docstring do módulo.
+    virgula_decimal: tuple[str, ...] = ()
 
     @property
     def formato(self) -> str:
@@ -199,6 +230,8 @@ class Leitura:
             partes.append(f"separador {legivel}")
         if self.codificacao:
             partes.append(f"codificação {self.codificacao}")
+        if self.virgula_decimal:
+            partes.append(f"vírgula decimal em {len(self.virgula_decimal)} coluna(s)")
         return " · ".join(partes)
 
 
@@ -328,6 +361,11 @@ def abrir_arquivo(caminho: Path, aba: str | None = None) -> tuple[pd.DataFrame, 
     else:
         quadro, leitura = _ler_csv(caminho)
 
+    ajustados = _limpar_nomes(quadro)
+    virgula = _ler_virgula_decimal(quadro, leitura.separador)
+    if ajustados or virgula:
+        leitura = replace(leitura, nomes_ajustados=ajustados, virgula_decimal=virgula)
+
     if quadro.shape[1] == 0:
         raise BancoVazioError(
             f"O arquivo `{caminho.name}` abriu sem nenhuma coluna.\n"
@@ -341,6 +379,100 @@ def abrir_arquivo(caminho: Path, aba: str | None = None) -> tuple[pd.DataFrame, 
         )
 
     return quadro, leitura
+
+
+# A quebra de linha dentro de um nome de coluna, com os espaços em volta dela: o
+# `\n` do Alt+Enter, o `\r\n` que alguns exportadores deixam, e os separadores de
+# linha que o `str.splitlines` também reconhece — os que chegam colando do Word.
+_QUEBRA_NO_NOME = re.compile(r"\s*[\n\r\v\f\x1c\x1d\x1e\x85  ]+\s*")
+
+
+def nome_de_coluna(nome: str) -> str:
+    """
+    O nome de uma coluna como o FlatCap o usa: numa linha só e sem espaço nas pontas.
+
+    `"Idade "` vira `Idade`; `"Peso\\n(kg)"` vira `Peso (kg)`. O espaço de dentro do
+    nome fica: `pressão sistólica` é o nome que o cliente escolheu.
+    """
+    return _QUEBRA_NO_NOME.sub(" ", nome).strip()
+
+
+def _limpar_nomes(quadro: pd.DataFrame) -> tuple[tuple[str, str], ...]:
+    """
+    Aplica o `nome_de_coluna` ao cabeçalho, no lugar, e devolve o que mudou.
+
+    Três casos ficam como vieram: o nome que não é texto (o `2023` de um cabeçalho
+    do Excel), o que ficaria vazio (um cabeçalho que é só um espaço, que o `perfil`
+    denuncia como coluna sem nome), e o que ficaria igual ao de outra coluna — `Sexo`
+    e `Sexo ` são duas colunas no arquivo, e renomear a segunda juntaria as duas
+    numa variável só. Essa colisão é o `cabecalho_repetido` do `perfil`.
+    """
+    nomes = list(quadro.columns)
+    ocupados = {str(nome) for nome in nomes}
+    ajustados: list[tuple[str, str]] = []
+
+    for posicao, nome in enumerate(nomes):
+        if not isinstance(nome, str):
+            continue
+        limpo = nome_de_coluna(nome)
+        if not limpo or limpo == nome or limpo in ocupados:
+            continue
+        ocupados.discard(nome)
+        ocupados.add(limpo)
+        nomes[posicao] = limpo
+        ajustados.append((nome, limpo))
+
+    if ajustados:
+        quadro.columns = nomes
+    return tuple(ajustados)
+
+
+# Um número escrito à brasileira, inteiro numa célula: `70,5`, `-0,25`, `1.234,56`,
+# `1,5E-05` — e o inteiro `70`, que divide a coluna com eles. O ponto só vale como
+# separador de milhar, em grupos de três: `12.5` não casa, e a coluna fica como veio.
+_NUMERO_PT_BR = re.compile(r"[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d+)?(?:[eE][+-]?\d+)?")
+
+
+def _ler_virgula_decimal(quadro: pd.DataFrame, separador: str | None) -> tuple[str, ...]:
+    """
+    Converte, no lugar, as colunas de texto que são inteiras números com vírgula
+    decimal, e devolve os nomes delas. Ver o fim da docstring do módulo.
+
+    Só num `.csv` cujo separador não é a vírgula — no `.xlsx` o número já vem número,
+    e um `"22,5"` lá é uma célula de texto, que o perfil denuncia. A coluna precisa
+    ter pelo menos uma vírgula, e todo valor preenchido precisa casar com
+    `_NUMERO_PT_BR`; se um só não casa, nada muda.
+    """
+    if not separador or separador == ",":
+        return ()
+
+    lidas: list[str] = []
+    for posicao in range(quadro.shape[1]):
+        serie = quadro.iloc[:, posicao]
+        if (
+            pd.api.types.is_numeric_dtype(serie)
+            or pd.api.types.is_bool_dtype(serie)
+            or pd.api.types.is_datetime64_any_dtype(serie)
+        ):
+            continue
+        preenchidos = serie.dropna()
+        if preenchidos.empty or not all(isinstance(valor, str) for valor in preenchidos):
+            continue
+        textos = [valor.strip() for valor in preenchidos]
+        if not any("," in texto for texto in textos):
+            continue
+        if not all(_NUMERO_PT_BR.fullmatch(texto) for texto in textos):
+            continue
+        numeros = serie.map(
+            lambda valor: _numero_pt_br(valor) if isinstance(valor, str) else valor
+        )
+        quadro.isetitem(posicao, pd.to_numeric(numeros).astype("float64"))
+        lidas.append(str(quadro.columns[posicao]))
+    return tuple(lidas)
+
+
+def _numero_pt_br(texto: str) -> float:
+    return float(texto.strip().replace(".", "").replace(",", "."))
 
 
 # Leitura por formato
@@ -648,6 +780,62 @@ def formato_de_data(
 # de código com uma célula vazia — que o `pandas` lê como `float64` —, o perfil
 # propunha `1.0|2.0`, a dica mandava escrever `1.0=Feminino`, e a descritiva, que
 # escreve `1`, saía com `Feminino 0` e `1 15` na mesma tabela.
+
+
+# As casas de sempre, e o teto das que uma variável de escala pequena pode ganhar.
+CASAS_DECIMAIS = 2
+CASAS_NO_MAXIMO = 12
+
+
+def casas_do_resumo(resumo: Mapping[str, float] | None, minimo: int = CASAS_DECIMAIS) -> int:
+    """
+    Quantas casas decimais mostram uma variável numérica: as `minimo` de sempre, ou
+    mais quando a escala dela é pequena demais para elas.
+
+    Até a 1.14.0 as estatísticas saíam sempre com duas casas, e uma concentração na
+    casa de 0,003 virava `0` no resumo inteiro — mínimo, quartis, média e desvio —,
+    as faixas saíam `[0 a 0)`, e a comparação imprimia "média 0 (0)" nos dois grupos
+    e "diferença 0,00 (0,00 a 0,00)" ao lado de um p < 0,001.
+
+    A escala é o menor entre o desvio padrão e a mediana, em valor absoluto — os dois
+    que precisam aparecer: o desvio, para os números da tabela não saírem todos
+    iguais, e a mediana, para o valor típico não sair zero. Enquanto ela for de 0,01
+    para cima, as duas casas de sempre já a mostram, e nada muda — idade, peso, IMC e
+    altura em metros continuam como sempre saíram. Abaixo disso, a variável ganha as
+    casas que mostram dois algarismos da escala: 0,0006 pede cinco.
+
+    `resumo` é o do `descritiva.resumo_numerico` e do `perfil`, com `desvio`,
+    `mediana`, `minimo` e `maximo`; com desvio e mediana zerados, vale o maior valor
+    em módulo. Todas as estatísticas de uma variável saem com as mesmas casas, e por
+    isso a conta é por variável, e não por número.
+    """
+    if not resumo:
+        return minimo
+
+    def modulo(chave: str) -> float:
+        valor = resumo.get(chave)
+        if valor is None:
+            return 0.0
+        valor = abs(float(valor))
+        return valor if math.isfinite(valor) else 0.0
+
+    maior = max(modulo("minimo"), modulo("maximo"))
+    # Um desvio de 1e-17 numa coluna de valores iguais é resto de ponto flutuante, e
+    # não escala: contado, ele pediria doze casas para mostrar `0,3`.
+    desvio = modulo("desvio")
+    if desvio <= 1e-9 * maior:
+        desvio = 0.0
+
+    candidatos = [valor for valor in (desvio, modulo("mediana")) if valor > 0]
+    if not candidatos:
+        candidatos = [maior] if maior > 0 else []
+    if not candidatos:
+        return minimo
+
+    escala = min(candidatos)
+    if escala >= 10.0**-minimo:
+        return minimo
+    return min(CASAS_NO_MAXIMO, max(minimo, 1 - math.floor(math.log10(escala))))
 
 
 def texto_de_numero(valor: float | None, casas: int) -> str:

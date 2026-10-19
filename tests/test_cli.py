@@ -490,18 +490,86 @@ class TestDescritiva:
         assert not list(pasta.glob("*.png"))
 
     def test_numerica_como_texto_sai_com_um(self, rodar, projeto_com_banco):
-        projeto_com_banco(bancos.com_virgula_decimal())
+        # No `.xlsx`, `22,5` é célula de texto: o perfil sugere `numerica`, e a
+        # descritiva recusa. (No `.csv` com `;`, ela é lida como número.)
+        projeto_com_banco(bancos.com_virgula_decimal(), nome="00_redcap_2026-09-01_banco.xlsx")
         rodar("perfil", RECORD_ID, "--sim")
-        # o perfil sugere `numerica` para a coluna de vírgula decimal
         resultado = rodar("descritiva", RECORD_ID)
         assert resultado.exit_code == 1
         assert "Descritiva" in _saida(resultado)
+
+    def test_o_csv_do_excel_em_portugues_vai_do_perfil_a_descritiva(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: o `.csv` com `;` e vírgula decimal — o formato mais
+        comum de chegar — parava na descritiva, que recusava `imc` como "numérica que
+        chegou como texto". Agora ele passa, e o perfil diz que leu a vírgula.
+        """
+        raiz = projeto_com_banco(bancos.com_virgula_decimal())
+        perfil = rodar("perfil", RECORD_ID, "--sim")
+        assert perfil.exit_code == 0
+        assert "vírgula decimal em 1 coluna(s)" in _saida(perfil)
+        assert "vírgula decimal em 1 coluna(s)" in (raiz / "perfil.md").read_text(
+            encoding="utf-8"
+        )
+        assert rodar("descritiva", RECORD_ID, "--sim").exit_code == 0
+        resumo = raiz / PASTA_ANALISES / PASTA_DESCRITIVA / "resumo_imc.csv"
+        assert "média;" in resumo.read_text(encoding="utf-8-sig")
 
     def test_sem_dicionario_sai_com_um(self, rodar, projeto_com_banco):
         projeto_com_banco()
         resultado = rodar("descritiva", RECORD_ID)
         assert resultado.exit_code == 1
         assert "flatcap perfil" in _saida(resultado)
+
+    def test_coluna_com_espaco_no_fim_do_nome_nao_trava_o_projeto(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: `Idade ` no banco travava o projeto num laço. A
+        descritiva dizia que o dicionário não conhecia a coluna, o perfil a
+        acrescentava de novo, e na volta a variável aparecia duas vezes.
+        """
+        raiz = projeto_com_banco(bancos.completo().rename(columns={"idade": "idade "}))
+        for comando in ("perfil", "descritiva", "perfil", "descritiva"):
+            resultado = rodar(comando, RECORD_ID, "--sim")
+            assert resultado.exit_code == 0, _saida(resultado)
+        dicionario = (raiz / "dicionario.csv").read_text(encoding="utf-8-sig")
+        assert dicionario.count("\nidade;") == 1
+        assert "idade ;" not in dicionario
+        assert (raiz / PASTA_ANALISES / PASTA_DESCRITIVA / "resumo_idade.csv").is_file()
+
+    def test_quebra_de_linha_no_nome_da_coluna_nao_estraga_o_relatorio(
+        self, rodar, projeto_com_banco
+    ):
+        """
+        REGRESSÃO da 1.14.0: o `Peso` e `(kg)` do Alt+Enter no cabeçalho partiam o
+        comentário do `resumo_*.csv` em duas linhas, a segunda sem `#`, e o relatório
+        a tomava pelo cabeçalho da tabela — duas tabelas de uma coluna só no `.docx`,
+        com `# variável: Peso` dentro, e o comando terminando com "Relatório escrito".
+        """
+        from docx import Document
+
+        raiz = projeto_com_banco(bancos.completo().rename(columns={"imc": "imc\n(kg/m²)"}))
+        for comando in ("perfil", "descritiva", "relatorio"):
+            resultado = rodar(comando, RECORD_ID, "--sim")
+            assert resultado.exit_code == 0, _saida(resultado)
+
+        (resumo,) = (raiz / PASTA_ANALISES / PASTA_DESCRITIVA).glob("resumo_imc*.csv")
+        linhas = resumo.read_text(encoding="utf-8-sig").splitlines()
+        assert "# variável: imc (kg/m²)" in linhas
+        cabecalho = next(linha for linha in linhas if not linha.startswith("#"))
+        assert cabecalho == "estatistica;valor"
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        for tabela in documento.tables:
+            if len(tabela.rows) == 1:  # a caixa de aviso, de uma célula só
+                continue
+            assert len(tabela.columns) >= 2
+            assert not any(
+                celula.text.startswith("#") for linha in tabela.rows for celula in linha.cells
+            )
 
     def test_regerar_avisa_que_arquivou(self, rodar, projeto_com_banco):
         projeto_com_banco()

@@ -163,6 +163,28 @@ class TestDetectoresCorrigir:
         assert achado.variavel == "imc"
         assert achado.exemplos, "sem exemplo o cliente procura; com exemplo ele acha"
 
+    def test_a_virgula_decimal_aponta_o_valor_que_nao_e_numero(self, perfilado):
+        """
+        Num `.csv` separado por `;` a vírgula decimal já é lida como número, a coluna
+        inteira ou nada. Se a coluna chegou como texto, o motivo costuma ser o valor
+        que não é número — e o achado o mostra, em vez de culpar a formatação.
+        """
+        quadro = bancos.com_virgula_decimal()
+        quadro.loc[0, "imc"] = "não sei"
+        achado = next(a for a in perfilado(quadro).achados if a.codigo == "virgula_decimal")
+        assert achado.detalhe.endswith("algum valor dela não é número: não sei.")
+
+    def test_1234_virgula_5_tambem_e_virgula_decimal(self, perfilado):
+        """
+        REGRESSÃO da 1.14.0: `1234,5`, sem o ponto de milhar, era diagnosticado como
+        "célula formatada como texto" — o `numero_como_texto` —, e não como vírgula.
+        """
+        quadro = bancos.completo()
+        quadro["renda"] = [f"{1500 + 37.5 * i:.1f}".replace(".", ",") for i in range(len(quadro))]
+        codigos = _codigos(perfilado(quadro))
+        assert "virgula_decimal" in codigos
+        assert "numero_como_texto" not in codigos
+
     def test_numero_como_texto(self, perfilado):
         perfil = perfilado(bancos.com_numero_como_texto())
         assert "numero_como_texto" in _codigos(perfil)
@@ -265,6 +287,23 @@ class TestDetectoresNota:
         quadro = bancos.completo().rename(columns={"sexo": "sexo "})
         assert "cabecalho_com_espaco" in _codigos(perfilado(quadro))
 
+    def test_o_nome_que_o_leitor_limpou_aparece_com_o_de_antes(self, tmp_path):
+        """
+        Desde a 1.14.1 o leitor limpa o nome (`banco.nome_de_coluna`), e o quadro já
+        chega com `idade`. A nota continua — é ela que conta ao cliente que o
+        cabeçalho veio com `idade ` — e mostra os dois nomes.
+        """
+        from dataclasses import replace
+
+        banco = _banco(bancos.completo(), tmp_path)
+        banco = replace(
+            banco, leitura=replace(banco.leitura, nomes_ajustados=(("idade ", "idade"),))
+        )
+        perfil = perfilar(banco, _ficha(tmp_path))
+        achado = next(a for a in perfil.achados if a.codigo == "cabecalho_com_espaco")
+        assert achado.gravidade == NOTA
+        assert achado.exemplos == ("'idade ' → idade",)
+
     def test_banco_limpo_nao_dispara_nada_alem_da_data(self, perfilado):
         """
         A data escrita como texto é inevitável num `.csv`. Fora ela, o banco de
@@ -361,6 +400,21 @@ class TestMedidas:
     def test_o_resumo_das_numericas_tem_as_sete_estatisticas(self, perfilado):
         resumo = _coluna(perfilado(bancos.completo()), "idade").resumo_numerico
         assert set(resumo) == {"minimo", "q1", "mediana", "q3", "maximo", "media", "desvio"}
+
+    def test_numero_pequeno_nao_vira_zero(self, perfilado):
+        """
+        REGRESSÃO da 1.14.0. Com duas casas fixas, uma concentração na casa de 0,003
+        chegava à reunião como `0 · 0,01` nos exemplos e `0` no resumo das numéricas.
+        """
+        from flatcap.dicionario import fundir
+
+        quadro = bancos.completo()
+        quadro["conc"] = [round(0.0021 + 0.0001 * i, 4) for i in range(len(quadro))]
+        perfil = perfilado(quadro)
+        assert _coluna(perfil, "conc").exemplos[:3] == ("0,0021", "0,0022", "0,0023")
+        texto = texto_do_perfil(perfil, fundir((), ()))
+        linha = next(linha for linha in texto.splitlines() if linha.startswith("| `conc` | 24"))
+        assert "| 0,0021 |" in linha and "| 0,00071 |" in linha
 
     def test_nome_de_coluna_repetido_nao_derruba_o_perfil(self, perfilado):
         """
