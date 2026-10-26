@@ -1,0 +1,86 @@
+# =========================================================================
+# FlatCap — o que nunca entra no Git
+# =========================================================================
+#
+# A primeira linha de defesa da LGPD: banco de pesquisa, nome de aluno e
+# relatório de cliente não entram no repositório — nem em repositório
+# privado, porque o histórico do Git é praticamente irreversível. O pre-commit
+# (`sem-dados-de-cliente`) é a segunda: ele barra o `git add -f`.
+
+# --- Credenciais ---------------------------------------------------------
+.env
+.env.*
+!.env.example
+.envrc
+
+# --- Dados e documentos de clientes --------------------------------------
+dados/
+output/
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.ods
+*.csv
+*.tsv
+*.sav
+*.zsav
+*.dta
+*.sas7bdat
+*.rds
+*.RData
+*.rdata
+*.docx
+*.doc
+*.pdf
+
+# Exceções: o que é inventado e precisa ser versionado. O formulário mínimo
+# do REDCap é texto de exemplo, sem dado de ninguém.
+!docs/redcap/*.csv
+# !tests/fixtures/*.csv     # no dia em que existir um fixture .csv
+
+# Os pacotes de entrega (flatcap-*.zip) extraídos por cima da raiz.
+*.zip
+
+# =========================================================================
+# Python
+# =========================================================================
+__pycache__/
+*.py[codz]
+*$py.class
+
+# Ambientes
+.venv/
+venv/
+env/
+ENV/
+
+# Empacotamento
+build/
+dist/
+*.egg-info/
+*.egg
+.eggs/
+wheels/
+pip-wheel-metadata/
+MANIFEST
+
+# Testes, cobertura e ferramentas
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.hypothesis/
+
+# Editores e sistemas
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+~$*

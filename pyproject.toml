@@ -1,0 +1,106 @@
+[build-system]
+# 77 é o primeiro setuptools com a licença como expressão SPDX (PEP 639).
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatcap"
+# A versão mora só no `src/flatcap/__init__.py`: duas cópias já divergiram uma vez.
+dynamic = ["version"]
+description = "Orquestra o fluxo de atendimento estatístico: REDCap -> pastas -> análises -> relatório .docx"
+readme = "README.md"
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "NOTICE.md"]
+authors = [{ name = "Matheus Fernandes", email = "matheusdfernandes@gmail.com" }]
+keywords = [
+  "redcap",
+  "estatística",
+  "bioestatística",
+  "consultoria estatística",
+  "relatório",
+  "docx",
+]
+classifiers = [
+  "Development Status :: 5 - Production/Stable",
+  "Environment :: Console",
+  "Intended Audience :: Healthcare Industry",
+  "Intended Audience :: Science/Research",
+  "Natural Language :: Portuguese (Brazilian)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering :: Information Analysis",
+  "Topic :: Scientific/Engineering :: Medical Science Apps.",
+]
+
+dependencies = [
+  "typer",
+  "rich",
+  "requests",
+  "pandas>=3.0",
+  "openpyxl",
+  "pyyaml",
+  "ruamel.yaml",
+  "python-dotenv",
+  "matplotlib",
+  "python-docx>=1.1",
+  "scipy>=1.11",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+  "ruff>=0.6",
+  "build",
+  "pre-commit",
+]
+
+[project.urls]
+Homepage = "https://github.com/MatheusEstatistico/flatcap"
+Documentation = "https://github.com/MatheusEstatistico/flatcap/blob/main/docs/Doc.Flatcap.md"
+Issues = "https://github.com/MatheusEstatistico/flatcap/issues"
+Changelog = "https://github.com/MatheusEstatistico/flatcap/blob/main/CHANGELOG.md"
+
+# Cria o executável `flatcap` apontando para o objeto `app` do typer.
+[project.scripts]
+flatcap = "flatcap.cli:app"
+
+[tool.setuptools.dynamic]
+version = { attr = "flatcap.__version__" }
+
+# Layout src/: o setuptools só procura pacotes dentro de src/.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+# E/F = pycodestyle+pyflakes, I = ordenação de imports,
+# UP = moderniza sintaxe, B = armadilhas comuns (bugbear).
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.flake8-bugbear]
+# `typer.Option(...)` no valor padrão do parâmetro é como o typer se usa.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
+[tool.ruff.lint.isort]
+# Os ajudantes da pasta tests/ são módulos da casa, não bibliotecas de fora.
+known-first-party = ["flatcap", "conftest", "servidor_falso", "bancos"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Os testes importam o pacote de src/ e os ajudantes (`bancos`, `servidor_falso`) direto.
+pythonpath = ["src", "tests"]
+markers = [
+    "e2e: sobe um REDCap falso em HTTP e roda o flatcap como subprocesso.",
+]
+# `pytest` sem argumento roda a suíte offline; `pytest -m e2e` a ponta a ponta, e
+# `pytest -m ""` as duas.
+addopts = "-m 'not e2e'"

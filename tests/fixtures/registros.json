@@ -1,0 +1,65 @@
+[
+  {
+    "record_id": "40",
+    "intro": "1",
+    "matricula1": "00740",
+    "prof1": "Ana Cláudia Menezes",
+    "matricula2": "",
+    "aluno2": "",
+    "database": "banco_ana.xlsx"
+  },
+  {
+    "record_id": "41",
+    "intro": "2",
+    "matricula1": "",
+    "prof1": "Ana Cláudia Menezes",
+    "matricula2": "20241234",
+    "aluno2": "Bruno de Sá e Silva",
+    "database": "coleta_bruno.csv"
+  },
+  {
+    "record_id": "42",
+    "intro": "1",
+    "matricula1": "00742",
+    "prof1": "José Antônio de Sá",
+    "matricula2": "",
+    "aluno2": "",
+    "database": ""
+  },
+  {
+    "record_id": "43",
+    "intro": "",
+    "matricula1": "",
+    "prof1": "Ana Cláudia Menezes",
+    "matricula2": "20245678",
+    "aluno2": "Maria    Eduarda\tRocha",
+    "database": "planilha.xlsx"
+  },
+  {
+    "record_id": "44",
+    "intro": "2",
+    "matricula1": "",
+    "prof1": "Paulo R. Guimarães Jr.",
+    "matricula2": "",
+    "aluno2": "Thiago Nunes/Neto",
+    "database": ""
+  },
+  {
+    "record_id": "45",
+    "intro": "1",
+    "matricula1": " 00745 ",
+    "prof1": "  Lúcia Helena D'Ávila  ",
+    "matricula2": "",
+    "aluno2": "",
+    "database": "base.xlsx"
+  },
+  {
+    "record_id": "9",
+    "intro": "1",
+    "matricula1": "00009",
+    "prof1": "Ricardo Coelho",
+    "matricula2": "",
+    "aluno2": "",
+    "database": "estudo.xlsx"
+  }
+]
