@@ -7,7 +7,8 @@ estatística que recebe as solicitações pelo REDCap:
 
 > **In English.** FlatCap is a command-line tool that automates the routine of a statistical
 > consulting service whose requests arrive through a REDCap survey: it creates one folder per
-> client and project, versions the client's datasets, profiles them, runs descriptive and
+> client and project, computes sample sizes for simple random sampling, versions the client's
+> datasets, profiles them, runs descriptive and
 > inferential analyses (normality, cross-tabulation, chi-square/Fisher, Pearson/Spearman/Kendall,
 > t-tests, ANOVAs and the rank-based Wilcoxon, Mann-Whitney, Kruskal-Wallis and Friedman tests)
 > checked against R, and writes a `.docx` report. Code, messages and documentation are in
@@ -23,7 +24,8 @@ para uma pasta própria dentro do projeto.
 - **Simula por padrão.** Todo comando que escreve em disco primeiro mostra o que faria;
   `--sim` executa.
 - **O que se analisa está escrito.** As decisões da reunião com o cliente moram no
-  `dicionario.csv` e no `projeto.yaml` do projeto, e as análises obedecem a eles.
+  `dicionario.csv` e no `projeto.yaml` do projeto, e as análises obedecem a eles; o plano da
+  amostra, no `desenho.yaml`.
 - **Conferido contra o R.** Os testes estatísticos reproduzem o R 4.3.3, e a suíte compara
   com valores calculados no R — nunca com o próprio FlatCap.
 - **O relatório não abre o banco.** Um número do `.docx` é, letra por letra, o número do
@@ -134,6 +136,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap doctor` | Testa a configuração, a conexão com o REDCap, o `FLATCAP_ROOT` e as bibliotecas. |
 | `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
 | `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
+| `flatcap amostragem <id>` | Calcula o tamanho da amostra a partir do `desenho.yaml` e escreve o relatório da amostra, em `4. Amostragem/`. |
 | `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco. |
 | `flatcap dados listar <id>` | Mostra a linha do tempo das versões do banco, conferida contra o disco. |
 | `flatcap perfil <id>` | Descreve o banco: escreve o `perfil.md` e o `dicionario.csv`. |
@@ -192,6 +195,44 @@ a pasta é criada assim mesmo, e o banco entra depois pelo `flatcap dados adicio
 flatcap novo 42          # simula
 flatcap novo 42 --sim    # cria
 ```
+
+### `flatcap amostragem <id>`
+
+Calcula o tamanho da amostra e escreve o relatório da amostra. Vem depois do `flatcap novo` —
+o pedido de amostragem costuma chegar sem banco, e o `novo` cria a pasta assim mesmo —, e
+tudo dele mora em `4. Amostragem/`, dentro da pasta do projeto.
+
+A primeira rodada cria a pasta e o `desenho.yaml`, o plano da amostra, para preencher à mão. O
+modelo já vem com o caso mais comum — 95% de confiança, margem de 5 pontos percentuais e
+proporção esperada de 50% —, e quase sempre basta escrever a população que o cliente
+informou:
+
+```yaml
+desenho: aas        # amostragem aleatória simples, sem reposição
+populacao: 1200     # N, sem ponto de milhar; em branco, a conta é a de população grande
+confianca: 95       # em %
+margem: 5           # em pontos percentuais; para uma média, na unidade da variável
+proporcao: 50       # em %; para uma média, `desvio:` no lugar dela
+perda: 10           # a perda esperada, em %
+```
+
+Com esse desenho, n₀ = 385, n = 292 com a correção para N = 1200, e 325 com a perda. As
+rodadas seguintes escrevem o `tamanho.csv` (a conta, linha por linha), o `manifesto.json` e o
+`Amostragem_<matrícula>_AAAA-MM-DD.docx`. Rodar de novo arquiva a rodada anterior em
+`4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então, e avisa se o tamanho mudou. O
+`desenho.yaml` nunca é sobrescrito, e um tamanho já decidido entra em `n:`, no lugar da conta.
+Por enquanto, o único desenho é a aleatória simples.
+
+```bash
+flatcap amostragem 23 --sim    # a primeira vez: cria 4. Amostragem/ e o desenho.yaml
+flatcap amostragem 23          # depois de preenchê-lo: simula a conta
+flatcap amostragem 23 --sim    # escreve a conta e o relatório da amostra
+```
+
+| Opção | Efeito |
+|---|---|
+| `--template ARQUIVO` | O modelo `.docx`, como no `flatcap relatorio`. |
+| `--titulo TEXTO` | O título da primeira linha do documento. Sem isso, "Relatório de Amostragem". |
 
 ### `flatcap dados adicionar <id> <arquivo>` e `flatcap dados listar <id>`
 
@@ -299,6 +340,15 @@ flatcap analisar 42 --sim                        # as análises da lista `analis
 flatcap relatorio 42 --sim                       # o .docx
 ```
 
+Um pedido de amostragem:
+
+```bash
+flatcap novo 23 --sim                            # a pasta do projeto, como sempre
+flatcap amostragem 23 --sim                      # 4. Amostragem/ e o desenho.yaml
+#   preencha o desenho.yaml — quase sempre, só a populacao
+flatcap amostragem 23 --sim                      # a conta e o relatório da amostra
+```
+
 ## O que fica onde
 
 ```
@@ -313,7 +363,9 @@ FLATCAP_ROOT/                                   fora do Git
         ├── Relatorio_00742_2026-09-20.docx     o que se entrega
         ├── 1. Dados originais/                 o banco do REDCap e a versão vigente
         ├── 2. Versões antigas/                 o que deixou de ser vigente
-        └── 3. Análises/                        uma pasta por análise
+        ├── 3. Análises/                        uma pasta por análise
+        └── 4. Amostragem/                      só com amostragem: o desenho.yaml, a conta, o
+                                                relatório da amostra e as versões antigas dela
 ```
 
 **Banco de pesquisa, nome de aluno e relatório não entram no Git**, nem em repositório
