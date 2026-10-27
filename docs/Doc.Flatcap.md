@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.14.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.15.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -37,10 +37,11 @@ estatística que recebe as solicitações por um formulário do REDCap:
 O princípio é **automatizar o que é repetitivo e mecânico e manter manual o que é decisão
 técnica**. O FlatCap cria a pasta de cada projeto, baixa o banco que o cliente anexou,
 guarda cada versão do banco, descreve o banco para a reunião, roda as análises que a reunião
-decidiu e monta o relatório. O que ele **não** faz é decidir: o tipo de cada variável, os
+decidiu e monta o relatório — e, quando o pedido é de amostragem, calcula o tamanho da amostra
+e escreve o relatório dela. O que ele **não** faz é decidir: o tipo de cada variável, os
 rótulos das categorias, os pares que se cruzam e as comparações que se testam são escritos por
 você, em dois arquivos de texto do projeto — o `dicionario.csv` e o `projeto.yaml` —, e as
-análises obedecem a eles.
+análises obedecem a eles. O plano da amostra mora num terceiro, o `desenho.yaml`.
 
 Cinco ideias atravessam o projeto:
 
@@ -210,6 +211,9 @@ REDCap ──listar──▶ o que chegou, e o que já virou pasta
    │
    └──novo──▶ 00742 - José Antônio de Sá/Projeto 006/     a pasta, o banco baixado, a ficha
                    │
+           amostragem ──▶ 4. Amostragem/      quando o pedido é de amostragem: o desenho.yaml,
+                   │                          a conta e Amostragem_00742_AAAA-MM-DD.docx
+                   │
         dados adicionar ──▶ 01_revisado_…     a versão que o cliente corrigiu
                    │
                perfil ──▶ perfil.md           o que levar para a reunião
@@ -240,8 +244,17 @@ flatcap analisar 42 --sim                        # as análises da lista `analis
 flatcap relatorio 42 --sim                       # o .docx
 ```
 
-Do `dados adicionar` em diante, **nada toca a rede**: a pasta já sabe de quem ela é, e os
-testes rodam esses comandos com um token inválido de propósito. O que continua manual é o que
+Um pedido de amostragem começa do mesmo jeito, e a amostragem vem depois do `novo`:
+
+```bash
+flatcap novo 23 --sim                            # a pasta do projeto, como sempre
+flatcap amostragem 23 --sim                      # 4. Amostragem/ e o desenho.yaml
+#   preencha o desenho.yaml — quase sempre, só a populacao
+flatcap amostragem 23 --sim                      # a conta e o relatório da amostra
+```
+
+Fora o `doctor`, o `listar` e o `novo`, **nada toca a rede**: a pasta já sabe de quem ela é, e
+os testes rodam esses comandos com um token inválido de propósito. O que continua manual é o que
 deve continuar: decidir o que analisar, escrever o dicionário e as listas na reunião, e ler o
 documento antes de enviar.
 
@@ -255,6 +268,7 @@ do projeto — esta só quando o cliente tem um projeto.
 | `flatcap doctor` | sim | nada (ou o `FLATCAP_ROOT`, o `.env` da conta) | confere a configuração, as bibliotecas e a conexão |
 | `flatcap listar [-n N]` | sim | nada | as solicitações do REDCap, e quais já viraram pasta |
 | `flatcap novo <record_id>` | sim | a pasta do projeto | cria a pasta, baixa o anexo, escreve a ficha e o histórico |
+| `flatcap amostragem <id>` | não | `4. Amostragem/` | o `desenho.yaml` na primeira vez; depois, o tamanho da amostra e o relatório dela |
 | `flatcap dados adicionar <id> <arquivo>` | não | `1. Dados originais/` | registra uma versão nova do banco |
 | `flatcap dados listar <id>` | não | nada | a linha do tempo das versões, conferida contra o disco |
 | `flatcap perfil <id>` | não | `perfil.md`, `dicionario.csv` | descreve o banco e propõe o dicionário |
@@ -279,12 +293,12 @@ As opções que se repetem:
 | `--sem-graficos` | descritiva, normalidade, correlação, analisar | escreve só as tabelas, sem carregar o `matplotlib` |
 | `--resumo` | analisar | mostra só a tabela do lote |
 | `--criar-root`, `--criar-env` | doctor | criam a pasta de dados e o `.env` da conta |
-| `--template ARQUIVO`, `--titulo TEXTO` | relatorio | o modelo e o título do documento |
+| `--template ARQUIVO`, `--titulo TEXTO` | relatorio, amostragem | o modelo e o título do documento |
 | `--saida ARQUIVO` | template | onde escrever o modelo |
 | `--version`, `-V` | — | a versão e a licença |
 
 O código de saída é escolhido: **1** quando o comando recusa (configuração faltando, dicionário
-inválido, lista vazia), **0** quando não há nada a fazer (a pasta já existe, o arquivo é igual
+inválido, lista vazia, `desenho.yaml` com problema), **0** quando não há nada a fazer (a pasta já existe, o arquivo é igual
 ao já registrado), e o traceback só aparece quando é defeito do FlatCap.
 
 ## 7. As pastas e os arquivos
@@ -318,13 +332,18 @@ FLATCAP_ROOT/                                    fora do Git · backup próprio
         │   ├── 00_redcap_2026-09-01_banco.xlsx       o que veio do REDCap — somente leitura
         │   └── 02_revisado_2026-09-10_banco.xlsx     a versão vigente
         ├── 2. Versões antigas/                       versões do banco, rodadas e relatórios anteriores
-        └── 3. Análises/                              uma pasta por análise, a rodada vigente
-            ├── descritiva/     manifesto.json · freq_* · graf_* · resumo_* · faixas_* · hist_* · data_* · periodo_*
-            ├── normalidade/    manifesto.json · normalidade.csv · qq_<variável>.png
-            ├── cruzamento/     manifesto.json · cruz_<a>_x_<b>.csv
-            ├── associacao/     manifesto.json · associacao.csv
-            ├── correlacao/     manifesto.json · correlacao.csv · disp_<a>_x_<b>.png
-            └── comparacao/     manifesto.json · uma_amostra.csv · dois_grupos.csv · k_grupos.csv · repetidas.csv
+        ├── 3. Análises/                              uma pasta por análise, a rodada vigente
+        │   ├── descritiva/     manifesto.json · freq_* · graf_* · resumo_* · faixas_* · hist_* · data_* · periodo_*
+        │   ├── normalidade/    manifesto.json · normalidade.csv · qq_<variável>.png
+        │   ├── cruzamento/     manifesto.json · cruz_<a>_x_<b>.csv
+        │   ├── associacao/     manifesto.json · associacao.csv
+        │   ├── correlacao/     manifesto.json · correlacao.csv · disp_<a>_x_<b>.png
+        │   └── comparacao/     manifesto.json · uma_amostra.csv · dois_grupos.csv · k_grupos.csv · repetidas.csv
+        └── 4. Amostragem/                            só com amostragem: nasce no primeiro `flatcap amostragem`
+            ├── desenho.yaml                          o plano da amostra — seu, nunca sobrescrito
+            ├── tamanho.csv · manifesto.json          a conta e o índice da rodada
+            ├── Amostragem_00742_2026-09-05.docx      o relatório da amostra
+            └── Versões antigas/                      as rodadas anteriores, cada uma com o desenho.yaml de então
 ```
 
 Três regras de arrumação: **a pasta vigente guarda uma versão só**; **o que deixa de ser
@@ -332,6 +351,12 @@ vigente vai para `2. Versões antigas/`**, com data e hora no nome quando é pas
 nome colide; e **o `.docx` fica na raiz do projeto**, onde a mão alcança primeiro. Uma pasta
 dentro de `3. Análises/` com `manifesto.json` é uma rodada; sem ele, é pasta sua, e ninguém a
 toca.
+
+A amostragem é a exceção às duas últimas, de propósito: **tudo da amostra fica em
+`4. Amostragem/`** — o relatório dela e as versões antigas dela também —, e as pastas 1, 2 e 3
+ficam para a análise que vem depois. O relatório das análises não vê a amostra, e o da amostra
+não vê as análises. Em `4. Amostragem/`, o FlatCap só move o que ele escreveu (`tamanho.csv`,
+`manifesto.json`, `Amostragem_*.docx`); o resto da pasta é seu.
 
 ### 7.3 O `projeto.yaml`
 
@@ -436,12 +461,43 @@ para a reunião: o cabeçalho (arquivo, separador, codificação, integridade), 
 a reunião** — os achados em *corrigir antes de começar*, *confirmar com o cliente* e *notas* —,
 e as consultas (variáveis, valores observados, resumo das numéricas, o dicionário).
 
+### 7.8 O `desenho.yaml`
+
+O plano da amostra, preenchido à mão. O `flatcap amostragem` escreve o modelo comentado na
+primeira vez e, dali em diante, só lê. O modelo já vem com o caso mais comum, e quase sempre
+basta a população:
+
+| Chave | O que é |
+|---|---|
+| `desenho` | `aas` — amostragem aleatória simples, sem reposição, o único por enquanto. `AAS` e `Aleatória simples` valem |
+| `populacao` | N, sem ponto de milhar (`12000`). Em branco, a conta é a de população grande, sem a correção |
+| `confianca` | o nível de confiança, em % (`95`, e não `0.95`) |
+| `margem` | a margem de erro: em pontos percentuais, para uma proporção; na unidade da variável, para uma média. A vírgula decimal vale (`2,5`) |
+| `proporcao` | a proporção esperada, em %: `50` quando não se sabe, que dá o maior tamanho |
+| `desvio` | no lugar da `proporcao`, para estimar uma média: o desvio-padrão esperado |
+| `perda` | a perda esperada, em %, de 0 a 100 sem o 100 |
+| `n` | o tamanho já decidido, no lugar da conta — com ele, `confianca`, `margem` e `proporcao` ficam em branco |
+
+A conta é a do OpenEpi: n₀ = z²·V/e², com V = p(1 − p) ou σ²; com a população,
+n = N·z²·V/[(N − 1)·e² + z²·V], que é o n₀ corrigido; com a perda, ⌈n/(1 − perda)⌉. Cada passo
+arredonda para cima, e o tamanho nunca passa de N — quando chega a ele, é um censo, e o comando
+avisa. O z é o `qnorm(1 − α/2)` do R. Com N = 1200, 95%, 5 pontos, 50% e perda de 10%, o
+`tamanho.csv` diz n₀ = 385, n = 292 e 325.
+
+As recusas são as do engano que muda o número em silêncio, e saem todas de uma vez: `12.000`,
+que no YAML é doze; a confiança ou a proporção escritas como fração (`0.95`, `0.5`); a
+confiança escrita como o α (`5`); a margem que não cabe na proporção; a chave com acento; e os
+desenhos previstos e ainda não feitos — sistemática, estratificada, conglomerados, PPT e dois
+estágios —, que dizem isso, e não que não existem. A margem escrita como fração
+(`margem: 0.05`) passa por todas, porque 0,05 ponto existe, e sai com aviso.
+
 ## 8. A arquitetura
 
 ### 8.1 As camadas
 
-O pacote é uma lista de módulos em que **cada um só conhece os de cima** (a exceção é o par
-`relatorio`–`documento`, ver o docstring do `__init__.py` na Parte II):
+O pacote é uma lista de módulos em que **cada um só conhece os de cima** (a exceção é o
+`documento`, que o `relatorio` e a `amostragem` chamam de dentro da execução — ver o docstring
+do `__init__.py` na Parte II):
 
 | Camada | Módulos | Bibliotecas de fora |
 |---|---|---|
@@ -451,6 +507,7 @@ O pacote é uma lista de módulos em que **cada um só conhece os de cima** (a e
 | o contrato de saída | `manifesto`, `graficos` | `matplotlib` (só o `graficos`) |
 | as análises | `descritiva`, `normalidade`, `cruzamento`, `associacao`, `correlacao`, `hipoteses`, `comparacao`, `analises` | `pandas`, `scipy` |
 | o documento | `relatorio`, `documento` | `python-docx` (só o `documento`) |
+| a amostragem | `amostral`, `amostragem` | nenhuma: a conta é da biblioteca padrão, e o `.docx` sai pelo `documento` |
 | a interface | `cli` | `typer`, `rich` |
 
 As bibliotecas caras ficam presas a poucos módulos, e entram **dentro da função que as usa**:
@@ -479,7 +536,8 @@ por dia, não paga pelo `pandas`.
   [seção 11](#11-licença-e-avisos)).
 - **Nada se sobrescreve em silêncio.** A gravação é atômica — temporário na mesma pasta,
   `fsync`, `os.replace` —, o texto sai em UTF-8 com `\n`, e o que deixa de valer vai para
-  `2. Versões antigas/`. Uma falha no meio desfaz o que já foi feito.
+  `2. Versões antigas/` — ou, na amostragem, para `4. Amostragem/Versões antigas/`. Uma falha
+  no meio desfaz o que já foi feito.
 
 ## 9. Os testes
 
@@ -627,6 +685,8 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 - [`flatcap/analises.py`](#flatcapanalisespy)
 - [`flatcap/relatorio.py`](#flatcaprelatoriopy)
 - [`flatcap/documento.py`](#flatcapdocumentopy)
+- [`flatcap/amostral.py`](#flatcapamostralpy)
+- [`flatcap/amostragem.py`](#flatcapamostragempy)
 - [`flatcap/cli.py`](#flatcapclipy)
 - [`flatcap/__main__.py`](#flatcap__main__py)
 
@@ -634,7 +694,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*516 linhas.*
+*582 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -660,6 +720,8 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
+    amostral.py    a aritmética do tamanho da amostra, só com a biblioteca padrão
+    amostragem.py  o desenho.yaml, a conta e o relatório da amostra, em 4. Amostragem/
 
     cli.py         expõe os comandos no terminal
 
@@ -668,7 +730,8 @@ A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `fich
 e `manifesto`, `relatorio` conhece `manifesto`, `dicionario`, `dados` e `ficha`, e nenhuma
 delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento` conhece o
 `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`.
+`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
+e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -1146,6 +1209,69 @@ variável aparecia duas vezes. `Peso` e `(kg)` em duas linhas partiam o comentá
 tabelas, e o relatório saía com tabelas de uma coluna só, sem aviso. O leitor limpa os
 dois, e o comentário das tabelas sai sempre numa linha só, mesmo quando o rótulo ou uma
 categoria trazem a quebra.
+
+### 1.15.0 — a amostragem
+
+**`flatcap amostragem <id>`: o tamanho da amostra, na pasta dela, com o relatório dela.** O
+projeto costuma começar com a amostragem e evoluir depois para a análise, e o fluxo começa
+sempre no `flatcap novo`, que não muda — as três pastas de sempre. A amostragem vem depois
+dele. A primeira rodada cria `4. Amostragem/` e escreve o `desenho.yaml`, o plano da amostra,
+para preencher à mão, e para; as seguintes leem o `desenho.yaml`, fazem a conta e escrevem o
+`tamanho.csv`, o `manifesto.json` e o relatório da amostra,
+`Amostragem_<matrícula>_AAAA-MM-DD.docx`. Tudo da amostra mora em `4. Amostragem/`, inclusive
+as versões antigas dela, e as pastas 1, 2 e 3 ficam para a análise que vem depois.
+
+**A pasta nasce na amostragem, e não no `novo`.** O `novo` não tem como saber se o pedido é de
+amostragem — o formulário do REDCap não tem essa opção —, o projeto que nunca amostra não
+ganha uma pasta vazia, e o que já existia ganha a pasta do mesmo jeito, sem migração. A
+amostragem não cria projeto: sem a pasta do `novo`, recusa e diz isso.
+
+**A amostragem não é uma análise.** Não está no `analises.REGISTRO`, na
+`ORDEM_PADRAO_DAS_ANALISES` nem no `flatcap analisar`. O relatório das análises varre só
+`3. Análises/` e nunca vê a amostra, e o relatório da amostra nunca vê as análises. O
+`ANALISE_AMOSTRAGEM` do `manifesto.py` existe para o manifesto dela dizer de que ele é.
+
+**Um desenho, e o espaço para os outros.** A aleatória simples, sem reposição: a do pedido
+mais comum, o do cliente que informa só o tamanho da população. O modelo do `desenho.yaml` já
+vem com 95% de confiança, margem de 5 pontos e proporção esperada de 50%, e preencher a
+`populacao` basta. A média entra com o `desvio` no lugar da `proporcao`; o tamanho decidido à
+mão, no `n`; a perda esperada, na `perda`. Cada desenho é uma entrada no
+`amostragem.DESENHOS`, com as chaves e a conta dele, e os previstos — sistemática,
+estratificada, conglomerados, PPT, dois estágios — recusam dizendo que ainda não estão no
+FlatCap, e não que não existem.
+
+**A conta é a do OpenEpi.** n₀ = z²·V/e², corrigido pela população na forma
+n = N·z²·V/[(N − 1)·e² + z²·V], arredondado para cima em cada passo, com a perda somada no fim
+e o tamanho nunca maior que N. O z é o `qnorm` do R, pelo `statistics.NormalDist`. A
+aritmética mora no `amostral.py`, só com a biblioteca padrão, e o teste a confere contra os
+tamanhos publicados e contra o `qnorm`.
+
+**As recusas são as do engano que muda o número em silêncio.** `12.000` é doze no YAML, e não
+doze mil; `confianca: 0.95` é a confiança escrita como fração, e `confianca: 5`, o α no lugar
+dela; `proporcao: 0.5` querendo 50% é meio por cento, e daria n = 8 sem erro nenhum. Saem
+todas de uma vez, como nas análises. A margem escrita como fração, `margem: 0.05`, passa por
+todas — 0,05 ponto existe —, e por isso sai com aviso, e não recusada. A vírgula decimal vale,
+e `AAS` ou `Aleatória simples` são lidos como `aas`.
+
+**O relatório da amostra é montado com as peças do das análises**, e três delas ficaram
+públicas no `relatorio.py`: o `tabela_do_texto` — o miolo do `ler_tabela`, para a tabela do
+documento ser lida do mesmo texto que vai para o `tamanho.csv` —, o `localizar_template` e o
+`conferir_texto`, com os nomes privados como apelido. A primeira página é a mesma, com a
+finalidade e os objetivos da ficha. O texto de metodologia tem o lugar dele, o
+`amostragem.METODOLOGIA`, vazio de propósito, pela regra do `TEXTO_PADRAO`.
+
+**O `desenho.yaml` é seu.** O FlatCap escreve o modelo uma vez e, dali em diante, só lê — e
+quem lê é o `ficha.ler_yaml`, para um YAML quebrado ganhar o diagnóstico da ficha. Refazer a
+rodada arquiva a anterior em `4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então:
+o texto que ela leu, guardado no manifesto dela, e não o da pasta, que a essa altura já é o
+novo. O tamanho que muda em relação à rodada vigente sai com aviso, antes de escrever.
+
+**O número escrito à mão desceu para o `ficha.py`.** A regra do `numero_escrito` era a do
+`comparacao.referencia_escrita`, e a amostragem lê o `desenho.yaml` por ela.
+
+**As propriedades do `.docx` dizem de qual rodada ele é.** O comentário dizia "a partir da
+descritiva" em todo documento e, sem banco, "banco ?"; passa a dizer a análise do manifesto,
+e "sem banco" quando não há.
 
 ## `flatcap/config.py`
 
@@ -1877,7 +2003,7 @@ sai com o próprio nome, sem inventar um cliente que não existe.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*806 linhas.*
+*839 linhas.*
 
 A pasta do projeto no disco: decidir o que criar e depois criar.
 
@@ -1979,9 +2105,39 @@ FlatCap de criar uma segunda pasta para um cliente que já tem uma.
 > `comparacao:` com os itens. Uma pasta só para todos os testes de comparação: o
 > teste é escolhido dentro da análise, e não é uma análise por teste.
 
-### `ARQUIVO_TEMPLATE`
+### `PASTA_AMOSTRAGEM`
 
 *linha 130*
+
+> A pasta da amostragem, a quarta do projeto — e a única que o `novo` não cria.
+>
+> O projeto costuma começar com a amostragem e evoluir depois para a análise, e tudo
+> da amostra mora aqui: a ficha (`desenho.yaml`), a conta, o relatório da amostra e as
+> versões antigas dele. As três pastas de cima ficam para a análise.
+>
+> Fica fora do `SUBPASTAS` de propósito. O fluxo começa sempre no `flatcap novo`, e a
+> pasta nasce no primeiro `flatcap amostragem`, que vem depois dele: o `novo` não tem
+> como saber se o pedido é de amostragem — o formulário do REDCap não tem essa opção —,
+> o projeto que nunca amostra não ganha uma pasta vazia, e o projeto que já existia
+> ganha a pasta do mesmo jeito, sem migração.
+
+### `ARQUIVO_DESENHO`
+
+*linha 143*
+
+> A ficha da amostra, dentro da pasta dela. É o `projeto.yaml` da amostragem: escrita
+> pelo FlatCap uma vez, como modelo, e preenchida à mão daí em diante.
+
+### `PASTA_ANTIGAS_DA_AMOSTRAGEM`
+
+*linha 147*
+
+> As versões antigas da amostra moram dentro da pasta dela, e não em
+> `2. Versões antigas/`: tudo da amostra fica na pasta da amostra.
+
+### `ARQUIVO_TEMPLATE`
+
+*linha 151*
 
 > O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
 > arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
@@ -1992,7 +2148,7 @@ FlatCap de criar uma segunda pasta para um cliente que já tem uma.
 
 ### `EXTENSOES_DE_BANCO`
 
-*linha 138*
+*linha 159*
 
 > As extensões que um banco do cliente pode ter.
 >
@@ -2004,7 +2160,7 @@ FlatCap de criar uma segunda pasta para um cliente que já tem uma.
 
 ### `def pastas_das_analises(raiz)`
 
-*linha 148*
+*linha 169*
 
 As pastas de rodada que existem em `3. Análises/`, em ordem de nome.
 
@@ -2020,7 +2176,7 @@ quem a lê — aqui a pergunta é só qual pasta existe.
 
 ### `def pasta_da_analise(raiz, analise)`
 
-*linha 168*
+*linha 189*
 
 Onde mora a rodada vigente de uma análise: `3. Análises/<analise>/`.
 
@@ -2033,11 +2189,22 @@ O nome da análise é o mesmo que vai escrito no `manifesto.json` (o campo
 para as três coisas é o que faz a lista da reunião, a pasta no disco e a ordem
 das seções do documento se encontrarem sem tradução no meio.
 
-- *linha 183* — `PREFIXO_REDCAP = "00_redcap_"` — feito dessa forma para manter uma ordem cronológica
+### `def pasta_da_amostragem(raiz)`
+
+*linha 205*
+
+Onde mora tudo da amostra deste projeto: `4. Amostragem/`.
+
+Ao lado de `3. Análises/`, e não dentro dela: a amostragem não é uma análise da
+lista `analises:`, e o relatório das análises, que varre `3. Análises/`, não a vê.
+Uma função, como a `pasta_da_analise`, porque é aqui que a resposta muda no dia em
+que ela mudar.
+
+- *linha 216* — `PREFIXO_REDCAP = "00_redcap_"` — feito dessa forma para manter uma ordem cronológica
 
 ### `class ProjetoError(RuntimeError)`
 
-*linha 189*
+*linha 222*
 
 Falha ao montar a pasta do projeto, já traduzida para o usuário.
 
@@ -2047,13 +2214,13 @@ deve subir com o traceback inteiro.
 
 ### `class RegistroNaoEncontradoError(ProjetoError)`
 
-*linha 199*
+*linha 232*
 
 O REDCap não tem nenhum registro com este `record_id`.
 
 ### `class LayoutAntigoError(ProjetoError)`
 
-*linha 205*
+*linha 238*
 
 A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
 à 1.1.0, de quando um cliente tinha um projeto só.
@@ -2065,7 +2232,7 @@ de quem só lê o disco — ver `texto_da_migracao`.
 
 ### `class ClienteIncompletoError(ProjetoError)`
 
-*linha 217*
+*linha 250*
 
 O registro existe, mas não dá para nomear a pasta a partir dele.
 
@@ -2075,7 +2242,7 @@ recusa a produzir uma pasta que você teria de renomear depois.
 
 ### `class ProjetoExistenteError(ProjetoError)`
 
-*linha 227*
+*linha 260*
 
 Já existe pasta para **este projeto**. Nada foi mudado.
 
@@ -2088,11 +2255,11 @@ O caminho fica gravado em `.pasta`, isso previne erros de quando a pasta é cria
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 239*
+*linha 272*
 
 ### `class ArquivoPlanejado`
 
-*linha 245*
+*linha 278*
 
 Um arquivo já baixado com destino e o recibo pronto -> ainda na memória.
 
@@ -2100,17 +2267,17 @@ O `sha256` é calculado aqui. É a diferença entre o recibo e uma anotação.
 
 #### `def tamanho(self)`
 
-*linha 256*
+*linha 289*
 
 #### `def tamanho_legivel(self)`
 
-*linha 260*
+*linha 293*
 
 Tamanho formatado para o terminal e para o `historico.md`.
 
 ### `class Plano`
 
-*linha 268*
+*linha 301*
 
 Tudo o que será criado, decidido e pronto para escrever.
 
@@ -2121,11 +2288,11 @@ nenhuma decisão.
 
 #### `def tem_anexo(self)`
 
-*linha 288*
+*linha 321*
 
 #### `def pasta_do_cliente(self)`
 
-*linha 292*
+*linha 325*
 
 A pasta do cliente, que é onde a pasta do projeto vai morar.
 
@@ -2134,7 +2301,7 @@ para que um `Plano` montado à mão em teste antigo continue válido.
 
 ### `class Resultado`
 
-*linha 303*
+*linha 336*
 
 O que `executar` de fato criou, e o que não foi planejado.
 
@@ -2143,9 +2310,9 @@ nuvem o `chmod` pode não pegar.
 
 ### `def preparar(cfg, record_id, agora)`
 
-*linha 315*
+*linha 348*
 
-*linha 314*
+*linha 347*
 
 > Casos de uso
 
@@ -2163,11 +2330,11 @@ Raises:
 
 ### `def executar(plano)`
 
-*linha 338*
+*linha 371*
 
 Escreve o plano no disco. Escritor puro: não decide, não consulta a rede.
 
-*linha 345*
+*linha 378*
 
 > `parents=True` cria a pasta do cliente quando ela não existe e a aceita
 > quando existe — mas continua estourando `FileExistsError` se a **última**
@@ -2176,19 +2343,19 @@ Escreve o plano no disco. Escritor puro: não decide, não consulta a rede.
 
 ### `def anotar(raiz, acao, agora)`
 
-*linha 387*
+*linha 420*
 
 Acrescenta uma linha para o `historico.md`.
 
 ### `def marcar_somente_leitura(caminho)`
 
-*linha 394*
+*linha 427*
 
 Tira a permissão de escrita do arquivo. Devolve se conseguiu.
 
 ### `def nome_do_banco(anexo, quando, record_id)`
 
-*linha 405*
+*linha 438*
 
 Monta `00_redcap_AAAA-MM-DD_<nome original>`.
 
@@ -2196,18 +2363,18 @@ Monta `00_redcap_AAAA-MM-DD_<nome original>`.
 
 ### `def _buscar_cliente(cfg, record_id)`
 
-*linha 419*
+*linha 452*
 
 Traz um único registro do REDCap e normaliza.
 
-*linha 433*
+*linha 466*
 
 > O `record_id` normalizado vem do corpo da resposta; se por alguma razão vier
 > vazio, o que o usuário digitou é a melhor identificação que temos.
 
 ### `def _rotulos_do_formulario(cfg)`
 
-*linha 437*
+*linha 470*
 
 Os rótulos das opções do `fin`, para que a ficha guarde texto e não código.
 
@@ -2223,13 +2390,13 @@ branco cai no alerta `texto_ausente` do relatório e aparece na sua frente.
 
 ### `def _conferir_identificacao(cliente)`
 
-*linha 458*
+*linha 491*
 
 Recusa registro sem matrícula ou sem nome, dizendo qual dos dois falta.
 
 ### `def _destino(cfg, cliente)`
 
-*linha 478*
+*linha 511*
 
 Decide onde a pasta vai ficar. Devolve (pasta do cliente, raiz, cliente é novo).
 
@@ -2254,7 +2421,7 @@ Três conferências, nesta ordem, e cada uma responde a uma pergunta diferente:
 
 ### `def texto_da_migracao(pasta_do_cliente, record_id)`
 
-*linha 551*
+*linha 584*
 
 O diagnóstico da pasta que ficou no formato de antes da 1.1.0.
 
@@ -2266,13 +2433,13 @@ instrução de conserto é como uma delas fica desatualizada.
 
 ### `def _baixar_anexo(cfg, cliente)`
 
-*linha 588*
+*linha 621*
 
 Baixa o banco anexado. Devolve `None` quando o registro não tem anexo.
 
 ### `def _montar_plano(cliente, pasta_cliente, raiz, cliente_novo, anexo, quando)`
 
-*linha 597*
+*linha 630*
 
 Converte cliente + anexo em um `Plano` inteiramente resolvido.
 
@@ -2280,7 +2447,7 @@ Converte cliente + anexo em um `Plano` inteiramente resolvido.
 
 ### `class _SemAncoras(yaml.SafeDumper)`
 
-*linha 633*
+*linha 666*
 
 Dumper que nunca cria âncora nem alias.
 
@@ -2291,13 +2458,13 @@ continua valendo.
 
 #### `def ignore_aliases(self, data)`
 
-*linha 642*
+*linha 675*
 
-- *linha 642* — `def ignore_aliases(self, data: object) -> bool:` — noqa: ARG002
+- *linha 675* — `def ignore_aliases(self, data: object) -> bool:` — noqa: ARG002
 
 ### `def _texto_em_bloco(dumper, dado)`
 
-*linha 646*
+*linha 679*
 
 Texto com quebra de linha sai como bloco literal, e não entre aspas.
 
@@ -2320,11 +2487,11 @@ fronteira onde o texto entra.
 
 ### `def _texto_projeto_yaml(cliente, banco, hoje)`
 
-*linha 698*
+*linha 731*
 
 Monta o `projeto.yaml`.
 
-*linha 722*
+*linha 755*
 
 > `or None` para que o campo em branco saia `finalidade: null`, do mesmo
 > jeito que o `prazo` — uma linha terminada em dois-pontos parece uma
@@ -2332,7 +2499,7 @@ Monta o `projeto.yaml`.
 
 ### `def _texto_historico(cliente, banco, quando)`
 
-*linha 740*
+*linha 773*
 
 Monta o `historico.md` com a primeira linha de log já escrita.
 
@@ -2342,23 +2509,23 @@ existe justamente para ser aberto seis meses depois.
 
 ### `def _linha_historico(acao, quando)`
 
-*linha 773*
+*linha 806*
 
 ### Funções auxiliares
 
 ### `def _escrever_texto(caminho, conteudo)`
 
-*linha 779*
+*linha 812*
 
 Escreve texto sempre em UTF-8 e sempre com `\n`.
 
 ### `def _extensao_do_mime(tipo_mime)`
 
-*linha 785*
+*linha 818*
 
 ### `def tamanho_legivel(bytes_)`
 
-*linha 791*
+*linha 824*
 
 Formata o tamanho para leitura humana, com vírgula decimal.
 
@@ -2370,7 +2537,7 @@ relatório acaba com "1,5 MiB" numa tabela e "1572864" na seguinte.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1032 linhas.*
+*1091 linhas.*
 
 Leitura e escrita do `projeto.yaml` — a ficha do atendimento.
 
@@ -2414,7 +2581,10 @@ ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 Toda a persistência do `projeto.yaml` está atrás das funções públicas abaixo —
 `ler`, `bloco`, `acrescentar_versao`, `localizar_projeto`, `projetos_da_matricula`,
 `caminho_da_ficha`, `versao_vigente` e `sequencia_do_nome`. Quem importa este
-módulo não sabe qual biblioteca de YAML está em uso.
+módulo não sabe qual biblioteca de YAML está em uso. Desde a 1.15.0, o `ler_yaml`
+estende o mesmo leitor aos outros YAML editados à mão — o `desenho.yaml` da
+amostragem é o primeiro —, e o `numero_escrito` é a regra de ler um número escrito
+num deles.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -2426,14 +2596,14 @@ esta implementação de YAML por outra precisa levá-las junto.
 
 ### `CAMPOS_VERSAO`
 
-*linha 84*
+*linha 88*
 
 > Ordem em que os campos de uma versão aparecem no arquivo. Fixa de propósito:
 > o `projeto.yaml` é lido por humanos, e coluna que muda de lugar cansa.
 
 ### `class FichaError(RuntimeError)`
 
-*linha 89*
+*linha 93*
 
 Falha ao lidar com o `projeto.yaml`, já traduzida para o usuário.
 
@@ -2443,13 +2613,13 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class ProjetoNaoEncontradoError(FichaError)`
 
-*linha 99*
+*linha 103*
 
 Nenhuma pasta em `FLATCAP_ROOT` corresponde ao identificador pedido.
 
 ### `class FichaAusenteError(FichaError)`
 
-*linha 105*
+*linha 109*
 
 A pasta existe, mas não tem `projeto.yaml`.
 
@@ -2458,11 +2628,11 @@ usuário: é um projeto que ainda não foi adotado pela ferramenta.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 113*
+*linha 117*
 
 ### `class ProjetoAmbiguoError(FichaError)`
 
-*linha 118*
+*linha 122*
 
 A matrícula pedida tem mais de um projeto, e nenhum deles é "o" projeto.
 
@@ -2478,11 +2648,11 @@ REDCap, e dois iguais querem dizer pasta copiada.
 
 #### `def __init__(self, mensagem, projetos)`
 
-*linha 133*
+*linha 137*
 
 ### `class LayoutAntigoError(FichaError)`
 
-*linha 138*
+*linha 142*
 
 A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
 à 1.1.0.
@@ -2494,21 +2664,21 @@ um só, e mora em `projeto.texto_da_migracao`.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 149*
+*linha 153*
 
 ### `class FichaInvalidaError(FichaError)`
 
-*linha 154*
+*linha 158*
 
 O `projeto.yaml` existe mas não é YAML válido, ou não tem o formato esperado.
 
 #### `def __init__(self, mensagem, caminho)`
 
-*linha 159*
+*linha 163*
 
 ### `class Versao`
 
-*linha 165*
+*linha 169*
 
 Uma versão do banco, do jeito que ela é registrada em `dados:`.
 
@@ -2518,14 +2688,14 @@ mandou o mesmo de novo?" sem abrir planilha nenhuma.
 
 #### `def sequencia(self)`
 
-*linha 181*
+*linha 185*
 
 O número do prefixo (`00`, `01`, `02`...), ou `None` se o nome não seguir
 a convenção. É o índice da versão na história do projeto.
 
 ### `class Ficha`
 
-*linha 190*
+*linha 194*
 
 O conteúdo do `projeto.yaml` que o FlatCap precisa conhecer.
 
@@ -2557,18 +2727,18 @@ o `bloco(raiz, chave)`, mais abaixo.
 
 #### `def versao_redcap(self)`
 
-*linha 233*
+*linha 237*
 
 A versão baixada do REDCap — a intocável. Identificada pela origem, e não
 pelo prefixo `00_`, porque a origem é o fato e o nome é convenção.
 
 #### `def ultima_versao(self)`
 
-*linha 244*
+*linha 248*
 
 ### `def versao_vigente(ficha)`
 
-*linha 248*
+*linha 252*
 
 A versão do banco que vale hoje: a de maior número de sequência.
 
@@ -2595,11 +2765,11 @@ meio segundo de partida para consultar uma lista que ele já tinha na mão. O
 
 ### `def caminho_da_ficha(raiz)`
 
-*linha 286*
+*linha 290*
 
 ### `def localizar_projeto(root, identificador)`
 
-*linha 290*
+*linha 294*
 
 Encontra a pasta do projeto a partir de um `record_id` ou de uma matrícula.
 
@@ -2639,20 +2809,20 @@ Raises:
     FichaAusenteError: a pasta foi encontrada pelo nome, mas não tem ficha.
     FichaInvalidaError: há ficha que não abre, e pode ser justamente a pedida.
 
-*linha 365*
+*linha 369*
 
 > Nada bateu. Antes de dizer "não existe", os três diagnósticos que dizem o
 > que fazer, em vez de mandar o usuário procurar erro de digitação.
 
-*linha 368*
+*linha 372*
 
 > 1. A pasta do cliente ficou no formato de antes da 1.1.0.
 
-*linha 379*
+*linha 383*
 
 > 2. A pasta existe pelo nome, e não tem projeto dentro.
 
-*linha 399*
+*linha 403*
 
 > 3. Uma ficha ilegível não é uma nota de rodapé: enquanto houver uma, a
 > busca não pode afirmar que o projeto não existe — ele pode ser justamente
@@ -2661,7 +2831,7 @@ Raises:
 
 ### `def projetos_da_matricula(root, matricula)`
 
-*linha 423*
+*linha 427*
 
 Todos os projetos de um cliente, em ordem, lendo as fichas.
 
@@ -2673,7 +2843,7 @@ sendo encontrada.
 
 ### `def _varrer(root)`
 
-*linha 440*
+*linha 444*
 
 Percorre o `FLATCAP_ROOT` inteiro e devolve o que encontrou, em três listas:
 os projetos legíveis, as fichas que não abrem, e as pastas de cliente que
@@ -2684,14 +2854,14 @@ Duas voltas, e não um `rglob`, para que a profundidade seja explícita: um
 uma ficha esquecida dentro de `2. Versões antigas/` de ser confundida com um
 projeto — e é o que permite reconhecer o layout antigo em vez de ignorá-lo.
 
-*linha 469*
+*linha 473*
 
 > A ficha antiga não abrir não impede o diagnóstico de layout;
 > só tira dele o número do projeto a criar.
 
 ### `def _mesmo_record(da_ficha, procurado)`
 
-*linha 484*
+*linha 488*
 
 O `record_id` da ficha é o que o usuário digitou?
 
@@ -2707,7 +2877,7 @@ outra pessoa.
 
 ### `def _mensagem_ambigua(identificador, projetos, achados)`
 
-*linha 507*
+*linha 511*
 
 A lista de projetos do cliente, com o que distingue um do outro.
 
@@ -2719,7 +2889,7 @@ sozinho não responde isso seis meses depois.
 
 ### `def ler(raiz)`
 
-*linha 548*
+*linha 552*
 
 Lê o `projeto.yaml` de uma pasta de projeto.
 
@@ -2729,7 +2899,7 @@ Raises:
 
 ### `def bloco(raiz, chave)`
 
-*linha 587*
+*linha 591*
 
 O bloco cru de uma chave qualquer do `projeto.yaml`, ou `None`.
 
@@ -2756,13 +2926,13 @@ Raises:
 
 ### `def _simples(valor)`
 
-*linha 626*
+*linha 630*
 
 Converte o que o `ruamel` devolveu para `dict`, `list` e escalares comuns.
 
 ### `def _analises(documento)`
 
-*linha 637*
+*linha 641*
 
 A lista `analises:`, com o que não for texto descartado.
 
@@ -2772,11 +2942,53 @@ não aparece na ordem pedida. Recusar a ficha inteira por causa dela travaria
 `flatcap dados listar` e `flatcap relatorio` — comandos que não têm nada a ver
 com a lista — por um erro de digitação em uma linha que nenhum deles lê.
 
+### `def ler_yaml(caminho)`
+
+*linha 661*
+
+O conteúdo de outro YAML editado à mão, em tipos comuns de Python.
+
+O `desenho.yaml` da amostragem é o primeiro. Existe pelo motivo do `bloco`: este é
+o único módulo do pacote que abre YAML. E o `desenho.yaml` quebra pelos mesmos
+motivos da ficha — tabulação, dois-pontos dentro de um valor sem aspas —; lido por
+aqui, ele ganha o mesmo diagnóstico, em vez da mensagem crua do parser.
+
+O valor **não é validado aqui**, como no `bloco`: o que é um desenho válido é
+assunto de quem o usa.
+
+Raises:
+
+    FichaAusenteError: o arquivo não existe.
+    FichaInvalidaError: o arquivo não é um YAML válido.
+
+### `_NUMERO_ESCRITO`
+
+*linha 685*
+
+> Um número escrito como texto num YAML editado à mão: `"24,9"`, `"24.9"`, `" 25 "`.
+> Sem separador de milhar — `1.234,5` é ambíguo, e ambiguidade numa ficha se recusa.
+
+### `def numero_escrito(valor)`
+
+*linha 690*
+
+Um número, a partir de como o YAML o trouxe; `None` quando não é um.
+
+Número do YAML entra como está. Texto entra quando é um número escrito — com
+vírgula ou ponto decimal, e sem separador de milhar: é o `margem: 2,5` do
+`desenho.yaml`, que o YAML lê como texto, e o `"24,9"` entre aspas que a recusa
+da comparação ensina a escrever. Lógico não é número, embora o Python ache que
+`True` vale 1.
+
+Morava na comparação, como `referencia_escrita`, e desceu para cá na 1.15.0: a
+amostragem lê o `desenho.yaml` com a mesma regra, e duas regras para o mesmo
+número escrito à mão é como uma ficha aceita `2,5` e a outra o recusa.
+
 ### Escrita
 
 ### `def acrescentar_versao(raiz, versao)`
 
-*linha 660*
+*linha 719*
 
 Acrescenta uma entrada ao fim da lista `dados:`, preservando o resto.
 
@@ -2785,11 +2997,11 @@ Não é um "reescreve o arquivo com os campos que eu conheço". O `projeto.yaml`
 e um comando que apagasse o `prazo` que você preencheu, ou a lista `analises`
 que você combinou na reunião, tornaria a promessa falsa.
 
-*linha 685*
+*linha 744*
 
 > Chave ausente, `dados:` vazio (que vira None) ou sobrescrito por engano.
 
-*linha 691*
+*linha 750*
 
 > Uma lista que veio do arquivo como `dados: []` mantém o estilo em linha, e
 > a entrada nova sairia toda espremida em uma linha só. Bloco é o formato em
@@ -2799,7 +3011,7 @@ que você combinou na reunião, tornaria a promessa falsa.
 
 ### `RECUO_PADRAO`
 
-*linha 703*
+*linha 762*
 
 > O `indent()` do ruamel vale para o documento inteiro — não há como preservar o
 > recuo de cada lista separadamente. Então a escolha é entre impor um estilo e
@@ -2807,18 +3019,18 @@ que você combinou na reunião, tornaria a promessa falsa.
 > `  - descritiva` escrito à mão em `- descritiva`: YAML idêntico, e um diff
 > gratuito num arquivo que o cabeçalho da ficha promete não mexer.
 
-- *linha 708* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
+- *linha 767* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
 
 ### `_ABRE_BLOCO`
 
-*linha 710*
+*linha 769*
 
 > Uma chave que termina em `|` ou `>` abre um bloco literal. O `[-+]?\d*` cobre
 > os indicadores (`|-`, `>+`, `|2`) e o `(#.*)?` o comentário na mesma linha.
 
 ### `def _recuo_das_listas(texto)`
 
-*linha 715*
+*linha 774*
 
 Em que coluna, em relação à chave que as contém, este arquivo escreve o `-`.
 
@@ -2843,7 +3055,7 @@ do cliente, não item de lista.
 
 ### `def _construtor(recuo_da_lista)`
 
-*linha 767*
+*linha 826*
 
 O leitor/escritor round-trip, configurado.
 
@@ -2860,7 +3072,7 @@ decide no código: ela vem do arquivo que está sendo reescrito. Ver
 
 ### `def _representar_nulo(dumper, _dados)`
 
-*linha 790*
+*linha 849*
 
 Escreve o vazio como `null`, e não como uma linha terminada em dois-pontos.
 
@@ -2871,13 +3083,13 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _carregar_documento(caminho)`
 
-*linha 802*
+*linha 861*
 
 ### `def _gravar_documento(caminho, documento)`
 
-*linha 810*
+*linha 869*
 
-*linha 813*
+*linha 872*
 
 > O recuo é lido do arquivo que está no disco, e não do documento carregado:
 > o ruamel prende os comentários aos dados, mas não a coluna em que as listas
@@ -2885,7 +3097,7 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _mapa_da_versao(versao)`
 
-*linha 823*
+*linha 882*
 
 Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
@@ -2893,7 +3105,7 @@ Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
 ### `def sequencia_do_nome(nome)`
 
-*linha 839*
+*linha 898*
 
 Extrai o prefixo numérico de `02_revisado_2026-03-14_banco.xlsx` → 2.
 
@@ -2903,7 +3115,7 @@ e é por isso que a função não devolve `-1` nem `0` como "não sei".
 
 ### `def _ler_texto(caminho)`
 
-*linha 853*
+*linha 912*
 
 Lê sempre em UTF-8, nunca na codificação do sistema.
 
@@ -2912,7 +3124,7 @@ voltaria diferente do que foi gravado — ou estouraria na leitura.
 
 ### `def escrever_atomico(caminho, texto)`
 
-*linha 872*
+*linha 931*
 
 Grava o arquivo inteiro ou não grava nada.
 
@@ -2930,7 +3142,7 @@ arquivo vazio.
 
 ### `def temporario_ao_lado(destino)`
 
-*linha 901*
+*linha 960*
 
 Cria um arquivo vazio, de nome único, na pasta do destino. Devolve o
 descritor aberto para escrita e o caminho.
@@ -2947,28 +3159,28 @@ quem decide é a permissão da pasta, e nada mudou por lá.
 Pública porque o `documento.py` grava o `.docx` atomicamente com o mesmo
 temporário — e duas formas de criá-lo é como uma delas fica com o defeito.
 
-*linha 919*
+*linha 978*
 
 > `O_BINARY` só existe no Windows: sem ele a biblioteca C trocaria cada `\n`
 > por `\r\n` na escrita, por baixo do `newline="\n"`.
 
 ### `def _texto(documento, chave)`
 
-*linha 931*
+*linha 990*
 
 ### `def _versoes(documento, caminho)`
 
-*linha 938*
+*linha 997*
 
 Traduz a lista `dados:` para objetos, recusando o que não dá para interpretar.
 
 ### `def _inteiro(valor)`
 
-*linha 973*
+*linha 1032*
 
 ### `def _data(valor)`
 
-*linha 980*
+*linha 1039*
 
 O YAML já entrega `date` quando a data está sem aspas. Com aspas vem texto,
 e é isso que esta função resgata — o arquivo é editado à mão, e digitar
@@ -2976,7 +3188,7 @@ e é isso que esta função resgata — o arquivo é editado à mão, e digitar
 
 ### `def _diagnostico(texto, caminho, erro)`
 
-*linha 998*
+*linha 1057*
 
 Traduz o estouro do parser, com um caso especial que vale ouro.
 
@@ -5011,7 +5223,7 @@ com as suas anotações da reunião, é outra.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*650 linhas.*
+*657 linhas.*
 
 O `manifesto.json` — o índice de uma rodada de análise, e o contrato entre uma
 análise e quem escreve os arquivos dela.
@@ -5099,9 +5311,18 @@ quando um campo novo aparecer.
 > grafias para a mesma análise é como uma rodada deixa de aparecer no documento
 > sem que nada diga por quê.
 
-### `ORDEM_PADRAO_DAS_ANALISES`
+### `ANALISE_AMOSTRAGEM`
 
 *linha 110*
+
+> A amostragem também escreve um manifesto, e se declara nele — mas não é uma análise
+> de `3. Análises/`. Ela mora em `4. Amostragem/` e tem o relatório dela, e por isso
+> não entra na `ORDEM_PADRAO_DAS_ANALISES` de baixo nem no `analises.REGISTRO`: o
+> relatório das análises varre só `3. Análises/`, e nunca a vê.
+
+### `ORDEM_PADRAO_DAS_ANALISES`
+
+*linha 116*
 
 > A ordem em que as análises aparecem no documento quando a ficha não manda.
 >
@@ -5139,7 +5360,7 @@ quando um campo novo aparecer.
 
 ### `SEMENTE`
 
-*linha 152*
+*linha 158*
 
 > A semente.
 >
@@ -5153,32 +5374,32 @@ quando um campo novo aparecer.
 
 ### `_BOM`
 
-*linha 163*
+*linha 169*
 
 > O BOM, o mesmo do `dicionario.csv` e pela mesma razão: é ele que faz o Excel em
 > português abrir o arquivo em UTF-8 em vez de cp1252.
 
 ### `class ManifestoError(RuntimeError)`
 
-*linha 168*
+*linha 174*
 
 Falha ao ler o `manifesto.json`, já traduzida para o usuário.
 
 ### `class ManifestoInvalidoError(ManifestoError)`
 
-*linha 174*
+*linha 180*
 
 O arquivo existe e não dá para interpretar — ou é de um formato mais novo.
 
 #### `def __init__(self, mensagem, caminho)`
 
-*linha 179*
+*linha 185*
 
 ### O contrato de saída de uma análise
 
 ### `class Tabela`
 
-*linha 188*
+*linha 194*
 
 Uma tabela pronta para virar `.csv`. Texto, não `DataFrame`.
 
@@ -5194,7 +5415,7 @@ segunda pagar o `pandas` só para conhecer uma `dataclass` de texto.
 
 #### `def texto(self)`
 
-*linha 211*
+*linha 217*
 
 O arquivo inteiro, com o cabeçalho explicativo em linhas de comentário.
 
@@ -5216,7 +5437,7 @@ da tabela: o `.docx` saía com uma tabela de uma coluna, com `# variável:`
 dentro, e sem aviso nenhum. O corpo da tabela não precisa disso: o `csv` põe
 entre aspas a célula que tem quebra, e a leitura a devolve inteira.
 
-*No módulo, linha 251:*
+*No módulo, linha 257:*
 
 > Toda quebra de linha, com os espaços em volta dela: o `\n`, o `\r\n`, e os
 > separadores que o `str.splitlines` também reconhece — o `\x0b` e o ` ` que
@@ -5225,13 +5446,13 @@ entre aspas a célula que tem quebra, e a leitura a devolve inteira.
 
 ### `def _uma_linha(texto)`
 
-*linha 258*
+*linha 264*
 
 O texto de um comentário numa linha só: a quebra e o espaço em volta viram um espaço.
 
 ### `class Grafico`
 
-*linha 264*
+*linha 270*
 
 Um gráfico decidido e ainda não desenhado.
 
@@ -5249,9 +5470,9 @@ que é a mesma pergunta que ela responde no histograma: quantos casos há ali.
 Uma `dataclass` por espécie daria um despacho por tipo no `graficos.py`, que é
 mais código para dizer o que o campo `especie` já diz.
 
-- *linha 284* — `"""` — barras | histograma | colunas | qq | dispersao
+- *linha 290* — `"""` — barras | histograma | colunas | qq | dispersao
 
-*linha 295*
+*linha 301*
 
 > O Q-Q da Fase 7. `reta` é (intercepto, inclinação) — a reta de referência,
 > calculada por quem sabe estatística e não por quem desenha.
@@ -5260,7 +5481,7 @@ mais código para dizer o que o campo `especie` já diz.
 
 ### `class Artefato`
 
-*linha 306*
+*linha 312*
 
 Um arquivo escrito por uma análise.
 
@@ -5270,15 +5491,15 @@ isso que ela é um campo próprio e não uma dedução a partir da extensão.
 
 #### `def e_tabela(self)`
 
-*linha 321*
+*linha 327*
 
 #### `def e_figura(self)`
 
-*linha 325*
+*linha 331*
 
 ### `class ItemDoManifesto`
 
-*linha 330*
+*linha 336*
 
 Uma seção da rodada, com os arquivos que ela gerou.
 
@@ -5294,11 +5515,11 @@ sem o campo, devolve a própria `variavel` — que é o que ele sempre quis dize
 
 #### `def preenchidos(self)`
 
-*linha 357*
+*linha 363*
 
 #### `def colunas_usadas(self)`
 
-*linha 361*
+*linha 367*
 
 As colunas do banco que este item usou.
 
@@ -5309,11 +5530,11 @@ qual versão do FlatCap o arquivo veio.
 
 #### `def artefato(self, especie)`
 
-*linha 374*
+*linha 380*
 
 ### `class Manifesto`
 
-*linha 382*
+*linha 388*
 
 Uma rodada inteira de uma análise.
 
@@ -5327,19 +5548,19 @@ que ele era.
 
 #### `def total_artefatos(self)`
 
-*linha 409*
+*linha 415*
 
 #### `def tabelas(self)`
 
-*linha 413*
+*linha 419*
 
 #### `def figuras(self)`
 
-*linha 417*
+*linha 423*
 
 #### `def colunas_usadas(self)`
 
-*linha 421*
+*linha 427*
 
 Todas as colunas do banco que esta rodada tocou, sem repetir e em ordem.
 
@@ -5349,15 +5570,15 @@ ainda são analisáveis no dicionário de hoje?".
 
 #### `def item(self, variavel)`
 
-*linha 436*
+*linha 442*
 
 #### `def por_tipo(self, tipo)`
 
-*linha 442*
+*linha 448*
 
 #### `def como_dicionario(self)`
 
-*linha 445*
+*linha 451*
 
 A forma serializável, na ordem em que ela sai no arquivo.
 
@@ -5369,7 +5590,7 @@ que são as duas perguntas de quem o abre sem contexto.
 
 ### `def texto_do_manifesto(manifesto)`
 
-*linha 494*
+*linha 500*
 
 O conteúdo do arquivo. Sem tocar no disco, para o `--sim` poder mostrá-lo.
 
@@ -5382,7 +5603,7 @@ por programa não se importa.
 
 ### `def ler(caminho)`
 
-*linha 512*
+*linha 518*
 
 Lê o `manifesto.json` de uma rodada.
 
@@ -5393,19 +5614,19 @@ Raises:
 
 ### `def de_dicionario(corpo, caminho)`
 
-*linha 550*
+*linha 556*
 
 Converte o JSON já decodificado em `Manifesto`.
 
-*linha 598*
+*linha 604*
 
 > Manifesto escrito antes da Fase 7 não tem o campo, e era de uma
 
-- *linha 599* — `retu` — descritiva: era a única análise que existia.
+- *linha 605* — `retu` — descritiva: era a única análise que existia.
 
 ### `def _data_e_hora(valor, caminho)`
 
-*linha 616*
+*linha 622*
 
 ## `flatcap/graficos.py`
 
@@ -10574,7 +10795,7 @@ por variável —, e um `nan` que chegasse viraria um t `nan` sem aviso nenhum.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*4006 linhas.*
+*3997 linhas.*
 
 A comparação — uma variável contra um valor de referência, entre os grupos de outra,
 ou entre medidas repetidas nos mesmos casos —, com o teste que os pressupostos pedem:
@@ -10940,30 +11161,23 @@ escrito nas notas e no terminal.
 > A referência sai como foi escrita, sem arredondar para duas casas: um `0,125` da
 > ficha impresso `0,12` seria uma hipótese que ninguém testou.
 
-### `_NUMERO_ESCRITO`
-
-*linha 488*
-
-> Um número escrito como texto na ficha: `"24,9"`, `"24.9"`, `" 25 "`. Sem separador
-> de milhar — `1.234,5` é ambíguo, e ambiguidade numa hipótese se recusa.
-
 ### `_PARECE_NUMERO`
 
-*linha 492*
+*linha 488*
 
 > Um texto que quer ser número e não é um que se leia sem ambiguidade: `"2.500,00"`.
 > Só algarismos, pontos, vírgulas e espaços — `pas_0` tem algarismo e é um nome.
 
 ### `EXEMPLO_DA_FICHA`
 
-*linha 496*
+*linha 492*
 
 > O exemplo que as mensagens escrevem. Um lugar só, para a recusa e o `--help` nunca
 > ensinarem duas formas diferentes de escrever a mesma lista.
 
 ### `class ComparacaoError(RuntimeError)`
 
-*linha 505*
+*linha 501*
 
 Falha ao gerar a comparação, já traduzida para o usuário.
 
@@ -10973,19 +11187,19 @@ verdade e deve subir com o traceback inteiro.
 
 ### `class DicionarioAusenteError(ComparacaoError)`
 
-*linha 515*
+*linha 511*
 
 O projeto não tem `dicionario.csv`. Não há o que obedecer.
 
 ### `class DicionarioDesatualizadoError(ComparacaoError)`
 
-*linha 521*
+*linha 517*
 
 O banco tem colunas que o dicionário desconhece.
 
 ### `class VariavelIncompativelError(ComparacaoError)`
 
-*linha 527*
+*linha 523*
 
 O dicionário promete `numerica` e a coluna chegou como texto, ou declara uma
 variável que o banco não tem.
@@ -10995,13 +11209,13 @@ como na correlação.
 
 ### `class SemItensError(ComparacaoError)`
 
-*linha 537*
+*linha 533*
 
 A ficha não diz o que comparar.
 
 ### `class ItemInvalidoError(ComparacaoError)`
 
-*linha 543*
+*linha 539*
 
 A lista `comparacao:` da ficha tem item que não serve.
 
@@ -11015,7 +11229,7 @@ uma variável de grupo com mais grupos do que esta versão compara. A mensagem l
 
 ### `class Pedido`
 
-*linha 559*
+*linha 555*
 
 Um item como a ficha o escreve: a variável e, conforme a forma, a referência ou a
 variável de grupo — e, quando houver, o método.
@@ -11029,7 +11243,7 @@ Nas medidas repetidas, `medidas` são as variáveis, na ordem da ficha, e `varia
 
 #### `def escrito(self)`
 
-*linha 579*
+*linha 575*
 
 O item de volta na forma da ficha, para as mensagens. O de medidas repetidas com
 método sai na forma de uma linha só, `{repetidas: [...], metodo: anova}`, que o
@@ -11037,14 +11251,14 @@ YAML lê igual à de duas linhas.
 
 #### `def chave(self)`
 
-*linha 595*
+*linha 591*
 
 O que faz dois itens serem a mesma comparação: o método não entra — o mesmo
 item com outro método é a mesma pergunta feita duas vezes.
 
 ### `class Pergunta`
 
-*linha 608*
+*linha 604*
 
 Um item da ficha, já conferido contra o dicionário. É a pergunta da reunião — "a
 média desta variável difere desta referência?", "difere entre estes grupos?" —
@@ -11056,11 +11270,11 @@ só se sabe com o banco aberto. `metodo` é o nome escrito na ficha, como no
 
 #### `def linhas(self)`
 
-*linha 627*
+*linha 623*
 
 ### `class Normal`
 
-*linha 634*
+*linha 630*
 
 O Shapiro-Wilk do vetor do delineamento.
 
@@ -11070,22 +11284,22 @@ houve um.
 
 #### `def testada(self)`
 
-*linha 649*
+*linha 645*
 
 #### `def rejeita(self)`
 
-*linha 653*
+*linha 649*
 
 ### `class Grupo`
 
-*linha 658*
+*linha 654*
 
 Um grupo de uma comparação entre grupos: o rótulo, quantos casos, a média e o
 desvio, e o Shapiro-Wilk dos valores dele.
 
 ### `class Escolha`
 
-*linha 671*
+*linha 667*
 
 Qual teste rodou, e de onde ele veio.
 
@@ -11096,11 +11310,11 @@ a regra escolheu um que ainda não tem aritmética, e a ficha não mandou outro.
 
 #### `def contra_a_regra(self)`
 
-*linha 687*
+*linha 683*
 
 ### `class VariavelComparada`
 
-*linha 692*
+*linha 688*
 
 Uma pergunta respondida. Na uma amostra é uma linha da tabela; entre grupos, um
 bloco — a linha da comparação e uma linha por grupo.
@@ -11113,61 +11327,61 @@ depende de pressuposto nenhum.
 Na uma amostra, `referencia`, `resumo` e `normal` são da variável inteira; entre
 grupos, `referencia` é `None`, e o resumo e o Shapiro-Wilk estão em cada `Grupo`.
 
-*linha 723*
+*linha 719*
 
 > As casas decimais da variável, as do `resumo_<variável>.csv` da descritiva: as
 > duas de sempre, ou mais numa variável de escala pequena. Ver `_casas_da_coluna`.
 
 #### `def faltantes(self)`
 
-*linha 728*
+*linha 724*
 
 #### `def testada(self)`
 
-*linha 732*
+*linha 728*
 
 #### `def entre_grupos(self)`
 
-*linha 736*
+*linha 732*
 
 #### `def repetidas(self)`
 
-*linha 740*
+*linha 736*
 
 #### `def metodo(self)`
 
-*linha 744*
+*linha 740*
 
 #### `def colunas(self)`
 
-*linha 748*
+*linha 744*
 
 As colunas do banco que esta comparação usou.
 
 #### `def cabeca(self)`
 
-*linha 757*
+*linha 753*
 
 Como a comparação se chama nas frases: `IMC (kg/m²) por Sexo`; nas medidas
 repetidas, os rótulos delas — `PAS basal, PAS 30 dias e PAS 90 dias`.
 
 #### `def n_na_frase(self)`
 
-*linha 769*
+*linha 765*
 
 `n = 57`, e entre grupos `n = 57 (29 em Feminino e 28 em Masculino)`. Nas medidas
 repetidas o n é um só — os casos com todas as medidas.
 
 #### `def celula_do_teste(self)`
 
-*linha 782*
+*linha 778*
 
 O que vai para a coluna `teste`: o nome do teste, ou o motivo no lugar dele —
 como a coluna `método` da correlação e a `teste` da associação.
 
 #### `def justificativa(self)`
 
-*linha 792*
+*linha 788*
 
 A frase que explica a comparação — a nota do `.csv` e a linha do terminal.
 
@@ -11176,7 +11390,7 @@ com as mesmas casas.
 
 #### `def como_detalhe(self)`
 
-*linha 838*
+*linha 834*
 
 Os números desta comparação, para o manifesto — o que responde "de onde saiu
 esse teste, e esse p?" sem reabrir o banco.
@@ -11187,7 +11401,7 @@ teste de postos não o alcança, o de nível menor que o R devolve vai em
 
 ### `def _casas_da_coluna(*colunas)`
 
-*linha 937*
+*linha 933*
 
 As casas decimais da variável, decididas como a descritiva as decide: pela coluna
 inteira, e não pelos casos da comparação — a média da uma amostra sai, letra por
@@ -11196,7 +11410,7 @@ Nas medidas repetidas, as da medida que pede mais, para a tabela não misturar.
 
 ### `def _resumo_no_manifesto(resumo)`
 
-*linha 952*
+*linha 948*
 
 As duas formas do resumo, sempre — a média e o desvio, a mediana e os quartis: a
 tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
@@ -11204,13 +11418,13 @@ um grupo, que a descritiva não tem, não morar só na célula.
 
 ### `class ForaDaComparacao`
 
-*linha 966*
+*linha 962*
 
 Uma variável do dicionário que não está em item nenhum, e por quê.
 
 ### `class Comparacao`
 
-*linha 977*
+*linha 973*
 
 A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
@@ -11219,43 +11433,43 @@ A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
 #### `def raiz(self)`
 
-*linha 994*
+*linha 990*
 
 #### `def linhas(self)`
 
-*linha 998*
+*linha 994*
 
 #### `def colunas_usadas(self)`
 
-*linha 1002*
+*linha 998*
 
 #### `def testadas(self)`
 
-*linha 1011*
+*linha 1007*
 
 #### `def sem_teste(self)`
 
-*linha 1015*
+*linha 1011*
 
 #### `def pela_ficha(self)`
 
-*linha 1019*
+*linha 1015*
 
 #### `def quantos(self, metodo)`
 
-*linha 1022*
+*linha 1018*
 
 #### `def do_delineamento(self, delineamento)`
 
-*linha 1025*
+*linha 1021*
 
 #### `def tabela_de(self, delineamento)`
 
-*linha 1028*
+*linha 1024*
 
 ### `class PlanoComparacao`
 
-*linha 1033*
+*linha 1029*
 
 Tudo o que a `comparacao` faria, decidido e ainda não escrito.
 
@@ -11264,19 +11478,19 @@ a execução ninguém altera um caminho em trânsito.
 
 #### `def raiz(self)`
 
-*linha 1048*
+*linha 1044*
 
 #### `def tabelas(self)`
 
-*linha 1052*
+*linha 1048*
 
 #### `def arquivos(self)`
 
-*linha 1056*
+*linha 1052*
 
 ### `class ResultadoComparacao`
 
-*linha 1061*
+*linha 1057*
 
 O que a execução de fato escreveu.
 
@@ -11284,7 +11498,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_comparacao(raiz, aba, conferir, agora)`
 
-*linha 1074*
+*linha 1070*
 
 Lê os itens da ficha, abre o banco, compara cada item e monta o plano. Não
 escreve nada.
@@ -11308,7 +11522,7 @@ Raises:
 
 ### `def executar_comparacao(plano)`
 
-*linha 1127*
+*linha 1123*
 
 Escreve o plano no disco. Não decide mais nada.
 
@@ -11317,7 +11531,7 @@ tabelas, e só então o `manifesto.json` — o recibo vem depois do que ele desc
 Uma falha no meio desfaz o que já foi feito, inclusive devolvendo a pasta
 arquivada ao lugar, e a exceção continua subindo inteira.
 
-*linha 1149*
+*linha 1145*
 
 > `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi este
 > comando que a criou, e o `rmdir` é registrado antes dos arquivos — o
@@ -11325,7 +11539,7 @@ arquivada ao lugar, e a exceção continua subindo inteira.
 
 ### `def comparar(banco, ficha, linhas_do_dicionario, pedidos, quando)`
 
-*linha 1194*
+*linha 1190*
 
 Compara cada item pedido, obedecendo ao dicionário. Função pura.
 
@@ -11348,7 +11562,7 @@ Raises:
 
     SemItensError, ItemInvalidoError, VariavelIncompativelError
 
-*linha 1231*
+*linha 1227*
 
 > Só as variáveis da lista vão para a recusa: a conferência é a da Fase 5, e o
 > escopo é deste comando.
@@ -11357,7 +11571,7 @@ Raises:
 
 ### `def _comparar_uma_amostra(quadro, pergunta, total)`
 
-*linha 1287*
+*linha 1283*
 
 Mede o pressuposto, aplica a regra (ou obedece à ficha) e calcula.
 
@@ -11372,11 +11586,11 @@ um valor só, e valores que não variam. Valem para o Wilcoxon também, que o R
 calcularia com um valor só, ou com todos iguais: um valor não é uma amostra, e uma
 variável que não varia não tem o que comparar.
 
-- *linha 1306* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
+- *linha 1302* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
 
 ### `def _impedimento(valores, validos, distintos)`
 
-*linha 1361*
+*linha 1357*
 
 O motivo de não haver teste nenhum, ou vazio.
 
@@ -11385,13 +11599,13 @@ terceira usa o critério do R, e não "todos iguais": ver `hipoteses.sem_variaca
 
 ### `def _normal(variavel, valores)`
 
-*linha 1379*
+*linha 1375*
 
 O Shapiro-Wilk da normalidade, pela mesma função, sobre os valores preenchidos.
 
 ### `def _motivo_sem_teste(normal, validos)`
 
-*linha 1387*
+*linha 1383*
 
 O motivo curto, para a célula da coluna `teste`, quando a regra escolheu um teste
 que ainda não existe. A frase inteira, com o p do Shapiro-Wilk, vai para as notas.
@@ -11402,7 +11616,7 @@ para repetir o que a tabela de normalidade do mesmo documento já imprime.
 
 ### `def _avisos_da_linha(nome, pergunta, escolha, normal, validos, distintos)`
 
-*linha 1401*
+*linha 1397*
 
 O que a escolha precisa levar junto para o terminal e para o manifesto.
 
@@ -11421,15 +11635,15 @@ Cinco casos, e cada um é um engano conhecido ou uma decisão que precisa de ras
 
 ### `def _aviso_contra_a_regra(nome, escolha, faltou)`
 
-*linha 1456*
+*linha 1452*
 
 ### `def _aviso_de_discreta(nome, distintos, validos)`
 
-*linha 1465*
+*linha 1461*
 
 ### `def _avisos_do_resultado(nome, resultado, tamanhos, valores)`
 
-*linha 1474*
+*linha 1470*
 
 O que o Wilcoxon e o Mann-Whitney devolvem e precisa de rastro — os três casos são
 de amostra pequena, ou de amostra sem variação, e nenhum deles é erro:
@@ -11451,7 +11665,7 @@ como eles se escrevem na frase.
 
 ### `def _menor_p_exato(metodo, tamanhos)`
 
-*linha 1538*
+*linha 1534*
 
 O menor p bilateral que o caminho exato dá: as duas caudas mais extremas da
 distribuição, com uma combinação cada — 2/2ⁿ no Wilcoxon, 2/C(n₁ + n₂, n₁) no
@@ -11461,7 +11675,7 @@ Mann-Whitney —, e nunca acima de 1.
 
 ### `def _comparar_grupos(quadro, pergunta, total)`
 
-*linha 1553*
+*linha 1549*
 
 Separa os grupos, mede o pressuposto em cada um, aplica a regra (ou obedece à
 ficha) e calcula. Devolve a comparação, ou `None` e a frase do que este banco não
@@ -11478,11 +11692,11 @@ Três barreiras vêm antes da regra — nenhum caso com as duas respostas, um gr
 só, um valor só em todas as linhas —, e as do teste escolhido vêm depois dela:
 cada teste tem o seu mínimo no R.
 
-- *linha 1577* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
+- *linha 1573* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
 
 ### `def _delineamento_dos_grupos(quantos, de_grupo)`
 
-*linha 1680*
+*linha 1676*
 
 O delineamento pelo número de grupos com resposta: dois, ou três ou mais.
 
@@ -11492,14 +11706,14 @@ outros casos: a pergunta foi feita sobre aqueles grupos, e o banco não os tem.
 
 ### `def _impedimento_dos_grupos(validos, quantos, distintos)`
 
-*linha 1696*
+*linha 1692*
 
 O motivo de não haver teste nenhum entre grupos, ou vazio. Vale para qualquer
 teste, escrito na ficha ou não.
 
 ### `def _impedimento_do_teste(metodo, amostras, grupos)`
 
-*linha 1710*
+*linha 1706*
 
 O motivo de o teste escolhido não rodar, ou vazio — as barreiras do R para ele,
 que mudam de teste para teste.
@@ -11523,11 +11737,11 @@ por zero.
 
 ### `def _sem_variacao_nos_grupos(amostras)`
 
-*linha 1783*
+*linha 1779*
 
 ### `def _normal_do_grupo(variavel, rotulo, valores, onde)`
 
-*linha 1789*
+*linha 1785*
 
 O Shapiro-Wilk de um grupo — ou de uma medida, nas repetidas —, pela mesma função
 da normalidade.
@@ -11539,7 +11753,7 @@ completos.
 
 ### `def _motivo_sem_teste_dos_grupos(escolha, grupos, delineamento)`
 
-*linha 1809*
+*linha 1805*
 
 O motivo curto, para a célula, quando a regra escolheu um teste que ainda não
 existe. Sem o p, pela mesma razão da uma amostra; a frase inteira vai para as
@@ -11547,7 +11761,7 @@ notas.
 
 ### `def _avisos_dos_grupos(nome, pergunta, escolha, grupos, delineamento, validos, distintos)`
 
-*linha 1827*
+*linha 1823*
 
 Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
@@ -11565,7 +11779,7 @@ Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
 ### `def _aviso_de_variancias(nome, metodo, grupos, delineamento)`
 
-*linha 1896*
+*linha 1892*
 
 O maior desvio padrão contra o menor, quando o teste supõe variâncias iguais e
 eles passam de `RAZAO_DE_DESVIOS` — ou quando um grupo não varia.
@@ -11575,7 +11789,7 @@ Só os grupos com dois valores ou mais: o desvio de um valor só sai zero no
 
 ### `def _metodo_sugerido(delineamento)`
 
-*linha 1933*
+*linha 1929*
 
 O método para o aviso ensinar a escrever: o paramétrico da regra, quando ele
 existe, e senão o primeiro paramétrico que existe — o nome como se escreve e o
@@ -11583,7 +11797,7 @@ teste.
 
 ### `def _problema_do_metodo(chave, teste, delineamento, de_grupo, quantos)`
 
-*linha 1951*
+*linha 1947*
 
 O método escrito que não serve para o número de grupos que o banco trouxe, ou
 vazio. A ficha é conferida antes de abrir o banco, mas só o banco diz quantos
@@ -11593,7 +11807,7 @@ grupos há — e um método de dois grupos numa variável de três é recusado a
 
 ### `def _comparar_repetidas(quadro, pergunta, total)`
 
-*linha 1977*
+*linha 1973*
 
 As mesmas pessoas, medidas k vezes: mede o pressuposto em cada medida, aplica a
 regra (ou obedece à ficha) e calcula.
@@ -11610,11 +11824,11 @@ variam dentro dos casos, em que o F é uma divisão por zero; no Friedman, cada 
 com o mesmo valor em todas as medidas, em que não há o que ordenar. Ver
 `_impedimento_das_medidas`.
 
-- *linha 1998* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
+- *linha 1994* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
 
 ### `def _impedimento_das_medidas(metodo, vetores, pergunta)`
 
-*linha 2071*
+*linha 2067*
 
 A barreira do teste das medidas repetidas — o motivo curto e o aviso —, ou dois
 vazios. Cada teste tem a sua, e uma não é a outra:
@@ -11628,11 +11842,11 @@ vazios. Cada teste tem a sua, e uma não é a outra:
 
 ### `def _impedimento_das_repetidas(validos, distintos)`
 
-*linha 2103*
+*linha 2099*
 
 ### `def _avisos_das_repetidas(nome, pergunta, escolha, grupos, validos, distintos)`
 
-*linha 2113*
+*linha 2109*
 
 Os avisos dos grupos, na forma das medidas: a linha sem teste ensina a escrever o
 método no item — `metodo: anova`, na linha de baixo —; a ficha contra a regra; o
@@ -11645,7 +11859,7 @@ justamente para quando a covariância foge da esfericidade.
 
 ### `def regra(delineamento, normal)`
 
-*linha 2162*
+*linha 2158*
 
 A regra dos pressupostos: o teste que ela escolhe, e o motivo.
 
@@ -11664,24 +11878,24 @@ escolhido.
 
 ### `def _pela_regra(delineamento, teste, motivo)`
 
-*linha 2226*
+*linha 2222*
 
 ### `def _disponivel(delineamento, teste)`
 
-*linha 2231*
+*linha 2227*
 
 ### As tabelas
 
 ### `def _tabelas(variaveis, total)`
 
-*linha 2238*
+*linha 2234*
 
 Uma tabela por delineamento que apareceu na ficha, na ordem de `DELINEAMENTOS`, e
 os itens de cada uma na ordem da ficha.
 
 ### `def linhas_da_tabela(variavel)`
 
-*linha 2257*
+*linha 2253*
 
 As linhas de uma comparação na tabela do delineamento dela.
 
@@ -11699,7 +11913,7 @@ quartis —, e o intervalo só entra quando é o de 95% que o cabeçalho promete
 
 ### `def _teste_da_linha(variavel)`
 
-*linha 2326*
+*linha 2322*
 
 O teste que a linha mostra, ou que teria mostrado: o que rodou; o escolhido, quando
 uma barreira dele o impediu de rodar; o da regra, quando ela escolheu um que ainda
@@ -11707,11 +11921,11 @@ não tem aritmética. Vazio quando nenhum teste chegou a ser escolhido.
 
 ### `def _de_postos(variavel)`
 
-*linha 2338*
+*linha 2334*
 
 ### `def _resumo_da_linha(variavel, resumo)`
 
-*linha 2342*
+*linha 2338*
 
 O resumo de um grupo, de uma medida ou da variável, na medida que o teste da linha
 usa: a mediana e os quartis nos testes de postos, a média e o desvio nos outros — e
@@ -11719,14 +11933,14 @@ quando não há teste nenhum, que é como a tabela sempre resumiu.
 
 ### `def _coluna_do_resumo(variaveis)`
 
-*linha 2353*
+*linha 2349*
 
 O cabeçalho da coluna do resumo, pelo que ela tem: as linhas sem resumo nenhum — o
 traço de quem não tem valor — não contam.
 
 ### `def _coluna_do_intervalo(variaveis)`
 
-*linha 2370*
+*linha 2366*
 
 O cabeçalho do intervalo da uma amostra, pelo teste de cada linha — o que rodou, ou
 o que a regra escolheu —, como o do resumo: o traço de um intervalo que não chega a
@@ -11735,7 +11949,7 @@ teste nenhum não contam, e uma tabela só delas fica com o da média, de sempre
 
 ### `def _coluna_da_diferenca(variaveis)`
 
-*linha 2385*
+*linha 2381*
 
 O cabeçalho da diferença entre dois grupos, pelo teste de cada linha, como o do
 intervalo da uma amostra: as linhas sem teste nenhum não contam, e uma tabela só do
@@ -11743,7 +11957,7 @@ t — ou sem teste nenhum — fica com o de sempre.
 
 ### `def _ic_da_tabela(resultado)`
 
-*linha 2399*
+*linha 2395*
 
 O intervalo que vai para a tabela: o de 95%, e só ele. Quando o R não o alcança —
 poucos valores num teste de postos —, ele devolve um de nível menor, que fica no
@@ -11751,7 +11965,7 @@ manifesto e no aviso, e não numa coluna que promete 95%.
 
 ### `def _tabela_uma_amostra(variaveis, total)`
 
-*linha 2412*
+*linha 2408*
 
 Uma linha por item, na ordem da ficha.
 
@@ -11762,13 +11976,13 @@ são do t, e os do Wilcoxon quando ele aparece. O que decidiu cada teste — o p
 Shapiro-Wilk, a estatística, os graus de liberdade, o caminho do p — vai para as
 notas do `.csv`, uma frase por linha, e para o manifesto.
 
-*linha 2454*
+*linha 2450*
 
 > Vazia de propósito: esta tabela fala de várias variáveis.
 
 ### `def _tabela_dois_grupos(variaveis, total)`
 
-*linha 2471*
+*linha 2467*
 
 Um bloco por item, na ordem da ficha: a linha da comparação e uma linha por grupo.
 
@@ -11783,7 +11997,7 @@ sempre foi, `diferença de locação (IC 95%)` quando são do Mann-Whitney.
 
 ### `def _tabela_k_grupos(variaveis, total)`
 
-*linha 2539*
+*linha 2535*
 
 Um bloco por item, como a dos dois grupos, sem a coluna da diferença: com três
 grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`, o
@@ -11792,7 +12006,7 @@ as notas, com o resto do que decidiu cada teste.
 
 ### `def _tabela_repetidas(variaveis, total)`
 
-*linha 2594*
+*linha 2590*
 
 Um bloco por item: uma linha por medida, na ordem da ficha, e o teste e o p na
 primeira. Cinco colunas — `medida`, `n`, o resumo, `teste` e `p-valor`.
@@ -11803,7 +12017,7 @@ em alguma medida, ele difere do `resumo` da descritiva, e a nota diz isso.
 
 ### `def _ainda_nao(delineamento)`
 
-*linha 2645*
+*linha 2641*
 
 A frase das notas sobre os testes da regra que ainda não têm aritmética — com o
 espaço do fim, para entrar entre duas frases —, ou vazio, que é o caso de todos os
@@ -11813,7 +12027,7 @@ delineamentos desde a 1.14.0.
 
 ### `def itens_da_ficha(raiz)`
 
-*linha 2666*
+*linha 2662*
 
 A lista `comparacao:` do `projeto.yaml`, conferida na forma e desdobrada.
 
@@ -11843,19 +12057,19 @@ Raises:
 
 ### `def _ler_item(item)`
 
-*linha 2729*
+*linha 2725*
 
 Um item da lista: os `Pedido` que ele escreve, ou a frase do que está errado nele.
 
 ### `def _ler_grupos(item, escrito, nome, grupo)`
 
-*linha 2817*
+*linha 2813*
 
 O item entre grupos: `[imc, sexo]`, ou `[imc, sexo, student]`.
 
 ### `def _ler_repetidas(item)`
 
-*linha 2848*
+*linha 2844*
 
 O item de medidas repetidas — a marca `repetidas:` e a lista das medidas, na ordem
 em que foram feitas, e o método numa chave ao lado, quando vier:
@@ -11869,14 +12083,14 @@ que é o t pareado ao quadrado.
 
 ### `def _ler_uma_contra_varias(item)`
 
-*linha 2898*
+*linha 2894*
 
 A forma com dois-pontos: `sexo: [imc, idade]` — cada variável da lista entre os
 grupos da que vem antes dos dois-pontos.
 
 ### `def _metodo_na_ficha(escrito, texto, familia)`
 
-*linha 2932*
+*linha 2928*
 
 O método escrito no item, conferido contra a forma dele: devolve o nome na forma
 de `_chave`, ou a frase do que está errado.
@@ -11888,21 +12102,21 @@ ele serve para o número de grupos que o banco tem só se sabe depois: ver
 
 ### `def _metodos_de(familia)`
 
-*linha 3006*
+*linha 3002*
 
 Os nomes que se escrevem no item e têm teste com aritmética na família.
 
 ### `def _e_metodo(texto)`
 
-*linha 3016*
+*linha 3012*
 
 ### `def _teste_da_chave(chave, delineamento)`
 
-*linha 3021*
+*linha 3017*
 
 ### `def metodo_escrito(texto, delineamento)`
 
-*linha 3025*
+*linha 3021*
 
 O teste que o método escrito na ficha quer dizer no delineamento, como a tabela o
 escreve; vazio quando o texto não é um método dele, ou quando o teste ainda não
@@ -11914,7 +12128,7 @@ Student contra uma referência, e o de Welch entre dois grupos.
 
 ### `def referencia_escrita(valor)`
 
-*linha 3039*
+*linha 3035*
 
 O valor de referência, a partir de como a ficha o trouxe; `None` quando não é um
 número.
@@ -11924,9 +12138,13 @@ vírgula ou ponto decimal, e sem separador de milhar: é o `"24,9"` entre aspas 
 a recusa da vírgula decimal ensina a escrever. Lógico não é número, embora o
 Python ache que `True` vale 1.
 
+A regra mora no `ficha.numero_escrito` desde a 1.15.0, quando a amostragem passou a
+ler o `desenho.yaml` com ela; o nome continua aqui, porque é o que esta análise
+pergunta — "qual é a referência?".
+
 ### `def _numero_partido(item)`
 
-*linha 3061*
+*linha 3052*
 
 O `[imc, 24,9]` que o YAML leu como `[imc, 24, 9]`: o número de volta, com ponto
 — `24.9` —, e se o sinal dele se perdeu; `None` quando o item não tem essa forma.
@@ -11940,7 +12158,7 @@ mesmo inteiro.
 
 ### `def _digitos(valor)`
 
-*linha 3084*
+*linha 3075*
 
 Os algarismos de um inteiro sem sinal como foram digitados — `05`, e não `5` —, ou
 vazio quando o valor não é um.
@@ -11954,23 +12172,23 @@ também serve: é como outra biblioteca de YAML leria o `09`.
 
 ### `def _inteiro(valor)`
 
-*linha 3110*
+*linha 3101*
 
 ### `def _como_pedido(item)`
 
-*linha 3114*
+*linha 3105*
 
 ### `def _metodos_da_chave(chave, familia)`
 
-*linha 3143*
+*linha 3134*
 
 ### `def _pedido_de(pergunta)`
 
-*linha 3149*
+*linha 3140*
 
 ### `def _conferir_itens(pedidos, linhas)`
 
-*linha 3160*
+*linha 3151*
 
 Confere cada item contra o dicionário, e recusa listando todos os problemas.
 
@@ -11987,15 +12205,15 @@ numéricas são uma correlação —, ou diz que os dois nomes estão trocados.
 
 ### `def _motivo_de_recusa(nome, linha)`
 
-*linha 3249*
+*linha 3240*
 
 ### `def _motivo_de_ausencia(nome, linha)`
 
-*linha 3263*
+*linha 3254*
 
 ### `def _motivo_de_recusa_das_medidas(nomes, por_nome)`
 
-*linha 3273*
+*linha 3264*
 
 O que impede as medidas repetidas, pelo dicionário — ou vazio. As medidas com o
 mesmo problema saem numa frase só: três medidas marcadas `categorica` são uma
@@ -12003,15 +12221,15 @@ decisão do dicionário, e não três.
 
 ### `def _crases(nomes)`
 
-*linha 3320*
+*linha 3311*
 
 ### `def _verbo(nomes, singular, plural)`
 
-*linha 3324*
+*linha 3315*
 
 ### `def _motivo_de_recusa_entre_grupos(pedido, por_nome)`
 
-*linha 3328*
+*linha 3319*
 
 O que impede o item entre grupos, pelo dicionário — ou vazio.
 
@@ -12019,7 +12237,7 @@ O que impede o item entre grupos, pelo dicionário — ou vazio.
 
 ### `def montar_manifesto(comparacao, linhas)`
 
-*linha 3382*
+*linha 3373*
 
 Traduz a rodada para o índice que o relatório vai ler.
 
@@ -12031,18 +12249,18 @@ variável. O que decidiu cada teste vai em `detalhes`, sob o nome do delineament
 
 ### `def _regras()`
 
-*linha 3475*
+*linha 3466*
 
 As regras desta versão, escritas por extenso no manifesto — as mesmas das notas
 das tabelas, sem os números de uma rodada.
 
 #### `def escolha(delineamento, onde, depois)`
 
-*linha 3480*
+*linha 3471*
 
 ### `def _ambiente()`
 
-*linha 3616*
+*linha 3607*
 
 As versões que produziram estes números.
 
@@ -12052,38 +12270,38 @@ bloco ter a forma dos outros.
 
 ### `def _shapiro_no_manifesto(normal)`
 
-*linha 3638*
+*linha 3629*
 
 ### Mensagens
 
 ### `def _mensagem_sem_itens(linhas)`
 
-*linha 3652*
+*linha 3643*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 3689*
+*linha 3680*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 3697*
+*linha 3688*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 3725*
+*linha 3716*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras análises:
 nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _rotulo(linha)`
 
-*linha 3736*
+*linha 3727*
 
 ### `def _nome(valor)`
 
-*linha 3740*
+*linha 3731*
 
 Um nome, como a ficha o trouxe; vazio quando não é um nome.
 
@@ -12092,11 +12310,11 @@ da lista também não — é o `[[imc, 25]]` digitado com um colchete a mais.
 
 ### `def _simplificado(texto)`
 
-*linha 3752*
+*linha 3743*
 
 ### `def _chave(texto)`
 
-*linha 3757*
+*linha 3748*
 
 O método como ele se procura no `METODOS`: sem acento, minúsculo, e só letras e
 algarismos — `Mann-Whitney`, `mann whitney` e `MANN_WHITNEY` são o mesmo —, com as
@@ -12104,49 +12322,49 @@ outras grafias do `_SINONIMOS` trocadas pela da casa.
 
 ### `def _concorda(teste, participio)`
 
-*linha 3767*
+*linha 3758*
 
 `t de Welch escrito`, `ANOVA escrita`: o participio no gênero do teste.
 
 ### `def _com_artigo(teste, maiuscula)`
 
-*linha 3772*
+*linha 3763*
 
 `o t de Welch`, `a ANOVA` — e, no começo da frase, `O t de Welch`, `A ANOVA`.
 
 ### `def _em_frase(itens)`
 
-*linha 3778*
+*linha 3769*
 
 `A`, `A e B`, `A, B e C`.
 
 ### `def _ou(nomes)`
 
-*linha 3786*
+*linha 3777*
 
 `` `t` ``, `` `t` ou `student` ``, com as crases.
 
 ### `def _unidades(delineamento)`
 
-*linha 3794*
+*linha 3785*
 
 O que se compara no delineamento, no singular e no plural.
 
 ### `def _nenhum(delineamento, quantos)`
 
-*linha 3799*
+*linha 3790*
 
 `nenhum dos dois grupos`, `nenhum dos 3 grupos`, `nenhuma das 3 medidas`.
 
 ### `def _p_na_frase(p)`
 
-*linha 3806*
+*linha 3797*
 
 O p dentro de uma frase: `p = 0,412`, ou `p < 0,001` — nunca `p = < 0,001`.
 
 ### `def _estatistica_em_texto(resultado)`
 
-*linha 3814*
+*linha 3805*
 
 `t = 2,16; 56 gl`, `F = 6,39; 2 e 57 gl` — e, nas medidas repetidas, o ε de
 Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`. No
@@ -12155,14 +12373,14 @@ Wilcoxon e no Mann-Whitney, o caminho do p, que muda com o n e com os empates:
 
 ### `def _media_e_desvio(resumo, casas)`
 
-*linha 3829*
+*linha 3820*
 
 `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
 pelo mesmo `numero()` e com as mesmas casas.
 
 ### `def _mediana_e_quartis(resumo, casas)`
 
-*linha 3839*
+*linha 3830*
 
 `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
 escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
@@ -12170,11 +12388,11 @@ colchetes e o `a` do intervalo.
 
 ### `def _intervalo(intervalo, casas)`
 
-*linha 3851*
+*linha 3842*
 
 ### `def _diferenca(resultado, casas)`
 
-*linha 3858*
+*linha 3849*
 
 `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
 fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
@@ -12182,7 +12400,7 @@ locação no Mann-Whitney. Sem o intervalo de 95%, o traço na célula inteira.
 
 ### `def _fixo(valor, casas)`
 
-*linha 3870*
+*linha 3861*
 
 Casas fixas — as duas de sempre, ou as da variável quando a escala dela é pequena
 —, o hífen do teclado no negativo, e nunca `-0,00` — o formato do coeficiente da
@@ -12191,7 +12409,7 @@ direção.
 
 ### `def _referencia_em_texto(valor, ponto)`
 
-*linha 3883*
+*linha 3874*
 
 A referência como foi escrita, sem os zeros do fim: `25`, `24,9`, `0,125`.
 
@@ -12200,28 +12418,28 @@ o que funciona.
 
 ### `def _descrever_valor(valor)`
 
-*linha 3894*
+*linha 3885*
 
 ### `def _descrever_solto(valor)`
 
-*linha 3906*
+*linha 3897*
 
 Um valor como ele apareceria dentro dos colchetes da ficha.
 
 ### `def _arredondar(valor)`
 
-*linha 3915*
+*linha 3906*
 
 ### `def _significativos(valor)`
 
-*linha 3922*
+*linha 3913*
 
 O p no manifesto, com seis algarismos significativos, e não seis casas — o da
 correlação. Com seis casas, um p de 2,5e-08 seria gravado como `0.0`.
 
 ### `def _integridade(confere)`
 
-*linha 3933*
+*linha 3924*
 
 ## `flatcap/analises.py`
 
@@ -12770,7 +12988,7 @@ Sem artigo antes do nome, pelo motivo que o relatório escreveu na função dele
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1429 linhas.*
+*1466 linhas.*
 
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -13219,7 +13437,7 @@ anteriores — e aí já está na lista, achado pela varredura. A linha
 `_ = destino` que morava no fim desta função dizia isso e não fazia nada;
 dizer está na docstring, que é onde se diz.
 
-### `def _localizar_template(raiz, template)`
+### `def localizar_template(raiz, template)`
 
 *linha 674*
 
@@ -13246,7 +13464,11 @@ O modelo mora fora do repositório de propósito. Ele carrega logotipo e
 identidade visual da instituição, muda sem pedir licença a ninguém, e é
 binário — três razões pelas quais ele não é código.
 
-*linha 710*
+Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
+procura o modelo pelos mesmos degraus, e dois caminhos de busca é como um dos
+dois relatórios sai sem o logotipo.
+
+*linha 714*
 
 > O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
 > de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
@@ -13255,7 +13477,7 @@ binário — três razões pelas quais ele não é código.
 
 ### `def _rodadas(raiz, ficha)`
 
-*linha 724*
+*linha 731*
 
 As rodadas de `3. Análises/`, na ordem do documento.
 
@@ -13275,7 +13497,7 @@ Raises:
 
 ### `def _ordenar(rodadas, analises_da_ficha)`
 
-*linha 772*
+*linha 779*
 
 A ordem das seções do documento: a ficha primeiro, o padrão depois.
 
@@ -13293,7 +13515,7 @@ escrito na ficha e sem rodada no disco não entra aqui — ele vira aviso, em
 
 ### `def _manifesto_principal(rodadas)`
 
-*linha 806*
+*linha 813*
 
 O manifesto que responde pelo documento quando a pergunta é uma só.
 
@@ -13306,7 +13528,7 @@ primeira rodada da ordem — que é a que o documento apresenta primeiro.
 
 ### `def _variaveis_de_fora(rodadas)`
 
-*linha 823*
+*linha 830*
 
 As variáveis do dicionário que **nenhuma** rodada descreveu.
 
@@ -13318,11 +13540,11 @@ aparece em rodada nenhuma.
 
 ### `def _mensagem_sem_rodada(raiz)`
 
-*linha 850*
+*linha 857*
 
 ### `def _analises_em_texto(analises)`
 
-*linha 861*
+*linha 868*
 
 `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
 
@@ -13332,7 +13554,7 @@ manifesto é escrito por quem escreveu a análise.
 
 ### `def _secoes(pasta, manifesto)`
 
-*linha 875*
+*linha 882*
 
 Uma seção por variável do manifesto, na ordem dele.
 
@@ -13343,7 +13565,7 @@ reversível em um comando que não roda.
 
 ### `def ler_tabela(caminho, especie, titulo)`
 
-*linha 923*
+*linha 930*
 
 Lê um `.csv` de uma análise sem o `pandas` e sem converter valor nenhum.
 
@@ -13359,14 +13581,29 @@ instalado —, é economia de conversão: `pd.read_csv` leria `28,7` como texto
 ou como número dependendo do `decimal=`, e das duas uma sairia diferente do
 que está no arquivo. Aqui o texto atravessa intacto.
 
-*linha 950*
+### `def tabela_do_texto(texto, especie, titulo, caminho)`
+
+*linha 960*
+
+O miolo do `ler_tabela`: o texto de um `.csv` de análise, já lido, virando tabela.
+
+Separado desde a 1.15.0, para a amostragem: ela monta o relatório da amostra a
+partir do texto do `tamanho.csv` **antes** de ele ir ao disco — o `preparar` decide
+o documento inteiro, e o `executar` só escreve. É o mesmo texto que vai para o
+arquivo, lido pela mesma função que o lê do disco, e por isso o documento e a
+tabela não têm como dizer números diferentes.
+
+O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM que o
+`manifesto.Tabela.texto` escreve é tirado aqui, como o `utf-8-sig` o tira na leitura.
+
+*linha 978*
 
 > Os comentários são só os do começo, como no `dicionario.csv`: depois do
 > cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
 > que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
 > tabela do documento e virava nota, e o `Total` deixava de somar.
 
-*linha 972*
+*linha 1000*
 
 > O primeiro comentário é o título do arquivo; o título do manifesto é o
 > mesmo texto e tem precedência, para que o documento e o índice não possam
@@ -13376,7 +13613,7 @@ que está no arquivo. Aqui o texto atravessa intacto.
 
 ### `_MARCADOR`
 
-*linha 996*
+*linha 1024*
 
 > O que ocupa o lugar de um campo que veio em branco.
 >
@@ -13392,7 +13629,7 @@ que está no arquivo. Aqui o texto atravessa intacto.
 
 ### `def montar_abertura(ficha, texto_padrao)`
 
-*linha 1013*
+*linha 1041*
 
 Os parágrafos da primeira página: o texto fixo, a finalidade, os objetivos.
 
@@ -13413,7 +13650,7 @@ estiver escrito na constante hoje.
 
 ### `def _paragrafos(texto)`
 
-*linha 1045*
+*linha 1073*
 
 Cada quebra de linha do campo `notes` vira um parágrafo do documento.
 
@@ -13425,9 +13662,9 @@ linha aqui".
 
 ### As conferências
 
-### `def _conferir_texto(ficha)`
+### `def conferir_texto(ficha)`
 
-*linha 1061*
+*linha 1089*
 
 Quais campos da primeira página vieram em branco.
 
@@ -13436,9 +13673,12 @@ quatro perguntam se a rodada ainda descreve a pasta, esta pergunta se o
 documento está pronto para ser enviado. Ela não recusa nada, pelo mesmo
 motivo das outras — o documento sai, com o aviso dentro dele.
 
+Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
+abre com a mesma primeira página, e o campo em branco precisa do mesmo aviso lá.
+
 ### `def _conferir_banco(raiz, ficha, rodadas, conferir)`
 
-*linha 1096*
+*linha 1130*
 
 As rodadas ainda descrevem a versão vigente do banco?
 
@@ -13461,11 +13701,11 @@ versões diferentes são dois — que é a informação que interessa, porque a�
 documento está misturando números de dois bancos e as análises que ele nomeia
 são as que precisam ser refeitas.
 
-- *linha 1162* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
+- *linha 1196* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
 
 ### `def _conferir_dicionario(raiz, rodadas)`
 
-*linha 1200*
+*linha 1234*
 
 O `dicionario.csv` de hoje é o que dirigiu as rodadas?
 
@@ -13499,13 +13739,13 @@ Perguntar a pergunta a todas as rodadas faria toda categórica do dicionário
 ser dada como «entrou depois» em um projeto que só rodou a normalidade —
 um alerta dentro do documento do cliente, sobre nada.
 
-- *linha 1238* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
+- *linha 1272* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
 
-*linha 1260*
+*linha 1294*
 
 > Quais colunas do banco cada rodada tocou, e qual rodada tocou primeiro.
 
-*linha 1266*
+*linha 1300*
 
 > Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
 > para eles: uma seção que fala de doze colunas não tem um tipo do
@@ -13513,7 +13753,7 @@ um alerta dentro do documento do cliente, sobre nada.
 
 ### `def _faixas_mudaram(faixas, detalhes)`
 
-*linha 1341*
+*linha 1375*
 
 Compara os cortes do dicionário com os que a rodada usou.
 
@@ -13521,23 +13761,23 @@ O manifesto guarda `origem` (`dicionario` ou `quartis`) e os `cortes` já
 arredondados. As três formas de divergir são: faixas preenchidas depois de a
 rodada ter usado quartis, faixas apagadas, e cortes diferentes.
 
-- *linha 1365* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+- *linha 1399* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
 
 ### Mensagens
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 1379*
+*linha 1413*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1390*
+*linha 1424*
 
 ## `flatcap/documento.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1424 linhas.*
+*1431 linhas.*
 
 O `.docx` do relatório.
 
@@ -14072,9 +14312,14 @@ inteira em branco, o que faz o documento parecer defeituoso já na abertura.
 
 Os metadados do arquivo, que o Windows mostra sem ninguém abrir o documento.
 
+A rodada é a do manifesto principal, com o nome dela — até a 1.14.1 o texto dizia
+"a partir da descritiva" mesmo quando só a normalidade tinha rodado. E o banco
+pode não existir: o relatório da amostra sai de um projeto que só tem o
+`desenho.yaml`, e ali o certo é "sem banco", e não "banco ?".
+
 ### `def _salvar_atomico(documento, caminho)`
 
-*linha 884*
+*linha 891*
 
 Grava o documento inteiro ou não grava nada.
 
@@ -14090,7 +14335,7 @@ O temporário é o do `ficha.temporario_ao_lado`, que respeita o `umask`: o
 
 ### `def _manter_junta(quadro)`
 
-*linha 914*
+*linha 921*
 
 Impede que uma tabela curta se parta na quebra de página.
 
@@ -14104,9 +14349,9 @@ cabeçalho repetido que resolve a leitura do outro lado.
 
 #### `def prender(linha)`
 
-*linha 928*
+*linha 935*
 
-*linha 938*
+*linha 945*
 
 > A tabela longa parte, e é o cabeçalho repetido que resolve a leitura do
 > outro lado. Com uma exceção: o `Total`. Sozinho no alto de uma página,
@@ -14117,7 +14362,7 @@ cabeçalho repetido que resolve a leitura do outro lado.
 
 ### `def _repetir_cabecalho(linha)`
 
-*linha 949*
+*linha 956*
 
 Marca a primeira linha como cabeçalho, para o Word repeti-la a cada página.
 
@@ -14127,17 +14372,17 @@ metade de baixo é uma coluna de números sem nome.
 
 ### `def _sombrear(celula, cor)`
 
-*linha 963*
+*linha 970*
 
 ### `def _bordas_da_tabela(tabela, cor, espessura)`
 
-*linha 971*
+*linha 978*
 
 Uma borda em volta de tudo. Serve a caixa de aviso, que é uma célula só.
 
 ### `def _bordas_de_tres_linhas(quadro, cor)`
 
-*linha 984*
+*linha 991*
 
 Topo, sob o cabeçalho, base. Nenhuma vertical.
 
@@ -14149,11 +14394,11 @@ o cliente pôr dois relatórios lado a lado.
 
 ### `def _lado_da_borda(nome, espessura, cor)`
 
-*linha 1002*
+*linha 1009*
 
 ### `def _escrever_bordas(tabela, lados)`
 
-*linha 1011*
+*linha 1018*
 
 Escreve `w:tblBorders`, com `none` explícito no que não foi pedido.
 
@@ -14161,13 +14406,13 @@ O `none` precisa ser escrito: sem ele, o lado herda a borda do estilo de
 tabela do modelo, e uma tabela de três linhas herdaria as verticais de um
 `Table Grid` institucional sem nada no código dizendo de onde elas vieram.
 
-*linha 1029*
+*linha 1036*
 
 > `tblBorders` vem antes de `tblLayout` e `tblLook` no esquema do OOXML.
 
 ### `def _rodape_com_pagina(secao)`
 
-*linha 1037*
+*linha 1044*
 
 O rodapé do documento padrão: `página N`, centralizado.
 
@@ -14177,13 +14422,13 @@ como instrução (`PAGE`) e o Word calcula na hora de exibir. Escrever o número
 
 ### `def _campo(paragrafo, instrucao, tamanho)`
 
-*linha 1053*
+*linha 1060*
 
 ### O modelo
 
 ### `def escrever_template(caminho)`
 
-*linha 1075*
+*linha 1082*
 
 Escreve um `template.docx` com os estilos do FlatCap já definidos.
 
@@ -14197,7 +14442,7 @@ procura antes de qualquer outro. Mude a fonte de `FlatCap Corpo` e o
 documento inteiro muda; ponha o logotipo no cabeçalho e ele aparece em todas
 as páginas de todos os relatórios.
 
-*linha 1098*
+*linha 1105*
 
 > As propriedades do arquivo são o único lugar de dentro do `.docx` em que
 > cabe uma explicação: elas aparecem no Word em Arquivo → Informações, não são
@@ -14206,14 +14451,14 @@ as páginas de todos os relatórios.
 
 ### `_NOTA_DO_MODELO`
 
-*linha 1111*
+*linha 1118*
 
 > O `dc:description` do OOXML tem limite de 255 caracteres — daí a nota ser um
 > ponteiro para a folha de decisões, e não a explicação inteira.
 
 ### `def _escrever_decisoes(caminho)`
 
-*linha 1121*
+*linha 1128*
 
 Escreve a folha de decisões ao lado do modelo, se ela ainda não existir.
 
@@ -14225,7 +14470,7 @@ a fusão do `dicionario.csv` existe para impedir.
 
 ### `def _fonte_do_estilo(estilo, nome)`
 
-*linha 1137*
+*linha 1144*
 
 Escreve a fonte nos quatro atributos do `w:rFonts`, e não só em dois.
 
@@ -14240,7 +14485,7 @@ convivem, quem vence depende da versão do Word.
 
 ### `def _fixar_tema(documento)`
 
-*linha 1159*
+*linha 1166*
 
 Põe a mesma fonte também no tema do documento.
 
@@ -14255,7 +14500,7 @@ mexe em outra coisa — e ele não tem como descobrir por quê.
 
 ### `def _definir_estilos(documento)`
 
-*linha 1182*
+*linha 1189*
 
 Cria os estilos `FlatCap *`, cada um herdando de um nativo do Word.
 
@@ -14278,13 +14523,13 @@ variável no painel de navegação do Word e num sumário, e `FlatCap Legenda` d
 
 #### `def criar(nome, base, tipo)`
 
-*linha 1207*
+*linha 1214*
 
-- *linha 1213* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
+- *linha 1220* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
 
 ### `def _estilo_de_tabela(documento)`
 
-*linha 1256*
+*linha 1263*
 
 Cria `FlatCap Tabela` — as três linhas, dentro do modelo.
 
@@ -14305,16 +14550,763 @@ cabeçalho" sem precisar saber quantas linhas a tabela tem.
 
 ### `def _margens_da_celula(cm)`
 
-*linha 1305*
+*linha 1312*
 
 O respiro entre a régua e o texto. Sem ele a tabela de três linhas fica
 apertada — sem verticais, é o espaço que separa as colunas.
+
+## `flatcap/amostral.py`
+
+`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
+
+*227 linhas.*
+
+A aritmética da amostragem — o z, o tamanho e a perda —, como números.
+
+É a fronteira do `hipoteses.py` com o `comparacao.py`, aplicada à amostra. Este módulo
+recebe números e devolve números; quem lê o `desenho.yaml`, converte os percentuais, monta a
+tabela e escreve o relatório da amostra é o `amostragem.py`. Três consequências:
+
+* **só biblioteca padrão** — `math` e `statistics`. Sem `pandas`, `numpy` nem `scipy`: o
+  comando da amostragem parte rápido, e o `test_amostral.py` confere as contas sem projeto,
+  ficha nem banco;
+* **frações, e não percentuais** — 0,95, 0,05, 0,5. O `95` é como o cliente fala e como a
+  ficha se escreve; a conversão é de quem lê a ficha, e uma conta que aceitasse as duas
+  formas teria de adivinhar qual veio;
+* **nenhuma formatação** — o 278 sai daqui como `int`, e a forma dele na tabela é decisão de
+  quem escreve a tabela.
+
+### A conta
+
+Para estimar uma proporção, com V = p(1 − p); para estimar uma média, com V = σ²:
+
+    n₀ = z²·V / e²                            população grande, sem correção
+    n  = N·z²·V / [(N − 1)·e² + z²·V]          com a população N
+
+A segunda é o n₀ corrigido pela população, na forma que o OpenEpi usa, e é igual a
+`n₀ / [1 + (n₀ − 1)/N]`. A perda esperada entra por último — `⌈n / (1 − perda)⌉` —, e o
+resultado nunca passa de N: uma amostra do tamanho da população é um censo.
+
+### Por que `NormalDist`, e não o `scipy`
+
+O z é o quantil bilateral da normal, o `qnorm(1 − α/2)` do R. O `statistics.NormalDist` da
+biblioteca padrão implementa o mesmo algoritmo do `qnorm` — o AS241 de Wichura (1988) —, e
+trazer o `scipy` só para um quantil faria o comando pagar a partida dele por nada.
+
+### `TOLERANCIA`
+
+*linha 43*
+
+> A folga do arredondamento para cima. Ver `para_cima`.
+
+### `class Tamanho`
+
+*linha 48*
+
+O tamanho da amostra, e como ele saiu.
+
+`n` é o tamanho que dá a precisão pedida — corrigido pela população quando há uma —, e
+`n_final` é o que vai a campo: com a perda somada e no máximo N. Os dois já arredondados
+para cima. `n0` e `n_corrigido` guardam as contas sem arredondar, para o manifesto.
+
+No tamanho escrito à mão (`tamanho_decidido`) não há conta: `z`, `n0` e `n_corrigido`
+ficam `None`, e `n` é o que foi escrito.
+
+#### `def censo(self)`
+
+*linha 69*
+
+A amostra é a população inteira.
+
+#### `def decidido(self)`
+
+*linha 74*
+
+O tamanho foi escrito à mão, e não calculado.
+
+### `def z_da_confianca(confianca)`
+
+*linha 79*
+
+O quantil bilateral da normal padrão: o `qnorm(1 − (1 − confianca)/2)` do R.
+
+`confianca` é uma fração, entre 0 e 1 sem as pontas: 0,95 dá 1,959964.
+
+### `def variancia_da_proporcao(proporcao)`
+
+*linha 90*
+
+O p(1 − p) da conta de uma proporção: 0,25 com p = 0,5, que é o maior possível.
+
+Por isso 50% é o valor de quem não sabe o que esperar — é o que dá o maior tamanho.
+
+### `def para_cima(valor)`
+
+*linha 101*
+
+Arredonda para cima, sem que o resto de ponto flutuante vire uma unidade a mais.
+
+Um tamanho de amostra se arredonda sempre para cima: 277,1 pessoas não dão a precisão
+pedida, e 278 dão. Mas uma conta que devia dar 278 exatos pode chegar como
+278,00000000000006, e o `math.ceil` cru faria dela 279. A folga de 1e-9 está muito abaixo
+de qualquer diferença que importe numa contagem de pessoas, e muito acima do resto de
+ponto flutuante de uma conta destas.
+
+### `def com_perda(n, perda)`
+
+*linha 114*
+
+O tamanho que vai a campo para que, perdida a fração `perda`, sobrem `n`.
+
+`⌈n / (1 − perda)⌉`: com perda de 10%, 292 viram 325 — e 325 × 0,9 = 292,5.
+
+### `def tamanho_aas(*, confianca, margem, variancia, populacao, perda)`
+
+*linha 127*
+
+O tamanho da amostra aleatória simples, sem reposição.
+
+Args:
+
+    confianca: o nível de confiança, em fração — 0,95.
+    margem: a margem de erro, na escala da estimativa: 0,05 (5 pontos percentuais) para
+        uma proporção; na unidade da variável para uma média.
+    variancia: p(1 − p) para uma proporção (`variancia_da_proporcao`); σ² para uma
+        média.
+    populacao: o N; `None` é a população grande, sem correção.
+    perda: a fração que se espera perder, de 0 a 1 sem o 1.
+
+Raises:
+
+    ValueError: um valor fora do domínio. Quem chega aqui pelo `amostragem.py` já passou
+        pelas recusas da ficha, com a frase de cada uma.
+
+### `def tamanho_decidido(n, *, populacao, perda)`
+
+*linha 167*
+
+O tamanho escrito à mão, no lugar da conta, com a perda somada a ele.
+
+A perda soma porque o `n` escrito é o tamanho necessário — o que precisa sobrar no fim —,
+como na conta. Quem quer o número que vai a campo escreve a perda zero.
+
+### `def _conferir_populacao(populacao)`
+
+*linha 182*
+
+### `def _fechar(n, populacao, perda, *, z, n0, n_corrigido)`
+
+*linha 187*
+
+A perda somada, e o teto de N.
+
+O teto vale para o `n_final`, e não para o `n`: com a correção de população finita o `n`
+nunca passa de N, e no tamanho decidido isso já foi recusado. Quem passa é o `n` com a
+perda — 169 de 300 com metade de perda dariam 338 —, e aí a amostra é a população
+inteira.
+
+## `flatcap/amostragem.py`
+
+`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
+
+*1436 linhas.*
+
+A amostragem — o plano da amostra de um projeto, na pasta dela, com o relatório dela.
+
+O projeto costuma começar com a amostragem e evoluir depois para a análise. O fluxo
+começa sempre no `flatcap novo`, e a amostragem vem depois dele:
+
+    flatcap novo 23 --sim          o projeto, como sempre: ficha, histórico, três pastas
+    flatcap amostragem 23 --sim    cria a `4. Amostragem/` e o `desenho.yaml`, e para
+      (preencher o desenho.yaml)
+    flatcap amostragem 23 --sim    a conta, o `tamanho.csv` e o relatório da amostra
+
+Segue o padrão da casa, decidir e escrever separados:
+
+    plano = preparar_amostragem(raiz)   # lê o desenho.yaml, calcula, monta o documento
+    executar_amostragem(plano)          # só escreve
+
+E, como as análises, **não fala com o REDCap**. Recebe `Path`, não `Config`.
+
+### Uma pasta própria, e não uma análise
+
+Tudo da amostra mora em `4. Amostragem/`: a ficha (`desenho.yaml`), a conta
+(`tamanho.csv`), o índice da rodada (`manifesto.json`), o relatório da amostra e as
+versões antigas dele, em `4. Amostragem/Versões antigas/`. As pastas 1, 2 e 3 ficam para
+a análise que vem depois.
+
+Por isso a amostragem não está no `analises.REGISTRO`, na `ORDEM_PADRAO_DAS_ANALISES`
+nem no `flatcap analisar`. O relatório das análises varre só `3. Análises/`, e nunca vê a
+amostra; o relatório da amostra nunca vê as análises.
+
+A pasta nasce no primeiro `flatcap amostragem`, e não no `novo`. O `novo` não tem como
+saber se o pedido é de amostragem — o formulário do REDCap não tem essa opção —, o
+projeto que nunca amostra não ganha uma pasta vazia, e o projeto que já existia ganha a
+pasta do mesmo jeito, sem migração. A amostragem não cria projeto: sem a pasta do `novo`,
+o `localizar_projeto` recusa, como em todo comando.
+
+### A ficha é o `desenho.yaml`, preenchido à mão
+
+A primeira rodada escreve o modelo comentado e para. O modelo já vem com o caso de todo
+dia — 95% de confiança, margem de 5 pontos, proporção esperada de 50% —, e o pedido mais
+comum, o do cliente que informa só o tamanho da população, é preencher a `populacao` e
+rodar de novo.
+
+O FlatCap escreve o modelo uma vez e, dali em diante, só lê. É a regra do
+`dicionario.csv` aplicada a outro arquivo: o que está escrito ali é decisão sua. Quem o lê
+é o `ficha.ler_yaml`, para que um YAML quebrado ganhe o diagnóstico da ficha.
+
+As recusas saem todas de uma vez, como nas análises: descobrir o segundo engano depois de
+corrigir o primeiro é o jeito mais lento de arrumar uma ficha.
+
+### O espaço para os outros desenhos
+
+O desenho é escolhido dentro da análise, como o teste é dentro da comparação: cada um é
+uma entrada no `DESENHOS`, com as chaves dele no `desenho.yaml` e a conta dele. Hoje há
+um, a aleatória simples; os previstos (`PREVISTOS`) recusam dizendo que ainda não
+existem, e não que não são conhecidos. O sorteio de uma lista também tem o lugar dele no
+registro, e nenhum desenho sorteia ainda.
+
+### O relatório da amostra
+
+Montado com as peças do relatório das análises: um `relatorio.Relatorio` com a seção do
+tamanho, escrito pelo `documento.escrever`, com o mesmo modelo `.docx` e a mesma primeira
+página — a finalidade e os objetivos do `projeto.yaml`. **Não recalcula nada**: a tabela
+do documento é lida, pelo `relatorio.tabela_do_texto`, do mesmo texto que vai para o
+`tamanho.csv`.
+
+O texto de metodologia sobre a amostra feita tem o lugar dele, o `METODOLOGIA`, e ele
+está vazio de propósito — a regra do `TEXTO_PADRAO` do relatório: nada de parágrafo de
+mentira guardando o lugar.
+
+### `DESENHO_AAS`
+
+*linha 125*
+
+> O nome do único desenho de hoje, como se escreve no `desenho.yaml`.
+
+### `PREVISTOS`
+
+*linha 128*
+
+> Os desenhos que vêm depois, na ordem do `claude/amostragem-tipos.md`. Escrever um deles
+> no `desenho.yaml` recusa dizendo que ainda não existe — e não que não é conhecido, que
+> mandaria procurar um erro de digitação que não está lá.
+
+### `CHAVES_COMUNS`
+
+*linha 139*
+
+> As chaves que todo desenho aceita. Cada desenho acrescenta as dele (`Desenho.chaves`).
+
+### `CHAVES_DA_CONTA`
+
+*linha 151*
+
+> As que fazem a conta. Com o `n` escrito à mão, elas ficam em branco.
+
+### `MARGEM_QUE_PARECE_FRACAO`
+
+*linha 154*
+
+> A margem de uma proporção que, escrita em pontos, parece uma fração: `0.05` é a margem de 5%
+> escrita como fração, e é 0,05 ponto. Até 0,2 — a fração de uma margem de 20% —, a conta sai
+> com aviso; acima disso, a leitura em fração daria uma margem que ninguém pede.
+
+### `PREFIXO_RELATORIO_DA_AMOSTRA`
+
+*linha 165*
+
+> O prefixo do relatório da amostra, como o `Relatorio_` do relatório das análises. Os
+> dois nunca se encontram: este mora em `4. Amostragem/`, e aquele na raiz do projeto.
+
+*No módulo, linha 169:*
+
+> ─────────────────────────────────────────────────────────────────────────────
+>  O TEXTO DE METODOLOGIA DE CADA DESENHO — é aqui que se escreve.
+>
+>  Uma linha da tupla, um parágrafo do documento. Ele entra na primeira página do
+>  relatório da amostra, depois da finalidade e dos objetivos, e cada parágrafo pode
+>  usar os campos da conta entre chaves:
+>
+>      {desenho} {populacao} {confianca} {z} {margem} {proporcao} {desvio}
+>      {n0} {n} {perda} {n_final}
+>
+>  Os campos chegam escritos como na tabela (`95%`, `5 pontos percentuais`, `1200`), e
+>  o que a conta não usou chega vazio — a média não tem `{proporcao}`, o tamanho
+>  decidido à mão não tem `{z}`. Por isso o texto de cada desenho vai precisar de uma
+>  frase por situação: proporção ou média, com ou sem N, com ou sem perda.
+>
+>  `()` é o estado de hoje: ainda não escrito. É a regra do `TEXTO_PADRAO` do
+>  relatório — nada de parágrafo de mentira guardando o lugar: um `xxxxx` esquecido
+>  aqui chega impresso na mão do cliente.
+> ─────────────────────────────────────────────────────────────────────────────
+
+### `MODELO_DO_DESENHO`
+
+*linha 193*
+
+> O `desenho.yaml` que a primeira rodada escreve. Já vem com o caso de todo dia, para que
+> o pedido mais comum — o cliente que informa só o tamanho da população — seja preencher a
+> `populacao` e rodar de novo. Lido como está, ele é válido: dá a conta de população
+> grande.
+
+### Erros
+
+### `class AmostragemError(RuntimeError)`
+
+*linha 232*
+
+Falha da amostragem, já traduzida para o usuário.
+
+Erro próprio pela regra da casa: a CLI captura esta classe e transforma em painel.
+Qualquer outra exceção é bug de verdade e deve subir com o traceback inteiro.
+
+### `class DesenhoInvalidoError(AmostragemError)`
+
+*linha 241*
+
+O `desenho.yaml` tem o que não serve. A mensagem lista **todos** os problemas.
+
+### `class DesenhoExistenteError(AmostragemError)`
+
+*linha 247*
+
+O `desenho.yaml` apareceu entre a simulação e a execução, e o modelo não o
+sobrescreve: o arquivo é seu.
+
+### O que circula
+
+### `class Pedido`
+
+*linha 258*
+
+O `desenho.yaml` lido, conferido e convertido.
+
+Os percentuais viram frações aqui (95 → 0,95), porque o `amostral.py` trabalha em
+frações. A margem só vira fração quando é de uma proporção; de uma média, ela é na
+unidade da variável e fica como veio. `escrito` é o arquivo como estava, para o
+manifesto guardar o que você escreveu, e não só o que o FlatCap entendeu; `texto` é o
+arquivo inteiro, comentários incluídos, para a cópia que acompanha a rodada quando
+ela for para as versões antigas.
+
+#### `def estima(self)`
+
+*linha 282*
+
+`proporcao`, `media`, ou vazio quando o tamanho foi decidido à mão.
+
+### `class Calculo`
+
+*linha 290*
+
+O tamanho, e a tabela que o apresenta.
+
+`linhas` são os pares `parâmetro;valor` do `tamanho.csv`, na ordem da leitura: o
+desenho e a população, a precisão pedida, e os tamanhos até o da amostra, que é
+sempre a última linha. `notas` vão para o cabeçalho do `.csv` e para o manifesto, e
+não para o documento. `campos` são os mesmos valores escritos, para o texto de
+metodologia.
+
+### `class Desenho`
+
+*linha 309*
+
+Um desenho que a amostragem sabe calcular — e, um dia, sortear.
+
+O nome é o que se escreve em `desenho:`. As `chaves` são as do `desenho.yaml` que só
+ele aceita, além das `CHAVES_COMUNS`; vazio na aleatória simples. O `sortear` chega
+com o sorteio de uma lista, num passo seguinte, e até lá nenhum desenho sorteia.
+
+### `class Amostragem`
+
+*linha 326*
+
+A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
+
+#### `def raiz(self)`
+
+*linha 338*
+
+#### `def tamanho(self)`
+
+*linha 342*
+
+### `class Arquivamento`
+
+*linha 347*
+
+A rodada anterior, a caminho de `4. Amostragem/Versões antigas/`.
+
+Arquivo por arquivo, e não a pasta inteira como nas análises: aqui a rodada divide a
+pasta com o `desenho.yaml`, que é seu e fica onde está.
+
+Vai junto o `desenho.yaml` **de então** (`desenho`), para a pergunta "com que ficha
+saiu aquele relatório?" ter resposta exata. Ele vem do manifesto daquela rodada, que
+guarda o texto que ela leu — e não do arquivo que está na pasta, que a esta altura
+você já mudou: copiar o de agora poria a ficha nova ao lado do relatório velho. Sem
+um manifesto legível, a rodada vai sem ele, e não com o errado.
+
+### `class PlanoAmostragem`
+
+*linha 367*
+
+Tudo o que a amostragem faria, decidido e ainda não escrito.
+
+Dois casos, e o `amostragem` diz qual: `None` é a primeira rodada, que só escreve o
+modelo do `desenho.yaml`; preenchido, é a rodada que calcula e escreve o relatório.
+
+#### `def so_o_modelo(self)`
+
+*linha 390*
+
+A primeira rodada: o `desenho.yaml` ainda não existe.
+
+#### `def desenho_yaml(self)`
+
+*linha 395*
+
+#### `def arquivos(self)`
+
+*linha 399*
+
+### `class ResultadoAmostragem`
+
+*linha 406*
+
+O que a execução de fato escreveu.
+
+### Casos de uso
+
+### `def preparar_amostragem(raiz, titulo, template, agora)`
+
+*linha 417*
+
+Lê o `desenho.yaml`, faz a conta e monta o relatório da amostra. Não escreve nada.
+
+Sem o `desenho.yaml`, o plano é o da primeira rodada: criar a `4. Amostragem/`, se
+ainda não existir, e escrever o modelo para preencher.
+
+Args:
+
+    raiz: a pasta do projeto (a que tem o `projeto.yaml`).
+    titulo: o título na primeira linha do relatório da amostra.
+    template: um `.docx` de onde herdar estilos; sem ele, os degraus de sempre — o
+        `template.docx` do projeto, do cliente e do `FLATCAP_ROOT`.
+    agora: relógio injetável, como em todo `preparar*`.
+
+Raises:
+
+    FichaError (a ficha do projeto), `DesenhoInvalidoError` (o `desenho.yaml`, com
+    todos os problemas de uma vez) e `ModeloAusenteError` (o `template` indicado não
+    existe).
+
+### `def executar_amostragem(plano)`
+
+*linha 491*
+
+Escreve o plano no disco. Não decide mais nada.
+
+Na primeira rodada, a pasta e o modelo. Nas outras, a ordem das análises: arquiva a
+rodada anterior, escreve a tabela, o relatório da amostra e, por último, o
+`manifesto.json` — o recibo vem depois do que ele descreve.
+
+Cada etapa registra como voltar atrás. Uma falha no meio desfaz o que já foi feito,
+inclusive devolvendo a rodada anterior ao lugar, e a exceção continua subindo
+inteira. O `python-docx` entra aqui dentro, e não no topo do módulo, pelo motivo do
+`executar_relatorio`: a simulação não escreve documento nenhum e não deve pagar por
+ele.
+
+### `def _executar_modelo(plano)`
+
+*linha 552*
+
+A primeira rodada: a pasta, se faltar, e o modelo do `desenho.yaml`.
+
+O modelo nunca escreve por cima de um `desenho.yaml`, nem do que apareceu entre a
+simulação e a execução: o arquivo é seu.
+
+### `def _arquivar(arquivamento, desfazer)`
+
+*linha 595*
+
+Move a rodada anterior para `Versões antigas/`, com o `desenho.yaml` de então.
+
+O `rmdir` de cada pasta criada aqui entra no desfazer **antes** dos arquivos, e o
+desfazer roda ao contrário: os arquivos voltam primeiro, e a pasta sai vazia, que é
+a única forma de ela sair.
+
+### `def _desfazer(desfazer, avisos)`
+
+*linha 624*
+
+### O desenho.yaml
+
+### `def ler_desenho(caminho)`
+
+*linha 638*
+
+Lê e confere o `desenho.yaml`. Recusa listando **todos** os problemas de uma vez.
+
+A leitura é tolerante onde o engano é inofensivo — `AAS` ou `Aleatória simples`
+no desenho, `2,5` com vírgula na margem — e estrita onde ele mudaria o número em
+silêncio: o `12.000` que no YAML é doze, a confiança escrita como fração, a
+proporção que a margem não cabe.
+
+Raises:
+
+    DesenhoInvalidoError: com todos os problemas — e também quando o arquivo não é
+        um YAML válido, com o diagnóstico da ficha.
+
+*linha 689*
+
+> Sem desenho, `problemas` já tem a frase dele; o `is None` é para quem lê o tipo.
+
+*linha 709*
+
+> Já se sabe que é UTF-8: o `ler_yaml` acabou de ler o mesmo arquivo.
+
+### `def _desenho_escrito(valor, problemas)`
+
+*linha 715*
+
+O desenho pelo nome, sem caixa nem acento: `AAS`, `aas` e `Aleatória simples` são o
+mesmo. Previsto e ainda não feito recusa dizendo isso.
+
+### `def _chaves_desconhecidas(bruto, desenho, problemas)`
+
+*linha 747*
+
+### `def _conferir_n(bruto, n, populacao, problemas)`
+
+*linha 769*
+
+Com o tamanho escrito à mão, a conta fica em branco, e o `n` cabe na população.
+
+### `def _conferir_conta(bruto, confianca, margem, proporcao, desvio, problemas)`
+
+*linha 784*
+
+A precisão pedida: confiança, margem, e a proporção ou o desvio — um dos dois.
+
+*linha 812*
+
+> O α escrito no lugar da confiança: `confianca: 5` querendo 95% daria z = 0,06 e
+> uma amostra de uma unidade, sem erro nenhum.
+
+*linha 845*
+
+> A margem é em pontos percentuais. Maior que a proporção, o intervalo passaria
+> de 0% — e é assim que o `proporcao: 0.5` escrito querendo 50% se denuncia,
+> em vez de dar n = 8 sem erro nenhum.
+
+### A leitura dos valores
+
+### `_APELIDOS`
+
+*linha 860*
+
+> Os nomes por extenso que querem dizer um desenho que existe.
+
+### `def _chave(texto)`
+
+*linha 869*
+
+`Aleatória Simples` → `aleatoria_simples`: sem acento, sem caixa, com sublinhado.
+
+### `def _vazio(valor)`
+
+*linha 875*
+
+### `def _numero(bruto, chave, problemas)`
+
+*linha 879*
+
+O número da chave, ou `None` quando ela falta ou está em branco.
+
+### `def _inteiro(bruto, chave, problemas)`
+
+*linha 893*
+
+Um inteiro, escrito como inteiro.
+
+Estrito de propósito. No YAML o ponto é a casa decimal, e o `12.000` que em português
+é doze mil chega como doze — aceitá-lo daria uma população de 12 sem erro nenhum.
+
+### `def _texto(valor)`
+
+*linha 919*
+
+O valor como ele aparece na mensagem: o que está no arquivo.
+
+### `def _simples(valor)`
+
+*linha 924*
+
+O valor escrito, para o manifesto: o escalar do YAML como escalar do Python.
+
+### `def _em_texto(nomes)`
+
+*linha 935*
+
+### A conta da aleatória simples
+
+### `def calcular_aas(pedido)`
+
+*linha 944*
+
+O tamanho da aleatória simples, sem reposição, e a tabela dele.
+
+Com o `n` escrito, não há conta: o tamanho é o escrito, com a perda somada.
+
+*linha 953*
+
+> O `ler_desenho` garante os três; um `Pedido` montado à mão sem eles é bug.
+
+*linha 977*
+
+> Aviso, e não recusa: uma margem pequena existe, nas pesquisas grandes. Mas é
+> também como chega a margem escrita em fração — `0.05` querendo 5% —, que passa
+> por todas as conferências e dá uma amostra cem vezes maior.
+
+### `def _campos(pedido, tamanho)`
+
+*linha 1000*
+
+Os valores escritos como na tabela, para a tabela e para o texto de metodologia.
+
+### `def _linhas(pedido, tamanho, campos)`
+
+*linha 1026*
+
+As linhas da tabela, do que se pediu ao que saiu. A última é sempre o tamanho da
+amostra, que é a resposta — quem procura o número procura no fim.
+
+### `def _notas(pedido, tamanho)`
+
+*linha 1070*
+
+O como da conta, para quem abrir o `.csv` sozinho. Não vai para o documento.
+
+### `def _formatar(valor)`
+
+*linha 1095*
+
+Um número como se escreve numa tabela em português: `95`, `2,5`, `0,001`.
+
+Sem o `banco.texto_de_numero` de propósito: o `banco.py` traz o `pandas`, e a
+amostragem da v1 não abre banco nenhum.
+
+### `def _percentual(fracao)`
+
+*linha 1106*
+
+### `def _pontos(valor)`
+
+*linha 1110*
+
+`5 pontos percentuais`, e `1,5 ponto percentual`: abaixo de dois, no singular.
+
+*No módulo, linha 1116:*
+
+> O registro. Depois das funções, que ele nomeia.
+
+### A tabela, o manifesto e o relatório
+
+### `def montar_tabela(desenho, calculo)`
+
+*linha 1130*
+
+O `tamanho.csv`. Duas colunas, e a última linha é a resposta.
+
+### `def montar_manifesto(amostragem)`
+
+*linha 1143*
+
+O índice da rodada, no formato do das análises.
+
+`banco` e `dicionario` vazios: a amostragem da v1 não abre banco nem obedece a
+dicionário. O item tem `variavel` vazia e `colunas` vazias pelo mesmo motivo. Em
+`detalhes`, os números sem arredondar, os valores como foram escritos (`escrito`) e
+o `desenho.yaml` inteiro (`desenho_yaml`) — de onde sai a cópia que acompanha esta
+rodada quando ela for para as versões antigas.
+
+### `def montar_relatorio(amostragem, manifesto, pasta, titulo)`
+
+*linha 1225*
+
+O relatório da amostra, com as peças do relatório das análises.
+
+A primeira página é a dele — a finalidade e os objetivos da ficha, com o marcador e
+o alerta quando estão em branco —, e o texto de metodologia entra depois, quando
+existir. A tabela é lida do texto do `tamanho.csv` pelo `tabela_do_texto`, a mesma
+função que lê o arquivo do disco.
+
+### `def texto_de_metodologia(amostragem)`
+
+*linha 1264*
+
+Os parágrafos do `METODOLOGIA` do desenho, com os campos da conta preenchidos.
+
+### `def nome_do_relatorio_da_amostra(matricula, quando)`
+
+*linha 1273*
+
+`Amostragem_123465_2026-10-26.docx`, como o `relatorio.nome_do_relatorio`.
+
+A matrícula passa pela mesma limpeza dos nomes de pasta: ela é digitada por outra
+pessoa, em outro sistema, e o que vem de fora não monta caminho.
+
+### `def resumo_do_tamanho(tamanho)`
+
+*linha 1284*
+
+`325 de 1200`, `385` ou `120 de 120 — a população inteira`: a linha do terminal.
+
+### A rodada anterior
+
+### `def _arquivamento(pasta, quando, anterior)`
+
+*linha 1295*
+
+O que a rodada vigente escreveu, e para onde vai quando ela for refeita.
+
+Os nomes que esta versão escreve — a tabela, o manifesto e os relatórios da amostra
+—, e só eles: o resto da pasta é seu. Pelos nomes, e não pelo manifesto da rodada,
+porque ler um manifesto que pode ser de outra versão só para saber o que mover é
+trocar uma regra simples por uma que falha. Do manifesto vem só o `desenho.yaml` de
+então, e a falta dele não impede o arquivamento.
+
+### `def _rodada_vigente(pasta)`
+
+*linha 1332*
+
+O manifesto da rodada que está no alto da pasta, quando há um legível e da amostragem.
+
+Lido uma vez, para duas coisas que não são indispensáveis: o aviso de mudança e o
+`desenho.yaml` de então. Por isso o manifesto quebrado ou de outra coisa não recusa
+a rodada nova: ela sai sem o aviso e sem a cópia.
+
+### `def _mudanca(anterior, tamanho)`
+
+*linha 1349*
+
+O aviso de quando o tamanho muda em relação à rodada vigente.
+
+Um tamanho de amostra entregue ao cliente que muda em silêncio é o pior jeito de ele
+mudar. A rodada anterior vai para as versões antigas de qualquer jeito — o aviso é
+para você saber, antes de escrever, que o número que o cliente tem vai deixar de ser
+o vigente.
+
+### `def _acao_do_historico(plano)`
+
+*linha 1372*
 
 ## `flatcap/cli.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*3696 linhas.*
+*3995 linhas.*
 
 Interface de linha de comando do FlatCap.
 
@@ -14322,28 +15314,28 @@ Esta camada não contém regras de negócio:
     ela lê argumentos, chama as camadas de baixo,
     formata a saída e escolhe o código de saída do processo.
 
-- *linha 75* — `if TYPE_CHECKING:` — só para as anotações: ver o comentário em `perfil`
+- *linha 78* — `if TYPE_CHECKING:` — só para as anotações: ver o comentário em `perfil`
 
 ### `_AVISO_DE_LICENCA`
 
-*linha 106*
+*linha 110*
 
 > O aviso que a GPL pede que um programa mostre, no formato dos programas GNU. O
 > titular dos direitos autorais é o mesmo do `NOTICE.md` e dos cabeçalhos SPDX.
 
 ### `def _versao(valor)`
 
-*linha 117*
+*linha 121*
 
 ### `def _plural(quantidade, singular, plural)`
 
-*linha 123*
+*linha 127*
 
 Devolve o substantivo já concordado com o número.
 
 ### `def _abortar(titulo, mensagem)`
 
-*linha 129*
+*linha 133*
 
 Imprime o erro em um painel e devolve a exceção que encerra o comando.
 
@@ -14353,19 +15345,19 @@ Imprime o erro em um painel e devolve a exceção que encerra o comando.
 
 ### `def _nada_a_fazer(mensagem)`
 
-*linha 140*
+*linha 144*
 
 Painel amarelo e saída com código 0: houve uma recusa, mas nada deu errado.
 
 ### `def _configuracao(env, criar_root)`
 
-*linha 146*
+*linha 150*
 
 Carrega a configuração ou encerra o comando com a mensagem do `config.py`.
 
 ### `def _rodada_escrita(frase, plano, resultado)`
 
-*linha 155*
+*linha 159*
 
 O que o comando de uma análise diz depois de escrevê-la.
 
@@ -14375,38 +15367,38 @@ a sétima cópia — e a primeira a divergir das outras.
 
 ### `def principal(_)`
 
-*linha 182*
+*linha 186*
 
 Ponto de entrada. Existe para hospedar as opções globais.
 
 ### `def doctor(criar_root, criar_env, env)`
 
-*linha 193*
+*linha 197*
 
 Testar as credenciais, a conexão com o REDCap e a pasta de dados.
 Responde se o problema está na configuração, na rede ou no token.
 
-*linha 212*
+*linha 216*
 
 > Como o `--criar-root`, não simula: criar é o pedido. E não sobrescreve
 > nunca — o arquivo guarda o token, e um token perdido se pede de novo.
 
-*linha 222*
+*linha 226*
 
 > 1. Configuração
 
-*linha 241*
+*linha 245*
 
 > 2. Conexão com o REDCap
 
-*linha 254*
+*linha 258*
 
 > A instalação incompleta é diagnosticada **depois** da tabela inteira, e não
 > no lugar dela: saber que a rede está de pé faz parte do diagnóstico mesmo
 > quando falta biblioteca. O `doctor` é o comando que responde "o que está
 > errado?" — ele não pode morrer no meio do próprio diagnóstico.
 
-*linha 259*
+*linha 263*
 
 > O `uv tool upgrade --reinstall` reinstala da origem guardada na instalação — o
 > repositório. O `uv tool install --reinstall flatcap` procura o nome no PyPI, onde
@@ -14415,13 +15407,13 @@ Responde se o problema está na configuração, na rede ou no token.
 
 ### `def _criar_env_da_conta()`
 
-*linha 275*
+*linha 279*
 
 O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_BIBLIOTECAS`
 
-*linha 306*
+*linha 310*
 
 > As bibliotecas que abrem o banco, calculam, desenham e escrevem o documento.
 > A ordem é a do fluxo: ler, calcular, desenhar, entregar.
@@ -14434,7 +15426,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_NOME_NO_PIP`
 
-*linha 316*
+*linha 320*
 
 > `import docx` é o pacote `python-docx`, e o nome de instalação não é o nome de
 > import. Quem lê "falta `docx`" no terminal vai procurar por `docx` no pip e
@@ -14442,7 +15434,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `def _bibliotecas()`
 
-*linha 322*
+*linha 326*
 
 Quais versões abrem o banco, desenham os gráficos e escrevem o documento hoje.
 
@@ -14458,13 +15450,13 @@ porque a máquina que os roda é a única em que ele nunca falha.
 
 ### `def listar(ultimos, env, conferir_anexos)`
 
-*linha 352*
+*linha 356*
 
 Lista as solicitações no REDCap, e o que já foi para o disco.
     É o que coordena o fluxo diário de trabalho.
     Mostra o que chegou de novo de um lado e o que já virou pasta.
 
-*linha 393*
+*linha 397*
 
 > A busca no disco é feita **uma vez** por cliente e o resultado é passado
 > adiante. A tabela e o resumo faziam a mesma varredura em separado, o que já
@@ -14472,13 +15464,13 @@ Lista as solicitações no REDCap, e o que já foi para o disco.
 
 ### `def _reconferir_anexos(cfg, clientes)`
 
-*linha 404*
+*linha 408*
 
 Confirma na API os anexos que o export de registros não declarou.
 
 ### `def _tabela_de_clientes(clientes, pastas)`
 
-*linha 436*
+*linha 440*
 
 Monta a tabela que sai do comando `listar`.
 Valores que vêm do REDCap entram como `Text`, nunca como string crua:
@@ -14491,7 +15483,7 @@ ter vários trabalhos essa pergunta faria a segunda solicitação dele aparecer
 como já atendida — e ela nunca viraria pasta, porque o `listar` é o comando
 que diz o que ainda falta fazer.
 
-*linha 465*
+*linha 469*
 
 > Só o nome do projeto: a matrícula e o nome do cliente já têm coluna
 > própria duas casas atrás, e repeti-los aqui espremeria a tabela inteira
@@ -14499,13 +15491,13 @@ que diz o que ainda falta fazer.
 
 ### `def _resumo(clientes, pastas, total)`
 
-*linha 473*
+*linha 477*
 
 Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
 
 ### `def novo(record_id, sim, env)`
 
-*linha 510*
+*linha 514*
 
 Cria a pasta do projeto a partir de uma solicitação do REDCap.
 POR PADRÃO APENAS SIMULA:
@@ -14514,14 +15506,14 @@ POR PADRÃO APENAS SIMULA:
 
 ### `def _cabecalho_do_plano(plano)`
 
-*linha 586*
+*linha 590*
 
 Uma linha identificando de quem é a solicitação, antes de desenhar a árvore.
 Confirma que o `record_id` digitado é mesmo o cliente que você tinha em mente.
 
 ### `def _arvore_do_plano(cfg, plano)`
 
-*linha 599*
+*linha 603*
 
 Desenha exatamente o que `executar` criaria, lendo o próprio `Plano`.
 
@@ -14530,11 +15522,77 @@ estava lá. É a informação que a simulação passou a dever: "vou criar uma
 pasta" e "vou acrescentar um projeto ao cliente que já tem dois" são coisas
 diferentes, e só uma delas pede conferência antes do `--sim`.
 
+### flatcap amostragem
+
+### `def amostragem(identificador, titulo, template, sim, env)`
+
+*linha 653*
+
+Calcula o tamanho da amostra e escreve o relatório da amostra.
+
+Vem depois do `flatcap novo`: o projeto precisa existir. Tudo da amostra mora
+em `4. Amostragem/`, dentro da pasta do projeto.
+
+A primeira rodada cria a pasta e o `desenho.yaml` — o plano da amostra, para
+preencher à mão — e para. O modelo já vem com 95% de confiança, margem de 5
+pontos e proporção esperada de 50%: o caso mais comum é preencher só a
+`populacao` e rodar de novo.
+
+As rodadas seguintes leem o `desenho.yaml`, fazem a conta e escrevem o
+`tamanho.csv`, o `manifesto.json` e o relatório da amostra,
+`Amostragem_<matrícula>_AAAA-MM-DD.docx`. Rodar de novo arquiva a rodada
+anterior em `4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então. O
+`desenho.yaml` é seu: o FlatCap nunca o reescreve.
+
+Por enquanto, um desenho: a aleatória simples, sem reposição. Não abre banco
+e não fala com o REDCap.
+
+POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+
+*linha 698*
+
+> O `python-docx` entra só na execução, dentro do `executar_amostragem`. O
+> `pandas` não entra nunca: a amostragem da v1 não abre banco.
+
+### `def _cabecalho_da_amostragem(plano)`
+
+*linha 821*
+
+Quem, e o que esta rodada faz: escrever o modelo, ou fazer a conta.
+
+Na rodada da conta, o desenho, o modelo `.docx` e o título entram aqui pelo
+motivo do `_cabecalho_do_relatorio`: sem eles, `--titulo` e `--template` só se
+confeririam depois de executar.
+
+### `def _modelo_do_desenho(plano)`
+
+*linha 863*
+
+O `desenho.yaml` que a primeira rodada escreve, inteiro.
+
+Inteiro, e não resumido: é um arquivo que você vai abrir e preencher, e a
+simulação existe para mostrar o que seria gravado.
+
+### `def _tabela_da_amostragem(amostragem)`
+
+*linha 877*
+
+A conta, linha por linha, como sai no `tamanho.csv` e no documento.
+
+A última linha é a resposta, e sai em destaque: quem procura o número procura
+no fim.
+
+### `def _arvore_da_amostragem(plano)`
+
+*linha 898*
+
+Desenha o que `executar_amostragem` escreveria, lendo o próprio plano.
+
 ### flatcap dados
 
 ### `def dados_adicionar(identificador, caminho, sim, env)`
 
-*linha 650*
+*linha 949*
 
 Registra uma nova versão do banco na pasta do projeto.
 
@@ -14546,7 +15604,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para executar.
 
 ### `def dados_listar(identificador, rapido, env)`
 
-*linha 728*
+*linha 1027*
 
 Mostra a linha do tempo das versões do banco de um projeto.
 
@@ -14556,27 +15614,27 @@ presente na pasta que a ficha desconhece.
 
 ### `def _cabecalho_dos_dados(plano)`
 
-*linha 776*
+*linha 1075*
 
 ### `def _cabecalho_da_ficha(tempo)`
 
-*linha 785*
+*linha 1084*
 
 ### `def _arvore_da_adicao(plano)`
 
-*linha 795*
+*linha 1094*
 
 Desenha o que `executar_adicao` faria, lendo o próprio plano.
 
 ### `def _tabela_da_linha_do_tempo(tempo)`
 
-*linha 844*
+*linha 1143*
 
 A cronologia. Nomes de arquivo entram como `Text` pelo mesmo motivo de sempre.
 
 ### `def _divergencias(tempo)`
 
-*linha 888*
+*linha 1187*
 
 As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
@@ -14584,7 +15642,7 @@ As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
 ### `def perfil(identificador, aba, rapido, sim, env)`
 
-*linha 949*
+*linha 1248*
 
 Descreve o banco e prepara a reunião com o cliente.
 
@@ -14598,7 +15656,7 @@ ficam intactas, e só entram as variáveis novas.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 984*
+*linha 1283*
 
 > O `pandas` sai de dentro deste import e não do topo do arquivo: ele custa uns
 > 0,4 s para carregar, contra 0,08 s do typer com o rich. O `listar`, que roda
@@ -14606,35 +15664,35 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_perfil(perfil)`
 
-*linha 1043*
+*linha 1342*
 
 Quem, qual arquivo, e se dá para confiar nele. Nessa ordem.
 
-*linha 1068*
+*linha 1367*
 
 > As colunas que o leitor converteu: é uma decisão dele, e decisão do leitor
 > sai escrita, como o separador e a codificação. Ver o `banco.py`.
 
 ### `def _tabela_do_perfil(perfil)`
 
-*linha 1088*
+*linha 1387*
 
 Uma linha por variável. Valores do banco entram como `Text`, nunca como string
 crua, pelo mesmo motivo do `listar`.
 
 ### `def _achados_no_terminal(perfil)`
 
-*linha 1124*
+*linha 1423*
 
 Os achados agrupados pelo que fazer com eles, do mais urgente para o menos.
 
 ### `def _lista_de_achados(achados)`
 
-*linha 1161*
+*linha 1460*
 
 ### `def _arvore_do_perfil(plano)`
 
-*linha 1176*
+*linha 1475*
 
 Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
@@ -14642,7 +15700,7 @@ Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
 ### `def descritiva(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1215*
+*linha 1514*
 
 Gera a análise descritiva obedecendo ao dicionario.csv.
 
@@ -14659,7 +15717,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1257*
+*linha 1556*
 
 > Mesmo motivo do `perfil`: o `pandas` custa perto de meio segundo para
 > carregar e o `matplotlib` outro tanto. O `listar`, que roda várias vezes por
@@ -14667,7 +15725,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_descritiva(plano)`
 
-*linha 1308*
+*linha 1607*
 
 O que a descritiva mostra antes de escrever — no comando dela e no `analisar`.
 
@@ -14678,13 +15736,13 @@ análises seguintes têm a sua `_mostrar_*` pelo mesmo motivo.
 
 ### `def _cabecalho_da_descritiva(plano)`
 
-*linha 1326*
+*linha 1625*
 
 Quem, qual banco, se dá para confiar nele, e quanto do dicionário entra.
 
 ### `def _tabela_da_descritiva(descritiva)`
 
-*linha 1370*
+*linha 1669*
 
 Uma linha por variável, com os arquivos que ela gera.
 
@@ -14693,7 +15751,7 @@ responde "de qual variável saiu este .csv?" antes de o .csv existir.
 
 ### `def _fora_da_descritiva(descritiva)`
 
-*linha 1407*
+*linha 1706*
 
 As variáveis que não geraram artefato, e por quê.
 
@@ -14702,7 +15760,7 @@ relatório" e "ninguém reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_da_descritiva(plano)`
 
-*linha 1433*
+*linha 1732*
 
 Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
@@ -14710,7 +15768,7 @@ Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
 ### `def normalidade(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1488*
+*linha 1787*
 
 Testa a normalidade das variáveis numéricas do dicionario.csv.
 
@@ -14729,7 +15787,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1532*
+*linha 1831*
 
 > Mesmo motivo do `perfil` e da `descritiva`: `pandas`, `scipy` e `matplotlib`
 > custam perto de um segundo somados, e o `listar`, que roda várias vezes por
@@ -14737,19 +15795,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_normalidade(plano)`
 
-*linha 1583*
+*linha 1882*
 
 O que a normalidade mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_normalidade(plano)`
 
-*linha 1597*
+*linha 1896*
 
 Quem, qual banco, se dá para confiar nele, e quantas variáveis entram.
 
 ### `def _tabela_da_normalidade(normalidade)`
 
-*linha 1643*
+*linha 1942*
 
 Uma linha por variável, na mesma ordem e com os mesmos números do `.csv`.
 
@@ -14758,7 +15816,7 @@ e uma tabela que o escondesse deixaria a coluna `p` parecer uma resposta. Pelo
 mesmo motivo a assimetria e a curtose vêm **antes** do W e do p, e não depois:
 elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
-*linha 1663*
+*linha 1962*
 
 > A tabela do terminal lê as mesmas células do `.csv` que vai para o disco, e
 > não reformata número nenhum: dois formatadores para a mesma grandeza é como
@@ -14766,7 +15824,7 @@ elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
 ### `def _nota_da_normalidade(normalidade)`
 
-*linha 1692*
+*linha 1991*
 
 A frase que impede a tabela de ser lida como um veredito.
 
@@ -14777,7 +15835,7 @@ vira leitura de conferência.
 
 ### `def _fora_da_normalidade(normalidade)`
 
-*linha 1740*
+*linha 2039*
 
 As variáveis que não entraram, e por quê.
 
@@ -14787,7 +15845,7 @@ lista é o que impede a pergunta "por que `sexo` não está na tabela?".
 
 ### `def _arvore_da_normalidade(plano)`
 
-*linha 1767*
+*linha 2066*
 
 Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
@@ -14795,7 +15853,7 @@ Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
 ### `def cruzamento(identificador, aba, rapido, sim, env)`
 
-*linha 1828*
+*linha 2127*
 
 Cruza pares de variáveis categóricas: uma tabela por par.
 
@@ -14817,26 +15875,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1871*
+*linha 2170*
 
 > O `pandas` entra aqui dentro, como em todo comando que abre o banco: o
 > `listar`, que roda várias vezes por dia, não deve pagar por ele.
 
 ### `def _mostrar_cruzamento(plano)`
 
-*linha 1915*
+*linha 2214*
 
 O que o cruzamento mostra antes de escrever — no comando dele e no `analisar`.
 
 ### `def _cabecalho_do_cruzamento(plano)`
 
-*linha 1927*
+*linha 2226*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_do_cruzamento(par)`
 
-*linha 1969*
+*linha 2268*
 
 A tabela de um par, com as mesmas células do `.csv`.
 
@@ -14845,7 +15903,7 @@ deste comando, e a simulação existe para você ler o que vai para o documento
 antes de escrevê-lo. A linha do `Total` em negrito e a `(sem informação)`
 apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
-*linha 1980*
+*linha 2279*
 
 > `Text` no título e nos cabeçalhos, e não a string: são rótulos do
 > dicionário, e um `Idade [anos]` perderia o colchete como marcação do rich —
@@ -14853,7 +15911,7 @@ apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
 ### `def _arvore_do_cruzamento(plano)`
 
-*linha 2003*
+*linha 2302*
 
 Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
@@ -14861,7 +15919,7 @@ Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
 ### `def associacao(identificador, aba, rapido, sim, env)`
 
-*linha 2047*
+*linha 2346*
 
 Testa a associação entre pares de variáveis categóricas.
 
@@ -14886,26 +15944,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2093*
+*linha 2392*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_associacao(plano)`
 
-*linha 2137*
+*linha 2436*
 
 O que a associação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_associacao(plano)`
 
-*linha 2149*
+*linha 2448*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_associacao(associacao)`
 
-*linha 2191*
+*linha 2490*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14914,11 +15972,11 @@ dois formatadores para o mesmo p é como o terminal diz `0.042` enquanto o
 arquivo diz `0,042`. O p abaixo de 0,05 sai em negrito: é o destaque de quem
 lê a simulação, e ele fica no terminal — o documento não marca nada.
 
-- *linha 2204* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
+- *linha 2503* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
 
 ### `def _nota_da_associacao(associacao)`
 
-*linha 2227*
+*linha 2526*
 
 Por que cada par foi para o teste em que foi, e quantos testes são.
 
@@ -14928,7 +15986,7 @@ ir para o documento.
 
 ### `def _arvore_da_associacao(plano)`
 
-*linha 2264*
+*linha 2563*
 
 Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
@@ -14936,7 +15994,7 @@ Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
 ### `def correlacao(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 2307*
+*linha 2606*
 
 Correlaciona pares de variáveis: Pearson, Spearman ou Kendall.
 
@@ -14964,7 +16022,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2360*
+*linha 2659*
 
 > O `pandas`, o `scipy` e o `matplotlib` entram aqui dentro, como em todo
 > comando que abre o banco: o `listar`, que roda várias vezes por dia, não deve
@@ -14972,19 +16030,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_correlacao(plano)`
 
-*linha 2407*
+*linha 2706*
 
 O que a correlação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_correlacao(plano)`
 
-*linha 2419*
+*linha 2718*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_correlacao(correlacao)`
 
-*linha 2461*
+*linha 2760*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -14994,11 +16052,11 @@ o arquivo diz `0,31`. O p abaixo de 0,05 sai em negrito, e o método escrito na
 ficha contra a regra sai em amarelo: são destaques de quem lê a simulação, e
 ficam no terminal — o documento não marca nada.
 
-- *linha 2475* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
+- *linha 2774* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
 
 ### `def _nota_da_correlacao(correlacao)`
 
-*linha 2500*
+*linha 2799*
 
 Por que cada par foi para o método em que foi, e quantos testes são.
 
@@ -15009,7 +16067,7 @@ a regra teria escolhido.
 
 ### `def _arvore_da_correlacao(plano)`
 
-*linha 2544*
+*linha 2843*
 
 Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
@@ -15017,7 +16075,7 @@ Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
 ### `def comparacao(identificador, aba, rapido, sim, env)`
 
-*linha 2602*
+*linha 2901*
 
 Compara: contra um valor de referência, entre grupos ou entre medidas.
 
@@ -15051,26 +16109,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2657*
+*linha 2956*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_comparacao(plano)`
 
-*linha 2701*
+*linha 3000*
 
 O que a comparação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_comparacao(plano)`
 
-*linha 2714*
+*linha 3013*
 
 Quem, qual banco, se dá para confiar nele, e quantos itens entram.
 
 ### `def _tabelas_da_comparacao(comparacao)`
 
-*linha 2756*
+*linha 3055*
 
 Uma tabela por delineamento, com as mesmas células do `.csv`.
 
@@ -15084,14 +16142,14 @@ O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com o método escrito
 contra a regra sai com a coluna `teste` em amarelo: são destaques de quem lê a
 simulação, e ficam no terminal — o documento não marca nada.
 
-*linha 2773*
+*linha 3072*
 
 > n, referência e p-valor: números, à direita. Pelo nome, e não pela posição —
 > cada delineamento tem as suas colunas.
 
 ### `def _nota_da_comparacao(comparacao)`
 
-*linha 2817*
+*linha 3116*
 
 Por que cada item foi para o teste em que foi, e quantos testes são.
 
@@ -15102,7 +16160,7 @@ escolheu um teste que ainda não existe, a frase sai em amarelo.
 
 ### `def _arvore_da_comparacao(plano)`
 
-*linha 2857*
+*linha 3156*
 
 Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
@@ -15110,42 +16168,42 @@ Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
 ### `class _Tela`
 
-*linha 2905*
+*linha 3204*
 
 O que o terminal sabe de uma análise: como mostrá-la antes de escrever, a frase
 de depois de escrita e a linha dela na tabela do lote.
 
 ### `def _sem_teste(quantos)`
 
-*linha 2916*
+*linha 3215*
 
 ### `def _resumo_da_descritiva(plano)`
 
-*linha 2920*
+*linha 3219*
 
 ### `def _resumo_da_normalidade(plano)`
 
-*linha 2927*
+*linha 3226*
 
 ### `def _resumo_do_cruzamento(plano)`
 
-*linha 2935*
+*linha 3234*
 
 ### `def _resumo_da_associacao(plano)`
 
-*linha 2940*
+*linha 3239*
 
 ### `def _resumo_da_correlacao(plano)`
 
-*linha 2948*
+*linha 3247*
 
 ### `def _resumo_da_comparacao(plano)`
 
-*linha 2956*
+*linha 3255*
 
 ### `_NA_TELA`
 
-*linha 2964*
+*linha 3263*
 
 > Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
 > iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
@@ -15154,7 +16212,7 @@ de depois de escrita e a linha dela na tabela do lote.
 
 ### `def analisar(identificador, aba, sem_graficos, rapido, resumo, sim, env)`
 
-*linha 2991*
+*linha 3290*
 
 Roda, de uma vez, as análises da lista `analises:` do projeto.yaml.
 
@@ -15179,21 +16237,21 @@ Para rodar uma análise só, o comando dela continua valendo.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3046*
+*linha 3345*
 
 > O `analises.py` não traz o `pandas`; quem traz é cada análise, no `preparar_*`
 > dela. O import fica aqui dentro pelo mesmo motivo dos outros comandos.
 
-*linha 3073*
+*linha 3372*
 
 > Um painel por recusa, com o título da análise — o mesmo painel que o
 > comando dela abriria —, e o fecho do lote por último.
 
 #### `def ao_escrever(feita)`
 
-*linha 3112*
+*linha 3411*
 
-*linha 3124*
+*linha 3423*
 
 > Ctrl+C no meio do lote. O `click` diria só «Aborted!», e aqui a pergunta
 > que sobra é qual análise ficou escrita e qual ficou pela metade — a mesma
@@ -15201,19 +16259,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _notas(erro)`
 
-*linha 3149*
+*linha 3448*
 
 As notas que o `executar_analises` prende ao erro: onde o lote parou.
 
 ### `def _regua_da_etapa(posicao, total, etapa)`
 
-*linha 3156*
+*linha 3455*
 
 A linha que abre a saída de cada análise, com a posição dela no lote.
 
 ### `def _cabecalho_do_lote(plano)`
 
-*linha 3167*
+*linha 3466*
 
 Quem, qual banco, se dá para confiar nele, e quantas análises a lista pede.
 
@@ -15222,7 +16280,7 @@ versão vigente da ficha.
 
 ### `def _tabela_do_lote(plano)`
 
-*linha 3211*
+*linha 3510*
 
 Uma linha por análise, na ordem da lista: o que entra nela, quantos arquivos, e
 se a rodada é a primeira ou refaz uma anterior.
@@ -15233,7 +16291,7 @@ par que não tinha casos para o teste.
 
 ### `def _avisos_das_etapas(plano)`
 
-*linha 3239*
+*linha 3538*
 
 Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
 
@@ -15242,7 +16300,7 @@ seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
 
 ### `def _arvore_do_lote(plano)`
 
-*linha 3260*
+*linha 3559*
 
 Desenha o que `executar_analises` escreveria, lendo o próprio plano.
 
@@ -15254,7 +16312,7 @@ logo acima. Aqui é o lote inteiro de uma vez — o que vai para
 
 ### `def relatorio(identificador, template, titulo, rapido, sim, env)`
 
-*linha 3306*
+*linha 3605*
 
 Monta o relatório .docx a partir das análises já rodadas.
 
@@ -15281,7 +16339,7 @@ escrito dentro dele.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3359*
+*linha 3658*
 
 > Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê os
 > manifestos e os `.csv` das rodadas, e é só isso. O `python-docx` entra só
@@ -15289,7 +16347,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def template(saida, sim, env)`
 
-*linha 3441*
+*linha 3740*
 
 Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
 
@@ -15306,7 +16364,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_relatorio(plano)`
 
-*linha 3513*
+*linha 3812*
 
 Quem, de quais análises, sobre qual banco, com qual modelo e qual título.
 
@@ -15319,7 +16377,7 @@ de executar, que é exatamente o que a simulação existe para evitar.
 
 ### `def _tabela_do_relatorio(relatorio)`
 
-*linha 3554*
+*linha 3853*
 
 Uma linha por seção do documento, com os arquivos que entram nela.
 
@@ -15331,7 +16389,7 @@ pergunta deixou de ser «o que entrou?» e passou a ser «o que entrou, e de
 qual rodada?». O nome aparece uma vez por bloco, e não repetido em toda
 linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
-*linha 3575*
+*linha 3874*
 
 > `rodadas` vazio é o `Relatorio` montado à mão — em teste, ou por uma
 > camada de cima que não passou pela varredura. A tabela continua saindo,
@@ -15339,7 +16397,7 @@ linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
 ### `def _alertas_no_terminal(relatorio)`
 
-*linha 3612*
+*linha 3911*
 
 Os avisos que também vão para dentro do documento.
 
@@ -15348,7 +16406,7 @@ que sobra depois de o arquivo ser anexado a um e-mail.
 
 ### `def _fora_do_relatorio(relatorio)`
 
-*linha 3639*
+*linha 3938*
 
 As variáveis que **nenhuma** análise descreveu, e por quê.
 
@@ -15363,7 +16421,7 @@ reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_do_relatorio(plano)`
 
-*linha 3671*
+*linha 3970*
 
 Desenha o que `executar_relatorio` escreveria, lendo o próprio plano.
 

@@ -867,17 +867,24 @@ def _limpar_fim(documento) -> None:
 def _propriedades(documento, relatorio: Relatorio) -> None:
     """
     Os metadados do arquivo, que o Windows mostra sem ninguém abrir o documento.
+
+    A rodada é a do manifesto principal, com o nome dela — até a 1.14.1 o texto dizia
+    "a partir da descritiva" mesmo quando só a normalidade tinha rodado. E o banco
+    pode não existir: o relatório da amostra sai de um projeto que só tem o
+    `desenho.yaml`, e ali o certo é "sem banco", e não "banco ?".
     """
     from . import __version__
 
     ficha = relatorio.ficha
+    manifesto = relatorio.manifesto
+    banco = manifesto.banco.get("arquivo")
     propriedades = documento.core_properties
     propriedades.title = f"{relatorio.titulo} — {ficha.nome or ficha.matricula}"
     propriedades.subject = f"Matrícula {ficha.matricula} · registro {ficha.record_id}"
     propriedades.comments = (
-        f"Gerado por FlatCap {__version__} a partir da descritiva de "
-        f"{relatorio.manifesto.gerado_em:%d/%m/%Y %H:%M} · banco "
-        f"{relatorio.manifesto.banco.get('arquivo', '?')}"
+        f"Gerado por FlatCap {__version__} · rodada {manifesto.analise} de "
+        f"{manifesto.gerado_em:%d/%m/%Y %H:%M} · "
+        + (f"banco {banco}" if banco else "sem banco")
     )
 
 

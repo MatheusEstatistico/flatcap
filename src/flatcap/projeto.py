@@ -127,6 +127,27 @@ PASTA_CORRELACAO = "correlacao"
 # teste é escolhido dentro da análise, e não é uma análise por teste.
 PASTA_COMPARACAO = "comparacao"
 
+# A pasta da amostragem, a quarta do projeto — e a única que o `novo` não cria.
+#
+# O projeto costuma começar com a amostragem e evoluir depois para a análise, e tudo
+# da amostra mora aqui: a ficha (`desenho.yaml`), a conta, o relatório da amostra e as
+# versões antigas dele. As três pastas de cima ficam para a análise.
+#
+# Fica fora do `SUBPASTAS` de propósito. O fluxo começa sempre no `flatcap novo`, e a
+# pasta nasce no primeiro `flatcap amostragem`, que vem depois dele: o `novo` não tem
+# como saber se o pedido é de amostragem — o formulário do REDCap não tem essa opção —,
+# o projeto que nunca amostra não ganha uma pasta vazia, e o projeto que já existia
+# ganha a pasta do mesmo jeito, sem migração.
+PASTA_AMOSTRAGEM = "4. Amostragem"
+
+# A ficha da amostra, dentro da pasta dela. É o `projeto.yaml` da amostragem: escrita
+# pelo FlatCap uma vez, como modelo, e preenchida à mão daí em diante.
+ARQUIVO_DESENHO = "desenho.yaml"
+
+# As versões antigas da amostra moram dentro da pasta dela, e não em
+# `2. Versões antigas/`: tudo da amostra fica na pasta da amostra.
+PASTA_ANTIGAS_DA_AMOSTRAGEM = "Versões antigas"
+
 # O modelo do relatório. Mora aqui pelo mesmo motivo das pastas: o nome de um
 # arquivo que o FlatCap procura dentro da pasta do projeto é desenho de pasta.
 # Ele estava escrito duas vezes — no `documento.py`, que é quem o grava, e no
@@ -179,6 +200,18 @@ def pasta_da_analise(raiz: Path, analise: str) -> Path:
     das seções do documento se encontrarem sem tradução no meio.
     """
     return Path(raiz) / PASTA_ANALISES / analise
+
+
+def pasta_da_amostragem(raiz: Path) -> Path:
+    """
+    Onde mora tudo da amostra deste projeto: `4. Amostragem/`.
+
+    Ao lado de `3. Análises/`, e não dentro dela: a amostragem não é uma análise da
+    lista `analises:`, e o relatório das análises, que varre `3. Análises/`, não a vê.
+    Uma função, como a `pasta_da_analise`, porque é aqui que a resposta muda no dia em
+    que ela mudar.
+    """
+    return Path(raiz) / PASTA_AMOSTRAGEM
 
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 

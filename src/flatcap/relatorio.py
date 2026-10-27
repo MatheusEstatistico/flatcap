@@ -506,7 +506,7 @@ def preparar_relatorio(
     # Por último de propósito: os quatro alertas acima falam da validade dos
     # números, e este fala do acabamento do documento. Um alerta de dado errado
     # não deve ficar abaixo de um alerta de texto por preencher.
-    alerta_texto = _conferir_texto(ficha)
+    alerta_texto = conferir_texto(ficha)
     if alerta_texto is not None:
         alertas.append(alerta_texto)
 
@@ -531,7 +531,7 @@ def preparar_relatorio(
         relatorio=relatorio,
         destino=raiz / nome_do_relatorio(ficha.matricula, quando.date()),
         arquivamentos=_arquivamentos(raiz),
-        template=_localizar_template(raiz, template),
+        template=localizar_template(raiz, template),
     )
 
 
@@ -671,7 +671,7 @@ def _arquivamentos(raiz: Path) -> tuple[tuple[Path, Path], ...]:
     return tuple(pares)
 
 
-def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
+def localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
     """
     Qual `.docx` empresta os estilos, e nesta ordem.
 
@@ -695,6 +695,10 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
     O modelo mora fora do repositório de propósito. Ele carrega logotipo e
     identidade visual da instituição, muda sem pedir licença a ninguém, e é
     binário — três razões pelas quais ele não é código.
+
+    Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
+    procura o modelo pelos mesmos degraus, e dois caminhos de busca é como um dos
+    dois relatórios sai sem o logotipo.
     """
     if template is not None:
         caminho = Path(template).expanduser()
@@ -716,6 +720,9 @@ def _localizar_template(raiz: Path, template: Path | str | None) -> Path | None:
         if candidato.is_file():
             return candidato
     return None
+
+
+_localizar_template = localizar_template
 
 
 # A rodada
@@ -947,6 +954,27 @@ def ler_tabela(caminho: Path, especie: str = "", titulo: str = "") -> TabelaLida
     except OSError as erro:
         raise TabelaIlegivelError(_mensagem_ilegivel(caminho, erro)) from erro
 
+    return tabela_do_texto(texto, especie, titulo, caminho)
+
+
+def tabela_do_texto(
+    texto: str, especie: str = "", titulo: str = "", caminho: Path | str = "tabela.csv"
+) -> TabelaLida:
+    """
+    O miolo do `ler_tabela`: o texto de um `.csv` de análise, já lido, virando tabela.
+
+    Separado desde a 1.15.0, para a amostragem: ela monta o relatório da amostra a
+    partir do texto do `tamanho.csv` **antes** de ele ir ao disco — o `preparar` decide
+    o documento inteiro, e o `executar` só escreve. É o mesmo texto que vai para o
+    arquivo, lido pela mesma função que o lê do disco, e por isso o documento e a
+    tabela não têm como dizer números diferentes.
+
+    O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM que o
+    `manifesto.Tabela.texto` escreve é tirado aqui, como o `utf-8-sig` o tira na leitura.
+    """
+    caminho = Path(caminho)
+    texto = texto.removeprefix("\ufeff")
+
     # Os comentários são só os do começo, como no `dicionario.csv`: depois do
     # cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
     # que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
@@ -1058,7 +1086,7 @@ def _paragrafos(texto: str) -> tuple[str, ...]:
 # As conferências
 
 
-def _conferir_texto(ficha: Ficha) -> Alerta | None:
+def conferir_texto(ficha: Ficha) -> Alerta | None:
     """
     Quais campos da primeira página vieram em branco.
 
@@ -1066,6 +1094,9 @@ def _conferir_texto(ficha: Ficha) -> Alerta | None:
     quatro perguntam se a rodada ainda descreve a pasta, esta pergunta se o
     documento está pronto para ser enviado. Ela não recusa nada, pelo mesmo
     motivo das outras — o documento sai, com o aviso dentro dele.
+
+    Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
+    abre com a mesma primeira página, e o campo em branco precisa do mesmo aviso lá.
     """
     faltando = [
         nome
@@ -1091,6 +1122,9 @@ def _conferir_texto(ficha: Ficha) -> Alerta | None:
             "— o arquivo é seu, e o FlatCap não sobrescreve o que você escreveu."
         ),
     )
+
+
+_conferir_texto = conferir_texto
 
 
 def _conferir_banco(
@@ -1420,10 +1454,13 @@ __all__ = [
     "Secao",
     "TabelaIlegivelError",
     "TabelaLida",
+    "conferir_texto",
     "executar_relatorio",
     "ler_tabela",
+    "localizar_template",
     "montar_abertura",
     "nome_do_relatorio",
     "preparar_relatorio",
     "relatorios_na_pasta",
+    "tabela_do_texto",
 ]

@@ -107,6 +107,12 @@ ANALISE_ASSOCIACAO = "associacao"
 ANALISE_CORRELACAO = "correlacao"
 ANALISE_COMPARACAO = "comparacao"
 
+# A amostragem também escreve um manifesto, e se declara nele — mas não é uma análise
+# de `3. Análises/`. Ela mora em `4. Amostragem/` e tem o relatório dela, e por isso
+# não entra na `ORDEM_PADRAO_DAS_ANALISES` de baixo nem no `analises.REGISTRO`: o
+# relatório das análises varre só `3. Análises/`, e nunca a vê.
+ANALISE_AMOSTRAGEM = "amostragem"
+
 # A ordem em que as análises aparecem no documento quando a ficha não manda.
 #
 # A lista `analises:` do `projeto.yaml` tem a primeira palavra — é o que foi
@@ -624,6 +630,7 @@ def _data_e_hora(valor: Any, caminho: Path | None) -> datetime:
 
 
 __all__ = [
+    "ANALISE_AMOSTRAGEM",
     "ANALISE_ASSOCIACAO",
     "ANALISE_COMPARACAO",
     "ANALISE_CORRELACAO",

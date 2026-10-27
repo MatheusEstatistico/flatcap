@@ -95,6 +95,17 @@ class TestArquitetura:
         for proibido in ("write_text", "write_bytes", "open(", "escrever_atomico"):
             assert proibido not in fonte
 
+    def test_a_amostragem_tem_nome_e_nao_tem_lugar_no_relatorio_das_analises(self):
+        """
+        Ela se declara no manifesto dela, mas mora em `4. Amostragem/` e tem o relatório
+        dela: na ordem padrão do relatório das análises, ela entraria numa seção que ele
+        nunca vai encontrar.
+        """
+        from flatcap.manifesto import ANALISE_AMOSTRAGEM, ORDEM_PADRAO_DAS_ANALISES
+
+        assert ANALISE_AMOSTRAGEM == "amostragem"
+        assert ANALISE_AMOSTRAGEM not in ORDEM_PADRAO_DAS_ANALISES
+
 
 class TestTexto:
     def test_o_formato_e_a_primeira_chave(self):

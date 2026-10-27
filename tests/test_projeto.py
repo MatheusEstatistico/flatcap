@@ -88,6 +88,26 @@ def test_as_subpastas_sao_tres_e_nao_ha_pasta_de_relatorios():
     assert not any("Relat" in nome for nome in SUBPASTAS)
 
 
+def test_a_pasta_da_amostragem_nao_e_das_que_o_novo_cria(tmp_path):
+    """
+    A quarta pasta nasce no `flatcap amostragem`, que vem depois do `novo`: o `novo` não
+    sabe se o pedido é de amostragem, e o projeto que nunca amostra não ganha uma pasta
+    vazia.
+    """
+    from flatcap.projeto import (
+        ARQUIVO_DESENHO,
+        PASTA_AMOSTRAGEM,
+        PASTA_ANTIGAS_DA_AMOSTRAGEM,
+        pasta_da_amostragem,
+    )
+
+    assert PASTA_AMOSTRAGEM == "4. Amostragem"
+    assert PASTA_AMOSTRAGEM not in SUBPASTAS
+    assert ARQUIVO_DESENHO == "desenho.yaml"
+    assert PASTA_ANTIGAS_DA_AMOSTRAGEM == "Versões antigas"
+    assert pasta_da_amostragem(tmp_path) == tmp_path / "4. Amostragem"
+
+
 def test_a_pasta_da_descritiva_mora_aqui():
     """
     Subiu do `descritiva.py` na Fase 6: o desenho da pasta é assunto deste

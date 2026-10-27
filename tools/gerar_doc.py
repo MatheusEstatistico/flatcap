@@ -80,6 +80,8 @@ ORDEM = (
     "analises",
     "relatorio",
     "documento",
+    "amostral",
+    "amostragem",
     "cli",
     "__main__",
 )

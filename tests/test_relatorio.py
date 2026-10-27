@@ -40,6 +40,7 @@ from flatcap.relatorio import (
     nome_do_relatorio,
     preparar_relatorio,
     relatorios_na_pasta,
+    tabela_do_texto,
 )
 
 QUANDO = datetime(2026, 9, 9, 10, 0)
@@ -225,6 +226,44 @@ class TestLerTabela:
         assert lida.linhas == escrita.linhas
         assert lida.titulo == "Frequência de x"
         assert lida.notas == ("denominador: todos os casos",)
+
+
+class TestTabelaDoTexto:
+    def test_e_o_que_o_ler_tabela_le_do_disco(self, tmp_path):
+        """
+        A amostragem monta o documento a partir do texto do `.csv` antes de ele ir ao
+        disco; lido do texto ou do arquivo, a tabela tem de ser a mesma — com o BOM que o
+        `Tabela.texto` escreve e o `utf-8-sig` tira.
+        """
+        from flatcap.manifesto import Tabela
+
+        escrita = Tabela(
+            nome="tamanho.csv",
+            especie="tamanho",
+            variavel="",
+            titulo="Tamanho da amostra",
+            colunas=("parâmetro", "valor"),
+            linhas=(("População (N)", "1200"), ("Margem de erro", "2,5 pontos percentuais")),
+            notas=("fórmula: n = N·z²·V / [(N − 1)·e² + z²·V]",),
+        )
+        caminho = tmp_path / "tamanho.csv"
+        caminho.write_text(escrita.texto(), encoding="utf-8", newline="\n")
+
+        do_texto = tabela_do_texto(escrita.texto(), "tamanho", "", caminho)
+        assert do_texto == ler_tabela(caminho, "tamanho")
+        assert do_texto.linhas == escrita.linhas
+        assert do_texto.titulo == "Tamanho da amostra"
+
+    def test_sem_linha_de_dados_e_ilegivel(self):
+        with pytest.raises(TabelaIlegivelError, match="nenhuma linha de dados"):
+            tabela_do_texto("# Só o título\n", caminho="vazia.csv")
+
+    def test_os_nomes_publicos_sao_os_de_antes(self):
+        """`localizar_template` e `conferir_texto` ficaram públicos com o apelido privado."""
+        import flatcap.relatorio as modulo
+
+        assert modulo._localizar_template is modulo.localizar_template
+        assert modulo._conferir_texto is modulo.conferir_texto
 
 
 # ── As quatro conferências ──────────────────────────────────────────────────

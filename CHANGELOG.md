@@ -7,6 +7,34 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.15.0] — a amostragem
+
+### Acrescentado
+- `flatcap amostragem <id>`: o tamanho da amostra de um projeto, com o relatório da amostra.
+  Vem depois do `flatcap novo`, e tudo dela mora em `4. Amostragem/`, dentro da pasta do
+  projeto: o `desenho.yaml`, o `tamanho.csv`, o `manifesto.json`, o
+  `Amostragem_<matrícula>_AAAA-MM-DD.docx` e as versões antigas, em
+  `4. Amostragem/Versões antigas/`.
+- O `desenho.yaml`, a ficha da amostra, preenchida à mão: a primeira rodada escreve o modelo
+  comentado — 95% de confiança, margem de 5 pontos, proporção esperada de 50% —, e o FlatCap
+  nunca o reescreve. Percentuais em %, e a vírgula decimal vale.
+- A amostragem aleatória simples, sem reposição: para uma proporção ou, com o `desvio`, para
+  uma média; com ou sem a população (`populacao`); com a perda esperada (`perda`); ou com o
+  tamanho decidido à mão (`n`). A conta é a do OpenEpi, arredondada para cima, e o tamanho
+  nunca passa de N — quando chega a ele, é um censo, e o comando avisa.
+- As recusas do `desenho.yaml`, todas de uma vez: o `12.000` que no YAML é doze, a confiança
+  ou a proporção escritas como fração, a confiança escrita como o α (`5`), a margem que não
+  cabe na proporção, a chave com acento, e os desenhos que ainda não estão no FlatCap
+  (sistemática, estratificada, conglomerados, PPT, dois estágios).
+- Os avisos da margem que parece fração (`margem: 0.05`) e de quando o tamanho da amostra
+  muda em relação à rodada vigente.
+
+### Mudado
+- As propriedades do `.docx` dizem a análise da rodada e, sem banco, "sem banco" — no lugar
+  de "a partir da descritiva" e de "banco ?".
+- `relatorio.tabela_do_texto`, `relatorio.localizar_template`, `relatorio.conferir_texto`,
+  `ficha.ler_yaml` e `ficha.numero_escrito` são públicos. Os nomes privados continuam valendo.
+
 ## [1.14.1] — o que chega do Excel
 
 ### Corrigido

@@ -34,7 +34,9 @@ from flatcap.ficha import (
     caminho_da_ficha,
     escrever_atomico,
     ler,
+    ler_yaml,
     localizar_projeto,
+    numero_escrito,
     sequencia_do_nome,
     versao_vigente,
 )
@@ -431,3 +433,63 @@ def test_a_pasta_do_projeto_e_a_do_fixture(projeto_vazio):
     assert projeto_vazio.name == PROJETO
     assert projeto_vazio.parent.name == PASTA
     assert versao_vigente(ler(projeto_vazio)) is None
+
+
+# ── Os outros YAML editados à mão ───────────────────────────────────────────
+
+
+class TestLerYaml:
+    def test_devolve_tipos_comuns(self, tmp_path):
+        caminho = tmp_path / "desenho.yaml"
+        caminho.write_text(
+            "# comentário de quem preencheu\n"
+            "desenho: aas\npopulacao: 1200\nmargem: 2,5\nlista: [1, 2]\n",
+            encoding="utf-8",
+        )
+        conteudo = ler_yaml(caminho)
+        assert conteudo == {
+            "desenho": "aas", "populacao": 1200, "margem": "2,5", "lista": [1, 2]
+        }
+        assert type(conteudo) is dict
+        assert type(conteudo["lista"]) is list
+
+    def test_yaml_quebrado_tem_o_diagnostico_da_ficha(self, tmp_path):
+        """A tabulação, o engano mais comum de quem edita à mão, vira frase, e não traceback."""
+        caminho = tmp_path / "desenho.yaml"
+        caminho.write_text("desenho: aas\n\tpopulacao: 1200\n", encoding="utf-8")
+        with pytest.raises(FichaInvalidaError, match="não é um YAML válido"):
+            ler_yaml(caminho)
+
+    def test_arquivo_ausente(self, tmp_path):
+        with pytest.raises(FichaAusenteError, match="desenho.yaml"):
+            ler_yaml(tmp_path / "desenho.yaml")
+
+    def test_arquivo_vazio_e_none(self, tmp_path):
+        caminho = tmp_path / "desenho.yaml"
+        caminho.write_text("# só comentário\n", encoding="utf-8")
+        assert ler_yaml(caminho) is None
+
+
+class TestNumeroEscrito:
+    @pytest.mark.parametrize(
+        ("valor", "esperado"),
+        [(25, 25.0), (24.9, 24.9), ("24,9", 24.9), (" 25 ", 25.0), ("-1,5", -1.5), ("2,5", 2.5)],
+    )
+    def test_numero(self, valor, esperado):
+        assert numero_escrito(valor) == esperado
+
+    @pytest.mark.parametrize(
+        "valor", [True, False, "2.500,00", float("nan"), float("inf"), None, "", "cinco", [5]]
+    )
+    def test_o_que_nao_e_numero(self, valor):
+        assert numero_escrito(valor) is None
+
+    def test_e_a_regra_da_referencia_da_comparacao(self):
+        """
+        A regra desceu da comparação para cá: as duas fichas leem o número escrito do
+        mesmo jeito.
+        """
+        from flatcap.comparacao import referencia_escrita
+
+        for valor in (25, 24.9, "24,9", " 25 ", True, "2.500,00", None, float("nan")):
+            assert referencia_escrita(valor) == numero_escrito(valor)

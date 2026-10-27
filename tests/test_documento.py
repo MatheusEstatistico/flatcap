@@ -114,6 +114,26 @@ class TestPrimeiraPagina:
         propriedades = doc.core_properties
         assert plano.relatorio.ficha.matricula in propriedades.subject
         assert plano.relatorio.manifesto.banco["arquivo"] in propriedades.comments
+        assert "rodada descritiva de 09/09/2026" in propriedades.comments
+
+    def test_sem_banco_os_metadados_dizem_sem_banco(self, documento, tmp_path):
+        """
+        O relatório da amostra sai de um projeto que só tem o `desenho.yaml`. Até a
+        1.14.1 a linha dizia "a partir da descritiva · banco ?" para ele.
+        """
+        from dataclasses import replace
+
+        from flatcap.documento import escrever
+
+        _, plano = documento()
+        manifesto = replace(plano.relatorio.manifesto, banco={}, analise="amostragem")
+        destino = escrever(
+            replace(plano.relatorio, manifesto=manifesto), tmp_path / "amostra.docx"
+        )
+        comentario = Document(str(destino)).core_properties.comments
+        assert "rodada amostragem de" in comentario
+        assert comentario.endswith("sem banco")
+        assert "?" not in comentario
 
     def test_o_alerta_vem_antes_do_texto_de_abertura(self, projeto_com_rodada):
         """

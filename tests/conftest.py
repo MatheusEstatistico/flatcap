@@ -454,8 +454,9 @@ def congelar_relogio(monkeypatch):
                 return quando
 
         for modulo in (
-            "analises", "associacao", "comparacao", "correlacao", "cruzamento", "dados",
-            "descritiva", "normalidade", "perfil", "projeto", "relatorio",
+            "amostragem", "analises", "associacao", "comparacao", "correlacao",
+            "cruzamento", "dados", "descritiva", "normalidade", "perfil", "projeto",
+            "relatorio",
         ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):

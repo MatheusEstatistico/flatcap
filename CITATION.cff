@@ -5,8 +5,8 @@ title: "FlatCap"
 abstract: >-
   Ferramenta de linha de comando que automatiza o fluxo de um serviço de assessoria
   estatística que recebe as solicitações pelo REDCap: organiza as pastas de cada cliente
-  e projeto, versiona os bancos, descreve-os, roda análises conferidas contra o R e
-  escreve o relatório .docx.
+  e projeto, calcula o tamanho da amostra, versiona os bancos, descreve-os, roda
+  análises conferidas contra o R e escreve o relatório .docx.
 authors:
   - family-names: "Fernandes"
     given-names: "Matheus"
@@ -17,4 +17,5 @@ keywords:
   - estatística
   - bioestatística
   - consultoria estatística
+  - amostragem
   - relatório

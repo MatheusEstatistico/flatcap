@@ -36,7 +36,7 @@ from .dados import (
     preparar_adicao,
 )
 from .dicionario import DicionarioError
-from .ficha import IMPLEMENTACAO, FichaError, localizar_projeto
+from .ficha import IMPLEMENTACAO, FichaError, ProjetoNaoEncontradoError, localizar_projeto
 from .manifesto import (
     ANALISE_ASSOCIACAO,
     ANALISE_COMPARACAO,
@@ -56,10 +56,13 @@ from .modelo import (
 )
 from .nomes import caminho_do_projeto, projetos_do_cliente, rotulo_do_projeto
 from .projeto import (
+    ARQUIVO_DESENHO,
     ARQUIVO_HISTORICO,
     ARQUIVO_PROJETO,
+    PASTA_AMOSTRAGEM,
     PASTA_ANALISES,
     PASTA_ANTIGAS,
+    PASTA_ANTIGAS_DA_AMOSTRAGEM,
     PASTA_DADOS,
     ClienteIncompletoError,
     LayoutAntigoError,
@@ -73,6 +76,7 @@ from .projeto import (
 from .redcap import RedcapError, exportar_projeto, exportar_registros, tem_arquivo
 
 if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
+    from .amostragem import Amostragem, PlanoAmostragem
     from .analises import Etapa, Feita, PlanoAnalises
     from .associacao import Associacao, PlanoAssociacao
     from .comparacao import Comparacao, PlanoComparacao
@@ -642,6 +646,301 @@ def _arvore_do_plano(cfg: Config, plano: Plano) -> Tree:
     raiz.add(Text(ARQUIVO_PROJETO))
     return arvore
 
+
+# flatcap amostragem
+
+@app.command()
+def amostragem(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    titulo: str | None = typer.Option(
+        None, "--titulo", metavar = "TEXTO",
+        help = "O título na primeira linha do relatório da amostra."
+    ),
+    template: Path | None = typer.Option(
+        None, "--template", metavar = "ARQUIVO",
+        help = "Um .docx para herdar estilos, cabeçalho e capa. Sem isso, o "
+               "template.docx da pasta do projeto, da do cliente ou do FLATCAP_ROOT."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Calcula o tamanho da amostra e escreve o relatório da amostra.
+
+    Vem depois do `flatcap novo`: o projeto precisa existir. Tudo da amostra mora
+    em `4. Amostragem/`, dentro da pasta do projeto.
+
+    A primeira rodada cria a pasta e o `desenho.yaml` — o plano da amostra, para
+    preencher à mão — e para. O modelo já vem com 95% de confiança, margem de 5
+    pontos e proporção esperada de 50%: o caso mais comum é preencher só a
+    `populacao` e rodar de novo.
+
+    As rodadas seguintes leem o `desenho.yaml`, fazem a conta e escrevem o
+    `tamanho.csv`, o `manifesto.json` e o relatório da amostra,
+    `Amostragem_<matrícula>_AAAA-MM-DD.docx`. Rodar de novo arquiva a rodada
+    anterior em `4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então. O
+    `desenho.yaml` é seu: o FlatCap nunca o reescreve.
+
+    Por enquanto, um desenho: a aleatória simples, sem reposição. Não abre banco
+    e não fala com o REDCap.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `python-docx` entra só na execução, dentro do `executar_amostragem`. O
+    # `pandas` não entra nunca: a amostragem da v1 não abre banco.
+    from .amostragem import (
+        TITULO_DA_AMOSTRA,
+        AmostragemError,
+        executar_amostragem,
+        preparar_amostragem,
+        resumo_do_tamanho,
+    )
+    from .relatorio import RelatorioError
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_amostragem(
+            raiz, titulo = titulo or TITULO_DA_AMOSTRA, template = template
+        )
+    except ProjetoNaoEncontradoError as erro:
+        raise _abortar(
+            "Projeto",
+            f"{erro}\n\n"
+            "A amostragem não cria projeto: ela vem depois do `flatcap novo "
+            "<record_id>`, que cria a pasta a partir da solicitação do REDCap.",
+        ) from erro
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except AmostragemError as erro:
+        raise _abortar("Desenho da amostra", str(erro)) from erro
+    except RelatorioError as erro:
+        raise _abortar("Relatório", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_da_amostragem(plano))
+    if plano.amostragem is None:
+        console.print(_modelo_do_desenho(plano))
+    else:
+        console.print(_tabela_da_amostragem(plano.amostragem))
+        for aviso in plano.amostragem.avisos:
+            erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+        if plano.relatorio is not None:
+            for bloco in _alertas_no_terminal(plano.relatorio):
+                console.print(bloco)
+    console.print(_arvore_da_amostragem(plano))
+
+    if not sim:
+        if plano.amostragem is None:
+            console.print(
+                "\n[yellow]Simulação.[/yellow] Nada foi escrito.\n"
+                "Repita com [bold]--sim[/bold] para escrever o desenho.yaml."
+            )
+        else:
+            console.print(
+                "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+                "Repita com [bold]--sim[/bold] para escrever a conta e o relatório da "
+                "amostra."
+            )
+        return
+
+    try:
+        resultado = executar_amostragem(plano)
+    except AmostragemError as erro:
+        raise _abortar("Desenho da amostra", str(erro)) from erro
+    except RelatorioError as erro:
+        raise _abortar("Relatório", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Falhei ao escrever em {plano.pasta}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
+            "anterior — confira a pasta antes de rodar de novo."
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(aviso, style = "yellow"))
+
+    if plano.amostragem is None:
+        console.print(
+            Text.assemble(
+                ("\nDesenho escrito. ", "green"),
+                (f"{PASTA_AMOSTRAGEM}/{ARQUIVO_DESENHO}", "bold"),
+                (f" em {plano.raiz}", ""),
+            )
+        )
+        console.print(
+            Text(
+                f"Preencha o {ARQUIVO_DESENHO} — o caso mais comum é só a `populacao` — "
+                f"e rode `flatcap amostragem {plano.ficha.record_id or identificador}` "
+                "de novo.",
+                style = "yellow",
+            )
+        )
+        return
+
+    if resultado.arquivado is not None:
+        console.print(
+            Text(
+                "\nRodada anterior arquivada em "
+                f"{PASTA_AMOSTRAGEM}/{PASTA_ANTIGAS_DA_AMOSTRAGEM}/{resultado.arquivado.name}/",
+                style = "dim",
+            )
+        )
+
+    console.print(
+        Text.assemble(
+            ("\nAmostragem escrita. ", "green"),
+            ("Tamanho da amostra: ", ""),
+            (resumo_do_tamanho(plano.amostragem.tamanho), "bold"),
+            (f" · {plano.destino.name if plano.destino else ''} em {PASTA_AMOSTRAGEM}/", ""),
+        )
+    )
+    if plano.relatorio is not None and plano.relatorio.alertas:
+        console.print(
+            Text(
+                f"O documento saiu com {len(plano.relatorio.alertas)} aviso(s) dentro dele. "
+                "Leia antes de enviar.",
+                style = "yellow",
+            )
+        )
+
+
+def _cabecalho_da_amostragem(plano: PlanoAmostragem) -> Text:
+    """
+    Quem, e o que esta rodada faz: escrever o modelo, ou fazer a conta.
+
+    Na rodada da conta, o desenho, o modelo `.docx` e o título entram aqui pelo
+    motivo do `_cabecalho_do_relatorio`: sem eles, `--titulo` e `--template` só se
+    confeririam depois de executar.
+    """
+    ficha = plano.ficha
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(plano.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+    )
+
+    if plano.amostragem is None:
+        cabecalho.append_text(
+            Text.assemble(
+                ("Primeira rodada: ", "dim"),
+                (f"{PASTA_AMOSTRAGEM}/{ARQUIVO_DESENHO}", "bold"),
+                (" ainda não existe. Este é o modelo que será escrito, para preencher.", ""),
+            )
+        )
+        return cabecalho
+
+    relatorio = plano.relatorio
+    cabecalho.append_text(
+        Text.assemble(
+            ("Desenho ", "dim"), (plano.amostragem.desenho.titulo, "bold"),
+            ("  ·  ", "dim"), ("modelo ", "dim"),
+            (
+                str(plano.template) if plano.template else "(nenhum — estilos padrão)",
+                "" if plano.template else "dim",
+            ),
+            "\n",
+            ("Título ", "dim"), (relatorio.titulo if relatorio else "?", "bold"),
+        )
+    )
+    return cabecalho
+
+
+def _modelo_do_desenho(plano: PlanoAmostragem) -> Panel:
+    """
+    O `desenho.yaml` que a primeira rodada escreve, inteiro.
+
+    Inteiro, e não resumido: é um arquivo que você vai abrir e preencher, e a
+    simulação existe para mostrar o que seria gravado.
+    """
+    return Panel(
+        Text(plano.modelo.rstrip("\n")),
+        title = f"{PASTA_AMOSTRAGEM}/{ARQUIVO_DESENHO}",
+        border_style = "dim",
+    )
+
+
+def _tabela_da_amostragem(amostragem: Amostragem) -> Table:
+    """
+    A conta, linha por linha, como sai no `tamanho.csv` e no documento.
+
+    A última linha é a resposta, e sai em destaque: quem procura o número procura
+    no fim.
+    """
+    tabela = Table(show_header = True, header_style = "bold")
+    tabela.add_column("Parâmetro", overflow = "fold")
+    tabela.add_column("Valor", overflow = "fold")
+
+    linhas = amostragem.calculo.linhas
+    for posicao, (parametro, valor) in enumerate(linhas, start = 1):
+        resposta = posicao == len(linhas)
+        tabela.add_row(
+            Text(parametro, style = "bold" if resposta else ""),
+            Text(valor, style = "bold green" if resposta else ""),
+        )
+    return tabela
+
+
+def _arvore_da_amostragem(plano: PlanoAmostragem) -> Tree:
+    """
+    Desenha o que `executar_amostragem` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.amostragem is None:
+        pasta = arvore.add(
+            Text.assemble(
+                (f"{PASTA_AMOSTRAGEM}/", "bold green" if plano.criar_pasta else "bold"),
+                ("   nova" if plano.criar_pasta else "   já existe", "dim"),
+            )
+        )
+        pasta.add(
+            Text.assemble((ARQUIVO_DESENHO, "bold green"), ("   novo · para preencher", "dim"))
+        )
+        arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+        return arvore
+
+    pasta = arvore.add(Text(f"{PASTA_AMOSTRAGEM}/", style = "bold"))
+    pasta.add(Text.assemble((ARQUIVO_DESENHO, ""), ("   lido · não muda", "dim")))
+
+    arquivados: set[str] = set()
+    if plano.arquivamento is not None:
+        arquivados = {arquivo.name for arquivo in plano.arquivamento.arquivos}
+        antigas = pasta.add(Text(f"{PASTA_ANTIGAS_DA_AMOSTRAGEM}/"))
+        destino = antigas.add(
+            Text.assemble(
+                (f"{plano.arquivamento.destino.name}/", "yellow"),
+                ("   recebe a rodada anterior", "dim"),
+            )
+        )
+        for nome in sorted(arquivados):
+            destino.add(Text(nome, style = "dim"))
+        if plano.arquivamento.desenho is not None:
+            destino.add(Text.assemble((ARQUIVO_DESENHO, "dim"), ("   o de então", "dim")))
+
+    for nome in plano.arquivos:
+        pasta.add(
+            Text.assemble(
+                (nome, "bold green"), ("   refeito" if nome in arquivados else "   novo", "dim")
+            )
+        )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
 
 
 # flatcap dados

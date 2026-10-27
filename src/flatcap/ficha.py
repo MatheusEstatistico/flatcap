@@ -43,7 +43,10 @@ ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 Toda a persistência do `projeto.yaml` está atrás das funções públicas abaixo —
 `ler`, `bloco`, `acrescentar_versao`, `localizar_projeto`, `projetos_da_matricula`,
 `caminho_da_ficha`, `versao_vigente` e `sequencia_do_nome`. Quem importa este
-módulo não sabe qual biblioteca de YAML está em uso.
+módulo não sabe qual biblioteca de YAML está em uso. Desde a 1.15.0, o `ler_yaml`
+estende o mesmo leitor aos outros YAML editados à mão — o `desenho.yaml` da
+amostragem é o primeiro —, e o `numero_escrito` é a regra de ler um número escrito
+num deles.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -56,6 +59,7 @@ esta implementação de YAML por outra precisa levá-las junto.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import secrets
@@ -652,6 +656,61 @@ def _analises(documento) -> tuple[str, ...]:
         for texto in (str(item).strip() for item in bruto if item is not None)
         if texto
     )
+
+
+def ler_yaml(caminho: Path) -> Any:
+    """
+    O conteúdo de outro YAML editado à mão, em tipos comuns de Python.
+
+    O `desenho.yaml` da amostragem é o primeiro. Existe pelo motivo do `bloco`: este é
+    o único módulo do pacote que abre YAML. E o `desenho.yaml` quebra pelos mesmos
+    motivos da ficha — tabulação, dois-pontos dentro de um valor sem aspas —; lido por
+    aqui, ele ganha o mesmo diagnóstico, em vez da mensagem crua do parser.
+
+    O valor **não é validado aqui**, como no `bloco`: o que é um desenho válido é
+    assunto de quem o usa.
+
+    Raises:
+        FichaAusenteError: o arquivo não existe.
+        FichaInvalidaError: o arquivo não é um YAML válido.
+    """
+    caminho = Path(caminho)
+    if not caminho.is_file():
+        raise FichaAusenteError(
+            f"A pasta {caminho.parent.name} não tem {caminho.name}.", caminho.parent
+        )
+    return _simples(_carregar_documento(caminho))
+
+
+# Um número escrito como texto num YAML editado à mão: `"24,9"`, `"24.9"`, `" 25 "`.
+# Sem separador de milhar — `1.234,5` é ambíguo, e ambiguidade numa ficha se recusa.
+_NUMERO_ESCRITO = re.compile(r"^[+\-]?\d+(?:[.,]\d+)?$")
+
+
+def numero_escrito(valor: Any) -> float | None:
+    """
+    Um número, a partir de como o YAML o trouxe; `None` quando não é um.
+
+    Número do YAML entra como está. Texto entra quando é um número escrito — com
+    vírgula ou ponto decimal, e sem separador de milhar: é o `margem: 2,5` do
+    `desenho.yaml`, que o YAML lê como texto, e o `"24,9"` entre aspas que a recusa
+    da comparação ensina a escrever. Lógico não é número, embora o Python ache que
+    `True` vale 1.
+
+    Morava na comparação, como `referencia_escrita`, e desceu para cá na 1.15.0: a
+    amostragem lê o `desenho.yaml` com a mesma regra, e duas regras para o mesmo
+    número escrito à mão é como uma ficha aceita `2,5` e a outra o recusa.
+    """
+    if isinstance(valor, bool):
+        return None
+    if isinstance(valor, int | float):
+        numero = float(valor)
+        return numero if math.isfinite(numero) else None
+    if isinstance(valor, str):
+        limpo = valor.strip()
+        if _NUMERO_ESCRITO.match(limpo):
+            return float(limpo.replace(",", "."))
+    return None
 
 
 # Escrita

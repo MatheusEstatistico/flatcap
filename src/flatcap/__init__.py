@@ -25,6 +25,8 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
+    amostral.py    a aritmética do tamanho da amostra, só com a biblioteca padrão
+    amostragem.py  o desenho.yaml, a conta e o relatório da amostra, em 4. Amostragem/
 
     cli.py         expõe os comandos no terminal
 
@@ -33,7 +35,8 @@ A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `fich
 e `manifesto`, `relatorio` conhece `manifesto`, `dicionario`, `dados` e `ficha`, e nenhuma
 delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento` conhece o
 `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`.
+`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
+e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -511,6 +514,69 @@ variável aparecia duas vezes. `Peso` e `(kg)` em duas linhas partiam o comentá
 tabelas, e o relatório saía com tabelas de uma coluna só, sem aviso. O leitor limpa os
 dois, e o comentário das tabelas sai sempre numa linha só, mesmo quando o rótulo ou uma
 categoria trazem a quebra.
+
+## 1.15.0 — a amostragem
+
+**`flatcap amostragem <id>`: o tamanho da amostra, na pasta dela, com o relatório dela.** O
+projeto costuma começar com a amostragem e evoluir depois para a análise, e o fluxo começa
+sempre no `flatcap novo`, que não muda — as três pastas de sempre. A amostragem vem depois
+dele. A primeira rodada cria `4. Amostragem/` e escreve o `desenho.yaml`, o plano da amostra,
+para preencher à mão, e para; as seguintes leem o `desenho.yaml`, fazem a conta e escrevem o
+`tamanho.csv`, o `manifesto.json` e o relatório da amostra,
+`Amostragem_<matrícula>_AAAA-MM-DD.docx`. Tudo da amostra mora em `4. Amostragem/`, inclusive
+as versões antigas dela, e as pastas 1, 2 e 3 ficam para a análise que vem depois.
+
+**A pasta nasce na amostragem, e não no `novo`.** O `novo` não tem como saber se o pedido é de
+amostragem — o formulário do REDCap não tem essa opção —, o projeto que nunca amostra não
+ganha uma pasta vazia, e o que já existia ganha a pasta do mesmo jeito, sem migração. A
+amostragem não cria projeto: sem a pasta do `novo`, recusa e diz isso.
+
+**A amostragem não é uma análise.** Não está no `analises.REGISTRO`, na
+`ORDEM_PADRAO_DAS_ANALISES` nem no `flatcap analisar`. O relatório das análises varre só
+`3. Análises/` e nunca vê a amostra, e o relatório da amostra nunca vê as análises. O
+`ANALISE_AMOSTRAGEM` do `manifesto.py` existe para o manifesto dela dizer de que ele é.
+
+**Um desenho, e o espaço para os outros.** A aleatória simples, sem reposição: a do pedido
+mais comum, o do cliente que informa só o tamanho da população. O modelo do `desenho.yaml` já
+vem com 95% de confiança, margem de 5 pontos e proporção esperada de 50%, e preencher a
+`populacao` basta. A média entra com o `desvio` no lugar da `proporcao`; o tamanho decidido à
+mão, no `n`; a perda esperada, na `perda`. Cada desenho é uma entrada no
+`amostragem.DESENHOS`, com as chaves e a conta dele, e os previstos — sistemática,
+estratificada, conglomerados, PPT, dois estágios — recusam dizendo que ainda não estão no
+FlatCap, e não que não existem.
+
+**A conta é a do OpenEpi.** n₀ = z²·V/e², corrigido pela população na forma
+n = N·z²·V/[(N − 1)·e² + z²·V], arredondado para cima em cada passo, com a perda somada no fim
+e o tamanho nunca maior que N. O z é o `qnorm` do R, pelo `statistics.NormalDist`. A
+aritmética mora no `amostral.py`, só com a biblioteca padrão, e o teste a confere contra os
+tamanhos publicados e contra o `qnorm`.
+
+**As recusas são as do engano que muda o número em silêncio.** `12.000` é doze no YAML, e não
+doze mil; `confianca: 0.95` é a confiança escrita como fração, e `confianca: 5`, o α no lugar
+dela; `proporcao: 0.5` querendo 50% é meio por cento, e daria n = 8 sem erro nenhum. Saem
+todas de uma vez, como nas análises. A margem escrita como fração, `margem: 0.05`, passa por
+todas — 0,05 ponto existe —, e por isso sai com aviso, e não recusada. A vírgula decimal vale,
+e `AAS` ou `Aleatória simples` são lidos como `aas`.
+
+**O relatório da amostra é montado com as peças do das análises**, e três delas ficaram
+públicas no `relatorio.py`: o `tabela_do_texto` — o miolo do `ler_tabela`, para a tabela do
+documento ser lida do mesmo texto que vai para o `tamanho.csv` —, o `localizar_template` e o
+`conferir_texto`, com os nomes privados como apelido. A primeira página é a mesma, com a
+finalidade e os objetivos da ficha. O texto de metodologia tem o lugar dele, o
+`amostragem.METODOLOGIA`, vazio de propósito, pela regra do `TEXTO_PADRAO`.
+
+**O `desenho.yaml` é seu.** O FlatCap escreve o modelo uma vez e, dali em diante, só lê — e
+quem lê é o `ficha.ler_yaml`, para um YAML quebrado ganhar o diagnóstico da ficha. Refazer a
+rodada arquiva a anterior em `4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então:
+o texto que ela leu, guardado no manifesto dela, e não o da pasta, que a essa altura já é o
+novo. O tamanho que muda em relação à rodada vigente sai com aviso, antes de escrever.
+
+**O número escrito à mão desceu para o `ficha.py`.** A regra do `numero_escrito` era a do
+`comparacao.referencia_escrita`, e a amostragem lê o `desenho.yaml` por ela.
+
+**As propriedades do `.docx` dizem de qual rodada ele é.** O comentário dizia "a partir da
+descritiva" em todo documento e, sem banco, "banco ?"; passa a dizer a análise do manifesto,
+e "sem banco" quando não há.
 """
 
-__version__ = "1.14.1"
+__version__ = "1.15.0"
