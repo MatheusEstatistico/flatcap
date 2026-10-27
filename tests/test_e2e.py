@@ -530,6 +530,69 @@ class TestFluxoCompleto:
         assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == do_csv
 
 
+class TestFluxoDaAmostragem:
+    """
+    O pedido de amostragem de ponta a ponta: o `novo` de um registro sem anexo e,
+    depois dele, a amostragem — já com o servidor derrubado, porque do `novo` em
+    diante nada fala com o REDCap.
+    """
+
+    def test_do_registro_sem_anexo_ao_docx_da_amostra(self, tmp_path):
+        from docx import Document
+
+        with servidor_falso.subir(registros=REGISTROS) as api:
+            env = api.env(tmp_path)
+            assert flatcap("novo", "42", "--sim", env=env).returncode == 0
+        env.write_text(
+            "REDCAP_API_URL=https://servidor.derrubado.invalido/redcap/api/\n"
+            "REDCAP_TOKEN=token_invalido\n"
+            f"FLATCAP_ROOT={tmp_path / 'FlatCapRoot'}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+
+        raiz = tmp_path / "FlatCapRoot" / "00742 - José Antônio de Sá" / "Projeto 042"
+        # o `novo` não muda: as três pastas de sempre, e nenhuma quarta
+        assert sorted(p.name for p in raiz.iterdir() if p.is_dir()) == [
+            "1. Dados originais", "2. Versões antigas", "3. Análises",
+        ]
+
+        resultado = flatcap("amostragem", "42", "--sim", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        pasta = raiz / "4. Amostragem"
+        desenho = pasta / "desenho.yaml"
+        assert desenho.is_file()
+
+        texto = desenho.read_text(encoding="utf-8")
+        desenho.write_text(
+            texto.replace("populacao:\n", "populacao: 1200\n"), encoding="utf-8", newline="\n"
+        )
+        resultado = flatcap("amostragem", "42", "--sim", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        saida = " ".join(resultado.stdout.split())
+        assert "Tamanho da amostra: 292 de 1200" in saida
+        # o registro de mentira não tem `fin` nem `obj1`: o documento sai com o aviso
+        assert "Leia antes de enviar" in saida
+
+        # o número do documento é, letra por letra, o do `.csv` ao lado; a primeira
+        # tabela é a caixa do aviso, e a da conta é a última
+        (documento,) = pasta.glob("Amostragem_00742_*.docx")
+        quadro = Document(str(documento)).tables[-1]
+        do_docx = [[c.text.strip() for c in linha.cells] for linha in quadro.rows]
+        do_csv = [
+            linha.split(";")
+            for linha in (pasta / "tamanho.csv").read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_docx == do_csv
+        assert do_docx[-1] == ["Tamanho da amostra", "292"]
+
+        # o `desenho.yaml` é o que você escreveu, e o histórico tem as três linhas
+        assert desenho.read_text(encoding="utf-8").count("populacao: 1200") == 1
+        historico = (raiz / "historico.md").read_text(encoding="utf-8")
+        assert historico.count("- **") == 3
+
+
 class TestSemRede:
     """
     Do `dados adicionar` em diante, nada toca o REDCap — e a prova é rodar com
@@ -564,6 +627,7 @@ class TestSemRede:
         "comando",
         [
             ("dados", "listar", "40"),
+            ("amostragem", "40", "--sim"),
             ("perfil", "40", "--sim"),
             ("descritiva", "40", "--sim"),
             ("normalidade", "40", "--sim"),
