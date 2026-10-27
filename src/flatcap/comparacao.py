@@ -247,7 +247,7 @@ from .descritiva import (
     serie_de_texto,
 )
 from .dicionario import ARQUIVO_DICIONARIO, CATEGORICA, IGNORAR, NUMERICA, Linha
-from .ficha import Ficha, bloco, escrever_atomico
+from .ficha import Ficha, bloco, escrever_atomico, numero_escrito
 from .ficha import ler as ler_ficha
 from .hipoteses import (
     ANOVA,
@@ -484,10 +484,6 @@ COLUNA_DAS_DUAS_DIFERENCAS = "diferença de médias ou de locação (IC 95%)"
 CASAS_REFERENCIA = 6
 
 _AUSENTE = "—"
-
-# Um número escrito como texto na ficha: `"24,9"`, `"24.9"`, `" 25 "`. Sem separador
-# de milhar — `1.234,5` é ambíguo, e ambiguidade numa hipótese se recusa.
-_NUMERO_ESCRITO = re.compile(r"^[+\-]?\d+(?:[.,]\d+)?$")
 
 # Um texto que quer ser número e não é um que se leia sem ambiguidade: `"2.500,00"`.
 # Só algarismos, pontos, vírgulas e espaços — `pas_0` tem algarismo e é um nome.
@@ -3045,17 +3041,12 @@ def referencia_escrita(valor: Any) -> float | None:
     vírgula ou ponto decimal, e sem separador de milhar: é o `"24,9"` entre aspas que
     a recusa da vírgula decimal ensina a escrever. Lógico não é número, embora o
     Python ache que `True` vale 1.
+
+    A regra mora no `ficha.numero_escrito` desde a 1.15.0, quando a amostragem passou a
+    ler o `desenho.yaml` com ela; o nome continua aqui, porque é o que esta análise
+    pergunta — "qual é a referência?".
     """
-    if isinstance(valor, bool):
-        return None
-    if isinstance(valor, int | float):
-        numero_ = float(valor)
-        return numero_ if math.isfinite(numero_) else None
-    if isinstance(valor, str):
-        limpo = valor.strip()
-        if _NUMERO_ESCRITO.match(limpo):
-            return float(limpo.replace(",", "."))
-    return None
+    return numero_escrito(valor)
 
 
 def _numero_partido(item: list[Any]) -> tuple[str, bool] | None:
