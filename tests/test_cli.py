@@ -38,9 +38,12 @@ from conftest import (
 from flatcap import __version__
 from flatcap.cli import app
 from flatcap.projeto import (
+    ARQUIVO_DESENHO,
     ARQUIVO_PROJETO,
+    PASTA_AMOSTRAGEM,
     PASTA_ANALISES,
     PASTA_ANTIGAS,
+    PASTA_ANTIGAS_DA_AMOSTRAGEM,
     PASTA_ASSOCIACAO,
     PASTA_COMPARACAO,
     PASTA_CORRELACAO,
@@ -353,6 +356,103 @@ class TestNovo:
 
     def test_registro_inexistente_sai_com_um(self, rodar, com_redcap):
         assert rodar("novo", "999").exit_code == 1
+
+
+# ── amostragem ──────────────────────────────────────────────────────────────
+
+
+class TestAmostragem:
+    DESENHO = "desenho: aas\npopulacao: 1200\nconfianca: 95\nmargem: 5\nproporcao: 50\n"
+
+    @staticmethod
+    def desenhar(raiz, texto=DESENHO):
+        pasta = raiz / PASTA_AMOSTRAGEM
+        pasta.mkdir(exist_ok=True)
+        (pasta / ARQUIVO_DESENHO).write_text(texto, encoding="utf-8")
+        return pasta
+
+    def test_sem_projeto_lembra_que_vem_depois_do_novo(self, rodar, root):
+        resultado = rodar("amostragem", "999")
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "A amostragem não cria projeto" in saida
+        assert "flatcap novo <record_id>" in saida
+
+    def test_a_primeira_rodada_simula_e_mostra_o_modelo(self, rodar, projeto_vazio):
+        resultado = rodar("amostragem", RECORD_ID)
+        assert resultado.exit_code == 0
+        saida = _sem_moldura(resultado)
+        assert "Primeira rodada" in saida
+        assert "desenho: aas" in saida
+        assert "Simulação" in saida
+        assert not (projeto_vazio / PASTA_AMOSTRAGEM).exists()
+
+    def test_a_primeira_rodada_com_sim_escreve_o_modelo(self, rodar, projeto_vazio):
+        resultado = rodar("amostragem", MATRICULA, "--sim")
+        assert resultado.exit_code == 0
+        assert (projeto_vazio / PASTA_AMOSTRAGEM / ARQUIVO_DESENHO).is_file()
+        saida = _sem_moldura(resultado)
+        assert "Desenho escrito" in saida
+        assert f"rode `flatcap amostragem {RECORD_ID}` de novo" in saida
+
+    def test_a_conta_simula_por_padrao(self, rodar, projeto_vazio):
+        pasta = self.desenhar(projeto_vazio)
+        resultado = rodar("amostragem", RECORD_ID)
+        assert resultado.exit_code == 0
+        saida = _sem_moldura(resultado)
+        assert "Tamanho da amostra" in saida
+        assert "292" in saida
+        assert "Título Relatório de Amostragem" in saida
+        assert [p.name for p in pasta.iterdir()] == [ARQUIVO_DESENHO]
+
+    def test_a_conta_com_sim_escreve_a_rodada(self, rodar, projeto_vazio):
+        pasta = self.desenhar(projeto_vazio)
+        resultado = rodar("amostragem", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        assert (pasta / "tamanho.csv").is_file()
+        assert (pasta / "manifesto.json").is_file()
+        assert len(list(pasta.glob("Amostragem_*.docx"))) == 1
+        assert "Tamanho da amostra: 292 de 1200" in _sem_moldura(resultado)
+
+    def test_o_desenho_invalido_sai_com_um_e_lista_tudo(self, rodar, projeto_vazio):
+        self.desenhar(projeto_vazio, self.DESENHO.replace("95", "0.95") + "pereda: 10\n")
+        resultado = rodar("amostragem", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Desenho da amostra" in saida
+        assert "tem 2 problema(s)" in saida
+
+    def test_refazer_mostra_o_arquivamento_e_avisa_a_mudanca(self, rodar, projeto_vazio):
+        pasta = self.desenhar(projeto_vazio)
+        rodar("amostragem", RECORD_ID, "--sim")
+        self.desenhar(projeto_vazio, self.DESENHO + "perda: 10\n")
+        resultado = rodar("amostragem", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        saida = _sem_moldura(resultado)
+        assert "era 292, e passa a ser 325" in saida
+        assert "recebe a rodada anterior" in saida
+        assert "Rodada anterior arquivada em 4. Amostragem/Versões antigas/amostragem_" in saida
+        assert len(list((pasta / PASTA_ANTIGAS_DA_AMOSTRAGEM).iterdir())) == 1
+
+    def test_o_titulo_aparece_na_simulacao(self, rodar, projeto_vazio):
+        self.desenhar(projeto_vazio)
+        saida = _sem_moldura(rodar("amostragem", RECORD_ID, "--titulo", "Cálculo amostral"))
+        assert "Título Cálculo amostral" in saida
+
+    def test_template_inexistente_sai_com_um(self, rodar, projeto_vazio, tmp_path):
+        self.desenhar(projeto_vazio)
+        resultado = rodar("amostragem", RECORD_ID, "--template", str(tmp_path / "x.docx"))
+        assert resultado.exit_code == 1
+        assert "Relatório" in _saida(resultado)
+
+    def test_a_ficha_em_branco_avisa_no_terminal(self, rodar, projeto_vazio):
+        from conftest import escrever_ficha
+
+        escrever_ficha(projeto_vazio, finalidade=None)
+        self.desenhar(projeto_vazio)
+        saida = _sem_moldura(rodar("amostragem", RECORD_ID, "--sim"))
+        assert "Vai escrito no documento" in saida
+        assert "Leia antes de enviar" in saida
 
 
 # ── dados ───────────────────────────────────────────────────────────────────
@@ -1279,6 +1379,7 @@ class TestInvariantes:
         "comando",
         [
             ("novo", "40"),
+            ("amostragem", RECORD_ID),
             ("dados", "adicionar", RECORD_ID, "ARQUIVO"),
             ("perfil", RECORD_ID),
             ("descritiva", RECORD_ID),
@@ -1308,14 +1409,18 @@ class TestInvariantes:
             raise AssertionError("um comando de disco tentou falar com a rede")
 
         monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
+        raiz = projeto_com_rodada()
         acrescentar_a_ficha(
-            projeto_com_rodada(),
+            raiz,
             TestCruzamento.BLOCO
             + TestAssociacao.BLOCO
             + TestCorrelacao.BLOCO
             + TestComparacao.BLOCO,
         )
+        assert rodar("amostragem", RECORD_ID).exit_code == 0
+        TestAmostragem.desenhar(raiz)
         for comando in (
+            ("amostragem", RECORD_ID),
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
             ("descritiva", RECORD_ID),
@@ -1342,6 +1447,8 @@ class TestInvariantes:
             + TestComparacao.BLOCO,
         )
         antes = len(linhas_do_historico(raiz))
+        rodar("amostragem", RECORD_ID, "--sim")  # o modelo do desenho.yaml
+        rodar("amostragem", RECORD_ID, "--sim")  # a conta, com o modelo como veio
         rodar("perfil", RECORD_ID, "--sim")
         rodar("descritiva", RECORD_ID, "--sim")
         rodar("normalidade", RECORD_ID, "--sem-graficos", "--sim")
@@ -1350,7 +1457,7 @@ class TestInvariantes:
         rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim")
         rodar("comparacao", RECORD_ID, "--sim")
         rodar("relatorio", RECORD_ID, "--sim")
-        assert len(linhas_do_historico(raiz)) == antes + 8
+        assert len(linhas_do_historico(raiz)) == antes + 10
 
     def test_a_cli_nao_tem_regra_de_negocio(self):
         """
