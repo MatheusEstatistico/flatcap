@@ -78,6 +78,7 @@ ORDEM = (
     "hipoteses",
     "comparacao",
     "analises",
+    "metodologia",
     "relatorio",
     "documento",
     "amostral",

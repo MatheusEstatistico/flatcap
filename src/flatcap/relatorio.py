@@ -72,18 +72,28 @@ texto que está na célula do `.csv` é o texto que vai para a célula do Word.
 
 ## O que sai na primeira página
 
-Título, subtítulo com `matrícula - nome`, os alertas quando houver, e a
+Título, subtítulo com `matrícula - nome`, os alertas quando houver, a
 **abertura** — três pedaços que `montar_abertura` junta, nesta ordem:
 
     1. o `TEXTO_PADRAO`, os parágrafos fixos que abrem todo relatório de todo
        projeto, definidos logo abaixo em um bloco só para serem reescritos sem
        se procurar código;
     2. a **finalidade** do estudo;
-    3. os **objetivos**, geral e específicos.
+    3. os **objetivos**, geral e específicos —
 
-Os dois últimos vêm da ficha, que os recebeu do formulário do REDCap (`fin` e
+e, fechando a página, a **metodologia**: o subtítulo "Metodologia Estatística
+(texto padrão)" e um parágrafo para o cliente levar para o artigo.
+
+Os dois do meio vêm da ficha, que os recebeu do formulário do REDCap (`fin` e
 `obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir à mão,
 porque o `projeto.yaml` é seu.
+
+A metodologia vem das rodadas, pelo `metodologia.py`: cada análise com rodada dá
+uma frase que nomeia só os testes que rodaram, lidos do manifesto, e a versão do
+Python fecha o parágrafo. Também não abre o banco — o que ela afirma é o que os
+manifestos registraram. Viaja em dois campos próprios do `Relatorio`, e não no
+`texto`, porque o subtítulo dela é um título, e o `documento.py` precisa saber
+disso para escrevê-lo no estilo de subtítulo.
 
 Campo da ficha em branco não encolhe a página em silêncio: vira um marcador
 visível **e** um `Alerta` de código `texto_ausente`. Nada disso fere a regra da
@@ -125,6 +135,7 @@ from .manifesto import (
     Manifesto,
 )
 from .manifesto import ler as ler_manifesto
+from .metodologia import montar_metodologia
 from .nomes import SEPARADOR, sanitizar
 from .projeto import (
     ARQUIVO_PROJETO,
@@ -341,6 +352,11 @@ class Relatorio:
     titulo: str
     secoes: tuple[Secao, ...]
     texto: tuple[str, ...] = ()
+    # A metodologia da primeira página: os parágrafos e o subtítulo acima deles. Fora
+    # do `texto` porque o subtítulo é um título, e não texto corrido; vazios, a
+    # página fecha nos objetivos, como antes da 1.16.0.
+    metodologia: tuple[str, ...] = ()
+    titulo_da_metodologia: str = ""
     fora: tuple[ForaDoRelatorio, ...] = ()
     alertas: tuple[Alerta, ...] = ()
     avisos: tuple[str, ...] = ()
@@ -510,6 +526,18 @@ def preparar_relatorio(
     if alerta_texto is not None:
         alertas.append(alerta_texto)
 
+    # A metodologia sai das rodadas, e não da ficha: o que ela afirma é o que os
+    # manifestos registraram. Análise com rodada e sem frase é aviso de terminal —
+    # o parágrafo sai sem ela, e quem precisa saber disso antes de enviar é você.
+    metodologia = montar_metodologia(rodada.manifesto for rodada in rodadas)
+    if metodologia.sem_frase:
+        avisos.append(
+            f"O parágrafo de metodologia da primeira página saiu sem "
+            f"{_analises_em_texto(metodologia.sem_frase)}: o manifesto da rodada não "
+            "diz quais testes rodaram. Rode a análise de novo com esta versão, ou "
+            "complete o parágrafo no documento antes de enviar."
+        )
+
     relatorio = Relatorio(
         ficha=ficha,
         manifesto=_manifesto_principal(rodadas),
@@ -519,8 +547,11 @@ def preparar_relatorio(
         # O texto entra no `Relatorio` como dado, e o `documento.py` não lê
         # constante nenhuma. É o que mantém a divisão da fase — e é o que fez
         # esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
-        # primeira página passaria a vir do `projeto.yaml`, é este.
+        # primeira página passaria a vir do `projeto.yaml`, é este. A
+        # metodologia entra do mesmo jeito, como dado, em dois campos dela.
         texto=montar_abertura(ficha),
+        metodologia=metodologia.paragrafos,
+        titulo_da_metodologia=metodologia.titulo,
         fora=_variaveis_de_fora(rodadas),
         alertas=tuple(alertas),
         avisos=tuple(avisos),

@@ -23,6 +23,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
+    metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
     amostral.py    a aritmética do tamanho da amostra, só com a biblioteca padrão
@@ -32,11 +33,12 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
 `projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
-e `manifesto`, `relatorio` conhece `manifesto`, `dicionario`, `dados` e `ficha`, e nenhuma
-delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento` conhece o
-`Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
-e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
+e `manifesto`, `metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`,
+`metodologia`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é
+o par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe, e o
+`relatorio` só chama o `documento` de dentro do `executar_relatorio`. A `amostragem` conhece
+`amostral`, `ficha`, `manifesto` e `relatorio`, e chama o `documento` do mesmo jeito, de
+dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -577,6 +579,47 @@ novo. O tamanho que muda em relação à rodada vigente sai com aviso, antes de 
 **As propriedades do `.docx` dizem de qual rodada ele é.** O comentário dizia "a partir da
 descritiva" em todo documento e, sem banco, "banco ?"; passa a dizer a análise do manifesto,
 e "sem banco" quando não há.
+## 1.16.0 — a metodologia na primeira página
+
+**O relatório ganha um texto padrão de metodologia, para o cliente levar para o artigo.** Ele
+fecha a primeira página, depois da finalidade e dos objetivos que vieram do REDCap, e antes da
+quebra que abre a primeira seção: o subtítulo "Metodologia Estatística (texto padrão)" e um
+parágrafo que diz, no registro de uma seção de métodos, como os números do documento foram
+produzidos — como cada tipo de variável foi descrito, quais testes rodaram, o nível de
+significância — e termina com "As análises foram feitas usando a linguagem Python versão
+3.11.", com a versão das rodadas.
+
+**O parágrafo sai das rodadas, e não de um texto fixo.** Um texto fixo citaria todos os testes
+que o FlatCap sabe fazer, e um artigo que nomeia nos métodos um teste que não aparece em
+resultado nenhum é a primeira coisa que o parecerista marca. Cada análise com rodada em
+`3. Análises/` contribui com uma frase, e a frase nomeia só os testes que rodaram — o
+Mann-Whitney entra quando alguma linha da comparação saiu com ele, o Fisher quando algum par da
+associação foi para ele. A explicação da regra entra só quando ela escolheu: com mais de um
+método na correlação, ou com o paramétrico e o de postos na comparação; e o teste escrito na
+ficha não é atribuído à regra.
+
+**Nada aqui abre o banco.** Tudo o que o parágrafo afirma está nos manifestos: o teste de cada
+par, item e delineamento nos `detalhes`, o alfa e a falta de correção para comparações
+múltiplas nas `regras`, e a versão do Python no `ambiente`, sem o último número. Rodar uma
+análise de novo reescreve o manifesto dela, e o parágrafo acompanha sem ninguém lembrar de
+editá-lo. Duas versões no parágrafo ("versões 3.11 e 3.13") são de propósito: dizem que uma
+rodada foi feita noutra máquina.
+
+**Um módulo novo, `metodologia.py`, e o subtítulo no `documento.py`.** A redação mora num bloco
+emoldurado no topo do módulo, como o `TEXTO_PADRAO`: o subtítulo, a frase de cada análise, o
+nome de cada teste, a frase do Python. O `Relatorio` leva a metodologia em dois campos dela,
+`metodologia` e `titulo_da_metodologia`, e não no `texto`, porque o subtítulo é um título: o
+`documento.py` o escreve no estilo de subtítulo — o `FlatCap Subtitulo` da linha
+`matrícula - nome`, que se ajusta no Word —, preso ao parágrafo que vem depois, e o parágrafo
+como o texto corrido da abertura. O módulo não importa as análises — elas trazem o `pandas`, e
+o `relatorio.py`, que o importa, tem o teste em subprocesso que falha se o `pandas` for
+carregado —, e por isso os nomes que os manifestos gravam estão escritos nele como texto; o
+`test_metodologia.py` confere que são, letra por letra, as constantes das análises.
+
+**Rodada sem frase é aviso, e não texto inventado.** Uma análise cujo manifesto não diz o que
+rodou — uma que esta versão não conheça — sai do parágrafo, e o terminal diz qual. A que não
+testou nada (toda linha "não testado") sai sem frase e sem aviso: a tabela dela já diz o
+motivo.
 """
 
-__version__ = "1.15.0"
+__version__ = "1.16.1"
