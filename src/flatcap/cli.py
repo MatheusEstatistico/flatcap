@@ -55,6 +55,7 @@ from .modelo import (
     normalizar_varios,
 )
 from .nomes import caminho_do_projeto, projetos_do_cliente, rotulo_do_projeto
+from .painel import LinhaDoPainel, Painel, montar_painel
 from .projeto import (
     ARQUIVO_DESENHO,
     ARQUIVO_HISTORICO,
@@ -64,6 +65,8 @@ from .projeto import (
     PASTA_ANTIGAS,
     PASTA_ANTIGAS_DA_AMOSTRAGEM,
     PASTA_DADOS,
+    STATUS,
+    STATUS_PRONTO,
     ClienteIncompletoError,
     LayoutAntigoError,
     Plano,
@@ -508,6 +511,190 @@ def _resumo(
         )
 
     return resumo
+
+
+# flatcap status
+
+# O nome da função não é o do comando, como no `dados_listar`: `status` é também o
+# campo da ficha, e uma função com esse nome no módulo inteiro da CLI é um engano
+# esperando para acontecer.
+@app.command("status")
+def status_dos_projetos(
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Mostra os projetos que já têm pasta, com o status e o prazo de cada um.
+        Lê o projeto.yaml de cada projeto do FLATCAP_ROOT, sem falar com o REDCap e
+        sem escrever nada. O prazo que passou sem o projeto estar pronto sai como
+        ATRASADO, e os projetos finalizados não aparecem.
+    """
+    cfg = _configuracao(env)
+
+    try:
+        painel = montar_painel(cfg.root)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    if painel.linhas:
+        console.print(_tabela_do_status(painel))
+    console.print(_resumo_do_status(painel))
+    for aviso in _avisos_do_status(painel):
+        erro_console.print(aviso)
+
+
+def _tabela_do_status(painel: Painel) -> Table:
+    """
+    As três colunas do `listar` que dizem de quem é a pasta, e as duas que dizem como
+    o projeto está.
+
+    O significado vai escrito, e não só na cor: um painel copiado para um e-mail, ou
+    lido por um programa que recebe a saída sem as cores, continua dizendo ATRASADO.
+    """
+    tabela = Table(show_header = True, header_style = "bold")
+    tabela.add_column("id", justify = "right", no_wrap = True)
+    tabela.add_column("Matrícula", no_wrap = True)
+    tabela.add_column("Pasta local", overflow = "fold")
+    tabela.add_column("Status", overflow = "fold")
+    tabela.add_column("Prazo", no_wrap = True)
+
+    for linha in painel.linhas:
+        tabela.add_row(
+            Text(linha.record_id or "?", style = "" if linha.record_id else "yellow"),
+            Text(linha.matricula or "—", style = "" if linha.matricula else "yellow"),
+            Text(linha.pasta_local),
+            _celula_do_status(linha),
+            _celula_do_prazo(linha),
+        )
+
+    return tabela
+
+
+def _celula_do_status(linha: LinhaDoPainel) -> Text:
+    """
+    Um dos cinco, como está no `projeto.STATUS`; o que não é nenhum deles, como está
+    escrito na ficha, em amarelo.
+    """
+    if linha.status_reconhecido:
+        return Text(linha.status)
+    return Text(linha.status or "(em branco)", style = "yellow")
+
+
+def _celula_do_prazo(linha: LinhaDoPainel) -> Text:
+    """
+    A data final, ou ATRASADO quando ela passou sem o projeto estar pronto.
+    """
+    if linha.atrasado:
+        return Text("ATRASADO", style = "bold red")
+    if linha.prazo is not None:
+        return Text(f"{linha.prazo:%d/%m/%Y}")
+    if linha.prazo_escrito:
+        return Text(linha.prazo_escrito, style = "yellow")
+    return Text("—", style = "dim")
+
+
+def _resumo_do_status(painel: Painel) -> str:
+    """
+    Uma linha com o que exige atenção, como a do `listar`.
+    """
+    finalizados = painel.finalizados
+    fora = f"{finalizados} {_plural(finalizados, 'finalizado', 'finalizados')}"
+
+    if not painel.linhas:
+        if finalizados:
+            return f"Nenhum projeto em aberto — {fora}, fora do painel."
+        return (
+            "Nenhum projeto com pasta no FLATCAP_ROOT. A pasta de um projeto nasce no "
+            "`flatcap novo`."
+        )
+
+    quantos = len(painel.linhas)
+    partes = [f"[bold]{quantos}[/bold] {_plural(quantos, 'projeto', 'projetos')}"]
+    if painel.atrasados:
+        atrasados = len(painel.atrasados)
+        partes.append(
+            f"[bold red]{atrasados} {_plural(atrasados, 'atrasado', 'atrasados')}[/bold red]"
+        )
+    if painel.sem_prazo:
+        partes.append(f"{len(painel.sem_prazo)} sem prazo")
+    if finalizados:
+        partes.append(f"[dim]{fora} fora do painel[/dim]")
+    return "\n" + " · ".join(partes) + "."
+
+
+def _avisos_do_status(painel: Painel) -> list[Text]:
+    """
+    O que está no painel sem poder ser lido, e o que ficou fora dele — cada um com o
+    que fazer.
+
+    Um status ou um prazo que não se lê não tira o projeto do painel: ele aparece em
+    amarelo, como está escrito, e o aviso diz o que escrever no lugar. A ficha que não
+    abre e a pasta no formato antigo não têm como aparecer na tabela, e aparecem aqui.
+    """
+    avisos: list[Text] = []
+
+    if painel.status_fora_da_lista:
+        quais = ", ".join(
+            f"{linha.pasta_local} (`{linha.status}`)" if linha.status
+            else f"{linha.pasta_local} (em branco)"
+            for linha in painel.status_fora_da_lista
+        )
+        validos = ", ".join(STATUS[:-1]) + f" ou {STATUS[-1]}"
+        avisos.append(
+            Text(
+                f"\nStatus fora da lista: {quais}. O `status:` do {ARQUIVO_PROJETO} "
+                f"precisa ser um destes: {validos}.",
+                style = "yellow",
+            )
+        )
+
+    if painel.prazos_que_nao_sao_data:
+        quais = ", ".join(
+            f"{linha.pasta_local} (`{linha.prazo_escrito}`)"
+            for linha in painel.prazos_que_nao_sao_data
+        )
+        avisos.append(
+            Text(
+                f"\nPrazo que não é data: {quais}. Escreva no `prazo:` do "
+                f"{ARQUIVO_PROJETO} a data final, como 2026-11-04 ou 04/11/2026.",
+                style = "yellow",
+            )
+        )
+
+    if painel.ilegiveis:
+        quantas = len(painel.ilegiveis)
+        lista = "\n".join(f"  {rotulo_do_projeto(pasta)}" for pasta in painel.ilegiveis)
+        avisos.append(
+            Text(
+                f"\n{quantas} {_plural(quantas, 'ficha não abre', 'fichas não abrem')}, e "
+                f"{_plural(quantas, 'o projeto ficou', 'os projetos ficaram')} fora do "
+                f"painel:\n{lista}\n"
+                f"Qualquer comando {_plural(quantas, 'sobre ele', 'sobre um deles')} "
+                "mostra o erro e o conserto.",
+                style = "yellow",
+            )
+        )
+
+    if painel.antigas:
+        quantas = len(painel.antigas)
+        lista = "\n".join(f"  {pasta.name}" for pasta in painel.antigas)
+        avisos.append(
+            Text(
+                f"\n{quantas} {_plural(quantas, 'pasta', 'pastas')} de cliente no formato "
+                f"anterior à 1.1.0, com o {ARQUIVO_PROJETO} fora de uma pasta "
+                f"`Projeto NNN`, {_plural(quantas, 'ficou', 'ficaram')} fora do painel:\n"
+                f"{lista}\n"
+                f"Qualquer comando {_plural(quantas, 'sobre ela', 'sobre uma delas')} "
+                "mostra o que mover.",
+                style = "yellow",
+            )
+        )
+
+    return avisos
 
 
 @app.command()
@@ -3653,6 +3840,8 @@ def relatorio(
     alterado, dicionário mexido — o documento é gerado assim mesmo, com o aviso
     escrito dentro dele.
 
+    Escrito o documento, o `status:` do projeto.yaml passa para `pronto`.
+
     POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
     """
     # Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê os
@@ -3726,6 +3915,10 @@ def relatorio(
         )
 
     console.print(f"\n[green]Relatório escrito.[/green] {resultado.caminho.name}")
+    if resultado.status_trocado:
+        console.print(
+            Text(f"O projeto passou para `{STATUS_PRONTO}` no {ARQUIVO_PROJETO}.", style = "dim")
+        )
     if plano.relatorio.alertas:
         console.print(
             Text(
@@ -3988,6 +4181,14 @@ def _arvore_do_relatorio(plano: PlanoRelatorio) -> Tree:
         )
     )
     arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    if plano.muda_o_status:
+        anterior = plano.relatorio.ficha.status or "(em branco)"
+        arvore.add(
+            Text.assemble(
+                (ARQUIVO_PROJETO, ""),
+                (f"   status: {anterior} → {STATUS_PRONTO}", "dim"),
+            )
+        )
     return arvore
 
 
