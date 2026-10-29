@@ -285,6 +285,110 @@ class TestListar:
         assert "[bold]" in _saida(rodar("listar"))
 
 
+# ── status ──────────────────────────────────────────────────────────────────
+
+
+class TestStatus:
+    """
+    O painel dos projetos com pasta. O relógio é o da suíte (`AGORA`, 09/09/2026), e
+    as fichas são escritas à mão, como você as deixa depois da reunião.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _relogio(self, congelar_relogio):
+        congelar_relogio()
+
+    @staticmethod
+    def projeto(root, record_id: str, **ficha):
+        from conftest import NOME, escrever_ficha
+
+        matricula = ficha.pop("matricula", MATRICULA)
+        raiz = root / f"{matricula} - {NOME}" / f"Projeto {int(record_id):03d}"
+        raiz.mkdir(parents=True)
+        escrever_ficha(raiz, record_id=record_id, matricula=matricula, **ficha)
+        return raiz
+
+    def test_a_tabela_traz_as_cinco_colunas(self, rodar, root):
+        self.projeto(root, "6")
+        resultado = rodar("status")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        for coluna in ("id", "Matrícula", "Pasta local", "Status", "Prazo"):
+            assert coluna in saida
+        assert "Projeto 006" in saida
+
+    def test_o_prazo_sai_como_data_e_o_que_passou_como_atrasado(self, rodar, root):
+        self.projeto(root, "6", prazo="2026-09-15")
+        self.projeto(root, "41", prazo="08/09/2026")
+        saida = _saida(rodar("status"))
+        assert "15/09/2026" in saida
+        assert "ATRASADO" in saida
+        assert "08/09/2026" not in saida, "o atrasado mostra ATRASADO no lugar da data"
+
+    def test_o_pronto_mostra_a_data_mesmo_depois_do_prazo(self, rodar, root):
+        self.projeto(root, "6", prazo="2026-09-01", status="pronto")
+        saida = _saida(rodar("status"))
+        assert "01/09/2026" in saida
+        assert "ATRASADO" not in saida
+
+    def test_o_finalizado_nao_aparece(self, rodar, root):
+        self.projeto(root, "6", status="finalizado")
+        self.projeto(root, "41")
+        saida = _saida(rodar("status"))
+        assert "Projeto 041" in saida
+        assert "Projeto 006" not in saida
+        assert "1 finalizado fora do painel" in saida
+
+    def test_o_resumo_conta_o_que_exige_atencao(self, rodar, root):
+        self.projeto(root, "6", prazo="2026-09-01")
+        self.projeto(root, "41", prazo="2026-09-01")
+        self.projeto(root, "137")
+        saida = _saida(rodar("status"))
+        assert "3 projetos · 2 atrasados · 1 sem prazo." in saida
+
+    def test_status_e_prazo_que_nao_se_leem_aparecem_e_ensinam(self, rodar, root):
+        self.projeto(root, "6", status="entregue", prazo="semana que vem")
+        resultado = rodar("status")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "entregue" in saida and "semana que vem" in saida
+        assert "Status fora da lista" in saida and "finalizado" in saida
+        assert "Prazo que não é data" in saida and "04/11/2026" in saida
+
+    def test_a_ficha_que_nao_abre_e_avisada(self, rodar, root):
+        self.projeto(root, "6")
+        quebrada = root / "00999 - Quebrada" / "Projeto 999"
+        quebrada.mkdir(parents=True)
+        (quebrada / ARQUIVO_PROJETO).write_text("nome: Fulano: o Segundo\n", encoding="utf-8")
+        resultado = rodar("status")
+        assert resultado.exit_code == 0
+        assert "1 ficha não abre" in _saida(resultado)
+
+    def test_sem_projeto_nenhum(self, rodar, root):
+        resultado = rodar("status")
+        assert resultado.exit_code == 0
+        assert "Nenhum projeto com pasta" in _saida(resultado)
+
+    def test_so_finalizados(self, rodar, root):
+        self.projeto(root, "6", status="finalizado")
+        assert "Nenhum projeto em aberto — 1 finalizado" in _saida(rodar("status"))
+
+    def test_nao_toca_a_rede_nem_escreve(self, rodar, root, monkeypatch):
+        def bomba(*_a, **_k):
+            raise AssertionError("o status tentou falar com a rede")
+
+        monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
+        raiz = self.projeto(root, "6", prazo="2026-09-01")
+        antes = (raiz / ARQUIVO_PROJETO).read_bytes()
+        assert rodar("status").exit_code == 0
+        assert (raiz / ARQUIVO_PROJETO).read_bytes() == antes
+        assert sorted(p.name for p in raiz.iterdir()) == [ARQUIVO_PROJETO]
+
+    def test_o_status_com_colchete_nao_vira_marcacao_do_rich(self, rodar, root):
+        self.projeto(root, "6", status="'[bold]entregue'")
+        assert "[bold]entregue" in _saida(rodar("status"))
+
+
 # ── novo ────────────────────────────────────────────────────────────────────
 
 
@@ -1306,6 +1410,24 @@ class TestRelatorio:
         assert resultado.exit_code == 0
         assert list(raiz.glob("Relatorio_*.docx"))
 
+    def test_a_simulacao_mostra_que_o_projeto_vai_ficar_pronto(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        antes = (raiz / ARQUIVO_PROJETO).read_bytes()
+        saida = _saida(rodar("relatorio", RECORD_ID))
+        assert "status: em andamento → pronto" in saida
+        assert (raiz / ARQUIVO_PROJETO).read_bytes() == antes
+
+    def test_com_sim_o_projeto_fica_pronto_e_o_painel_mostra(self, rodar, projeto_com_rodada):
+        from flatcap.ficha import ler
+
+        raiz = projeto_com_rodada()
+        saida = _saida(rodar("relatorio", RECORD_ID, "--sim"))
+        assert "O projeto passou para `pronto`" in saida
+        assert ler(raiz).status == "pronto"
+
+        painel = _saida(rodar("status"))
+        assert "pronto" in painel and "Projeto 042" in painel
+
     def test_sem_descritiva_sai_com_um(self, rodar, projeto_com_banco):
         projeto_com_banco()
         resultado = rodar("relatorio", RECORD_ID)
@@ -1420,6 +1542,7 @@ class TestInvariantes:
         assert rodar("amostragem", RECORD_ID).exit_code == 0
         TestAmostragem.desenhar(raiz)
         for comando in (
+            ("status",),
             ("amostragem", RECORD_ID),
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
