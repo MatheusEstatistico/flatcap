@@ -4,9 +4,9 @@
 A metodologia — o parágrafo da primeira página que o cliente leva para o artigo.
 
 O relatório abre com a finalidade e os objetivos, que vieram do REDCap. Este módulo
-escreve o que vem logo depois: um parágrafo curto, no registro de uma seção de
-*Análise estatística*, dizendo como os números do documento foram produzidos — para
-o cliente copiar, ajustar e citar.
+escreve o que vem logo depois: um subtítulo — "Metodologia Estatística (texto padrão)" —
+e um parágrafo curto, no registro de uma seção de métodos, dizendo como os números do
+documento foram produzidos — para o cliente copiar, ajustar e levar para o artigo.
 
 ## O parágrafo sai das rodadas, e não de um texto fixo
 
@@ -19,16 +19,20 @@ análise já escreve o teste de cada par, de cada item e de cada delineamento.
 
 É a mesma régua do resto do relatório: **nada aqui abre o banco.** O que o parágrafo
 afirma está no `manifesto.json` da rodada — o teste de cada linha (`detalhes`), o alfa
-e a correção para comparações múltiplas (`regras`), as versões do Python e das
-bibliotecas (`ambiente`). Rodar a análise de novo reescreve o manifesto, e o parágrafo
-acompanha sem ninguém lembrar de editá-lo.
+e a correção para comparações múltiplas (`regras`), a versão do Python (`ambiente`).
+Rodar a análise de novo reescreve o manifesto, e o parágrafo acompanha sem ninguém
+lembrar de editá-lo.
 
 ## O que se edita, e onde
 
 A redação mora no bloco emoldurado logo abaixo, como o `TEXTO_PADRAO` do
-`relatorio.py`: o rótulo, a frase de cada análise, o nome de cada teste. Mudar uma
-palavra é mudar uma string. O que muda de projeto para projeto — quais testes, quais
-versões, o alfa — vem do manifesto e não se escreve à mão.
+`relatorio.py`: o subtítulo, a frase de cada análise, o nome de cada teste. Mudar uma
+palavra é mudar uma string. O que muda de projeto para projeto — quais testes, a versão
+do Python, o alfa — vem do manifesto e não se escreve à mão.
+
+O subtítulo sai separado do parágrafo, no `Metodologia.titulo`, e não colado na frente
+dele: é o `documento.py` quem o escreve no estilo de subtítulo do modelo (o
+`FlatCap Subtitulo`, o mesmo da linha `matrícula - nome`), que se ajusta no Word.
 
 ## Os nomes dos testes são os do manifesto
 
@@ -62,7 +66,7 @@ from .manifesto import (
 #  O TEXTO DA METODOLOGIA — é aqui que se escreve.
 #
 #  O parágrafo é a soma das frases das análises que têm rodada, na ordem da
-#  `ORDEM` abaixo, mais a do nível de significância e a dos programas. Cada frase
+#  `ORDEM` abaixo, mais a do nível de significância e a do Python. Cada frase
 #  só nomeia o que rodou: os testes saem do manifesto, e os nomes deles, deste
 #  bloco. Mudar a redação é mudar as strings; nada no resto do módulo depende do
 #  que está escrito nelas.
@@ -71,11 +75,9 @@ from .manifesto import (
 #  `KeyError` no primeiro teste, e não um `{versao}` impresso no documento.
 # ─────────────────────────────────────────────────────────────────────────────
 
-# O rótulo que abre o parágrafo, como o "Finalidade do estudo: " de duas linhas acima.
-# `""` tira o rótulo, e o parágrafo começa direto na primeira frase.
-ROTULO = "Análise estatística: "
-
-ENDERECO = "https://github.com/MatheusEstatistico/flatcap"
+# O subtítulo acima do parágrafo, no estilo de subtítulo do documento. `""` tira o
+# subtítulo, e o parágrafo vem logo depois dos objetivos.
+TITULO = "Metodologia Estatística (texto padrão)"
 
 # A ordem das frases é a de uma seção de métodos — descrever, cruzar, testar —, e não
 # a das seções do relatório, que é a da lista `analises:` da ficha.
@@ -183,11 +185,12 @@ EXCECAO = "Exceto quando o teste foi definido de antemão, "
 FRASE_SIGNIFICANCIA = "Adotou-se o nível de significância de {alfa}%{multiplas}."
 SEM_CORRECAO = ", sem correção para comparações múltiplas"
 
-FRASE_PROGRAMAS = (
-    "As análises foram feitas com o FlatCap, versão {flatcap} ({endereco}), em Python "
-    "{python}, com {bibliotecas}."
-)
-BIBLIOTECAS: dict[str, str] = {"pandas": "pandas", "scipy": "SciPy"}
+# A última frase. `{versao}` é o `VERSAO` com a versão do Python das rodadas — o
+# `VERSOES`, quando elas rodaram em Pythons diferentes —, e some quando o manifesto
+# não registra o Python.
+FRASE_PROGRAMAS = "As análises foram feitas usando a linguagem Python{versao}."
+VERSAO = " versão {python}"
+VERSOES = " versões {python}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -205,14 +208,16 @@ _FISHER = "Exato de Fisher"
 @dataclass(frozen=True)
 class Metodologia:
     """
-    O parágrafo, e o que ficou sem frase.
+    O subtítulo, o parágrafo, e o que ficou sem frase.
 
-    `paragrafos` é o que vai para a primeira página — um parágrafo, ou nenhum. `sem_frase`
+    `paragrafos` é o que vai para a primeira página — um parágrafo, ou nenhum —, e
+    `titulo` o subtítulo que vem acima dele, vazio quando não há parágrafo. `sem_frase`
     são as análises com rodada que não deram frase porque o manifesto delas não diz o que
     rodou: um aviso de terminal, e não um texto inventado no documento.
     """
 
     paragrafos: tuple[str, ...] = ()
+    titulo: str = ""
     sem_frase: tuple[str, ...] = ()
 
     @property
@@ -257,7 +262,9 @@ def montar_metodologia(manifestos: Iterable[Manifesto]) -> Metodologia:
         frases.append(_significancia(testam))
     frases.append(_programas(list(por_analise.values())))
 
-    return Metodologia(paragrafos=(ROTULO + " ".join(frases),), sem_frase=tuple(sem_frase))
+    return Metodologia(
+        paragrafos=(" ".join(frases),), titulo=TITULO, sem_frase=tuple(sem_frase)
+    )
 
 
 # As frases
@@ -397,32 +404,27 @@ def _significancia(manifestos: Sequence[Manifesto]) -> str:
 
 
 def _programas(manifestos: Sequence[Manifesto]) -> str:
-    def versoes(chave: str, partes: int = 3) -> str:
-        valores = {
-            ".".join(str(manifesto.ambiente.get(chave)).split(".")[:partes])
-            for manifesto in manifestos
-            if manifesto.ambiente.get(chave)
-        }
-        return _lista(sorted(valores, key=_chave_de_versao)) or "?"
+    """
+    "As análises foram feitas usando a linguagem Python versão 3.11."
 
-    bibliotecas = [
-        f"{nome} {versoes(chave)}"
-        for chave, nome in BIBLIOTECAS.items()
-        if any(manifesto.ambiente.get(chave) for manifesto in manifestos)
-    ]
-    if len(bibliotecas) > 1:
-        com = f"as bibliotecas {_lista(bibliotecas)}"
-    elif bibliotecas:
-        com = f"a biblioteca {bibliotecas[0]}"
-    else:
-        com = "a biblioteca padrão"
-    flatcap = {manifesto.flatcap for manifesto in manifestos if manifesto.flatcap}
-    return FRASE_PROGRAMAS.format(
-        flatcap=_lista(sorted(flatcap, key=_chave_de_versao)) or "?",
-        endereco=ENDERECO,
-        python=versoes("python", partes=2),
-        bibliotecas=com,
+    A versão vem do `ambiente` de cada rodada, sem o último número: o 3.11.15 de uma
+    máquina e o 3.11.9 de outra são o mesmo Python para quem lê o artigo.
+    """
+    versoes = sorted(
+        {
+            ".".join(str(manifesto.ambiente["python"]).split(".")[:2])
+            for manifesto in manifestos
+            if manifesto.ambiente.get("python")
+        },
+        key=_chave_de_versao,
     )
+    if not versoes:
+        versao = ""
+    elif len(versoes) == 1:
+        versao = VERSAO.format(python=versoes[0])
+    else:
+        versao = VERSOES.format(python=_lista(versoes))
+    return FRASE_PROGRAMAS.format(versao=versao)
 
 
 # Miúdos
@@ -506,13 +508,11 @@ def _chave_de_versao(versao: str) -> tuple[int, ...]:
 
 
 __all__ = [
-    "BIBLIOTECAS",
     "COMPARACOES",
     "CORRELACOES",
     "DELINEAMENTOS",
-    "ENDERECO",
     "Metodologia",
     "ORDEM",
-    "ROTULO",
+    "TITULO",
     "montar_metodologia",
 ]
