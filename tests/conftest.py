@@ -123,7 +123,8 @@ def escrever_ficha(
     matricula: str = MATRICULA,
     nome: str = NOME,
     tipo: str = "professor",
-    status: str = "em_analise",
+    status: str = "em andamento",
+    prazo: str = "null",
     finalidade: str | None = FINALIDADE,
     objetivos: str | None = OBJETIVOS,
     dados: list[dict] | None = None,
@@ -135,6 +136,10 @@ def escrever_ficha(
     À mão de propósito: um teste do leitor que usa o escritor do próprio pacote
     só prova que os dois concordam entre si. O formato que precisa ser lido é o
     que está no disco de um projeto de verdade — inclusive o editado por você.
+
+    `status` e `prazo` entram como se digitam no editor, sem aspas: `prazo` é o
+    texto da linha, e `2026-11-04` e `04/11/2026` chegam ao leitor como o YAML os
+    entrega — uma data e um texto.
     """
     linhas = [
         cabecalho,
@@ -143,7 +148,7 @@ def escrever_ficha(
         f"matricula: '{matricula}'",
         f"nome: {nome}",
         f"criado_em: {HOJE.isoformat()}",
-        "prazo: null",
+        f"prazo: {prazo}",
         f"status: {status}",
         f"finalidade: {_texto_yaml(finalidade)}",
         f"objetivos: {_texto_yaml(objetivos)}",
@@ -293,7 +298,7 @@ def ficha_em_memoria(raiz: Path | None = None) -> Ficha:
         matricula=MATRICULA,
         nome=NOME,
         tipo="professor",
-        status="em_analise",
+        status="em andamento",
         dados=(),
     )
 
@@ -455,8 +460,8 @@ def congelar_relogio(monkeypatch):
 
         for modulo in (
             "amostragem", "analises", "associacao", "comparacao", "correlacao",
-            "cruzamento", "dados", "descritiva", "normalidade", "perfil", "projeto",
-            "relatorio",
+            "cruzamento", "dados", "descritiva", "normalidade", "painel", "perfil",
+            "projeto", "relatorio",
         ):
             alvo = __import__(f"flatcap.{modulo}", fromlist=["datetime"])
             if hasattr(alvo, "datetime"):
