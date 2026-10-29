@@ -7,6 +7,18 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.16.0] — a metodologia na primeira página
+
+### Acrescentado
+- O parágrafo de metodologia na primeira página do relatório, depois da finalidade e dos
+  objetivos, começando com "Análise estatística:", para o cliente levar para a seção de
+  métodos do artigo. Diz como as variáveis foram descritas, quais testes rodaram, o nível de
+  significância e as versões do FlatCap, do Python e das bibliotecas.
+- O parágrafo é montado dos manifestos das rodadas, e nomeia só os testes que de fato rodaram;
+  a regra que escolheu entre eles só é explicada quando escolheu. A redação mora no bloco
+  editável no topo do `metodologia.py`.
+- O aviso de terminal quando uma rodada não diz quais testes rodaram e fica fora do parágrafo.
+
 ## [1.15.0] — a amostragem
 
 ### Acrescentado
