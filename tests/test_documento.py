@@ -69,6 +69,21 @@ class TestPrimeiraPagina:
         for paragrafo in plano.relatorio.texto:
             assert paragrafo in textos
 
+    def test_a_metodologia_fecha_a_primeira_pagina(self, documento):
+        """
+        Depois dos objetivos e antes da quebra: é o último parágrafo da abertura, e a
+        primeira seção começa na página seguinte. Entrou pelo `Relatorio.texto`, sem
+        uma linha nova aqui.
+        """
+        from flatcap.metodologia import ROTULO
+
+        doc, plano = documento()
+        textos = _textos(doc)
+        metodologia = next(texto for texto in textos if texto.startswith(ROTULO))
+        posicao = textos.index(metodologia)
+        assert textos[posicao - 1] == plano.relatorio.texto[-2]
+        assert textos[posicao + 1] == plano.secoes[0].rotulo
+
     def test_a_primeira_variavel_comeca_em_pagina_nova(self, documento):
         """
         `page_break_before` no título da seção, e não um parágrafo de quebra
