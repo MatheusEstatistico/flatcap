@@ -26,6 +26,8 @@ import bancos
 from conftest import escrever_ficha
 from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO
+from flatcap.metodologia import ROTULO as ROTULO_METODOLOGIA
+from flatcap.metodologia import montar_metodologia
 from flatcap.projeto import PASTA_ANTIGAS, PASTA_DADOS
 from flatcap.relatorio import (
     TEXTO_PADRAO,
@@ -155,9 +157,55 @@ class TestSecoes:
         """
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
         # A `TEXTO_PADRAO` abre a página, e a finalidade e os objetivos da ficha
-        # vêm depois dela — os três pedaços que o `montar_abertura` junta.
-        assert plano.relatorio.texto == montar_abertura(plano.relatorio.ficha)
+        # vêm depois dela — os três pedaços que o `montar_abertura` junta. A
+        # metodologia, que sai das rodadas, fecha a abertura.
+        abertura = montar_abertura(plano.relatorio.ficha)
+        metodologia = montar_metodologia(r.manifesto for r in plano.relatorio.rodadas)
+        assert plano.relatorio.texto == abertura + metodologia.paragrafos
         assert plano.relatorio.texto[: len(TEXTO_PADRAO)] == TEXTO_PADRAO
+
+
+class TestMetodologia:
+    """
+    O quarto pedaço da primeira página. O texto em si é do `test_metodologia.py`;
+    aqui, o lugar dele e o aviso.
+    """
+
+    def test_vem_depois_da_finalidade_e_dos_objetivos(self, projeto_com_rodada):
+        plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
+        texto = plano.relatorio.texto
+        assert texto[-1].startswith(ROTULO_METODOLOGIA)
+        assert any(paragrafo.startswith("Finalidade do estudo") for paragrafo in texto[:-1])
+
+    def test_fala_da_rodada_que_esta_na_pasta(self, projeto_com_rodada):
+        """O projeto da casa só tem a descritiva: nenhum teste, nenhum alfa."""
+        metodologia = preparar_relatorio(projeto_com_rodada(), agora=QUANDO).relatorio.texto[-1]
+        assert "foram descritas" in metodologia
+        assert "significância" not in metodologia
+        assert "As análises foram feitas com o FlatCap" in metodologia
+
+    def test_rodada_sem_frase_vira_aviso_de_terminal(self, projeto_com_rodada, pasta_da_rodada):
+        """
+        Uma rodada cujo manifesto não diz o que rodou não ganha frase inventada: o
+        parágrafo sai sem ela, e o aviso fica no terminal, que é quem pode resolver.
+        """
+        import shutil
+
+        raiz = projeto_com_rodada()
+        outra = raiz / "3. Análises" / "regressao"
+        shutil.copytree(pasta_da_rodada(raiz), outra)
+        manifesto = outra / ARQUIVO_MANIFESTO
+        manifesto.write_text(
+            manifesto.read_text(encoding="utf-8").replace(
+                '"analise": "descritiva"', '"analise": "regressao"'
+            ),
+            encoding="utf-8",
+        )
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        assert any(
+            "metodologia" in aviso and "`regressao`" in aviso for aviso in plano.relatorio.avisos
+        )
+        assert "regressao" not in plano.relatorio.texto[-1]
 
 
 class TestLerTabela:
