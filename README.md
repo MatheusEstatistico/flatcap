@@ -311,6 +311,12 @@ recalcula nada. O documento sai na raiz da pasta do projeto como
 uma rodada já não descreve o que está na pasta — banco novo, dicionário mexido —, o documento
 sai assim mesmo, com o aviso escrito dentro dele.
 
+A primeira página traz a finalidade e os objetivos que vieram do REDCap e, depois deles, um
+parágrafo de metodologia — "Análise estatística: …" — para o cliente levar para o artigo. Ele
+é montado dos manifestos das rodadas e nomeia só os testes que de fato rodaram, com o nível de
+significância e as versões do FlatCap, do Python e das bibliotecas. A redação se ajusta no
+bloco editável do topo de `src/flatcap/metodologia.py`.
+
 | Opção | Efeito |
 |---|---|
 | `--template ARQUIVO` | Um `.docx` de onde herdar estilos, cabeçalho e capa. Sem isso, o `template.docx` da pasta do projeto, da do cliente ou do `FLATCAP_ROOT`. |
