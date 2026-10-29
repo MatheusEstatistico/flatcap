@@ -27,6 +27,8 @@ from flatcap.projeto import (
     ARQUIVO_PROJETO,
     PASTA_DADOS,
     PASTA_DESCRITIVA,
+    STATUS,
+    STATUS_INICIAL,
     SUBPASTAS,
     ClienteIncompletoError,
     ProjetoExistenteError,
@@ -320,6 +322,38 @@ class TestProjetoYaml:
         redcap([REGISTRO])
         texto = preparar(cfg, "42", agora=AGORA).projeto_yaml
         assert "não\n# sobrescreve" in texto or "não sobrescreve" in texto
+
+    def test_o_status_nasce_nao_iniciado(self, cfg, redcap):
+        redcap([REGISTRO])
+        corpo = self._corpo(preparar(cfg, "42", agora=AGORA))
+        assert corpo["status"] == STATUS_INICIAL == "não iniciado"
+
+    def test_o_cabecalho_lista_os_cinco_status_e_os_dois_formatos_do_prazo(
+        self, cfg, redcap
+    ):
+        """
+        O cabeçalho é a documentação que você tem na mão quando abre a ficha para
+        escrever o status e o prazo depois da reunião.
+        """
+        redcap([REGISTRO])
+        texto = preparar(cfg, "42", agora=AGORA).projeto_yaml
+        cabecalho = " ".join(
+            linha.lstrip("# ") for linha in texto.splitlines() if linha.startswith("#")
+        )
+        cabecalho = " ".join(cabecalho.split())
+        for status in STATUS:
+            assert status in cabecalho
+        assert "2026-11-04" in cabecalho and "04/11/2026" in cabecalho
+        assert "ATRASADO" in cabecalho
+
+    def test_os_cinco_status_na_ordem_do_atendimento(self):
+        assert STATUS == (
+            "não iniciado",
+            "aguardando banco de dados",
+            "em andamento",
+            "pronto",
+            "finalizado",
+        )
 
 
 class TestHistorico:
