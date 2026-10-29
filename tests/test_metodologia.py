@@ -45,9 +45,8 @@ from flatcap.metodologia import (
     COMPARACOES,
     CORRELACOES,
     DELINEAMENTOS,
-    ENDERECO,
     ORDEM,
-    ROTULO,
+    TITULO,
     montar_metodologia,
 )
 from flatcap.projeto import PASTA_ANALISES
@@ -182,15 +181,22 @@ def test_o_modulo_nao_carrega_pandas_nem_scipy():
 
 
 class TestParagrafo:
-    def test_sem_rodada_nao_ha_paragrafo(self):
+    def test_sem_rodada_nao_ha_paragrafo_nem_subtitulo(self):
         metodologia = montar_metodologia([])
         assert metodologia.paragrafos == ()
+        assert metodologia.titulo == ""
         assert metodologia.texto == ""
 
-    def test_um_paragrafo_so_com_o_rotulo_na_frente(self):
+    def test_um_paragrafo_so_e_o_subtitulo_separado_dele(self):
+        """
+        O subtítulo não vai colado na frente do parágrafo: é o `documento.py` quem o
+        escreve, no estilo de subtítulo.
+        """
         metodologia = montar_metodologia([_manifesto(ANALISE_DESCRITIVA, tipos=("numerica",))])
         assert len(metodologia.paragrafos) == 1
-        assert metodologia.paragrafos[0].startswith(ROTULO)
+        assert metodologia.titulo == TITULO == "Metodologia Estatística (texto padrão)"
+        assert metodologia.paragrafos[0].startswith("As variáveis numéricas")
+        assert TITULO not in metodologia.texto
 
     def test_a_ordem_e_a_de_uma_secao_de_metodos_e_nao_a_da_entrada(self):
         texto = _texto(
@@ -199,11 +205,10 @@ class TestParagrafo:
         )
         assert texto.index("foram descritas") < texto.index("t de Welch")
 
-    def test_a_frase_dos_programas_fecha_o_paragrafo(self):
+    def test_a_frase_do_python_fecha_o_paragrafo(self):
         texto = _texto(_manifesto(ANALISE_DESCRITIVA, tipos=("categorica",)))
         assert texto.endswith(
-            f"As análises foram feitas com o FlatCap, versão 1.16.0 ({ENDERECO}), em "
-            "Python 3.13, com as bibliotecas pandas 3.0.6 e SciPy 1.18.1."
+            "relativas. As análises foram feitas usando a linguagem Python versão 3.13."
         )
 
     def test_nenhum_campo_por_preencher_escapa(self):
@@ -223,7 +228,7 @@ class TestParagrafo:
 class TestDescritiva:
     def test_um_tipo_so(self):
         assert _texto(_manifesto(ANALISE_DESCRITIVA, tipos=("numerica",))).startswith(
-            f"{ROTULO}As variáveis numéricas foram descritas por média e desvio padrão, "
+            "As variáveis numéricas foram descritas por média e desvio padrão, "
             "mediana e quartis."
         )
 
@@ -231,7 +236,7 @@ class TestDescritiva:
         assert _texto(
             _manifesto(ANALISE_DESCRITIVA, tipos=("numerica", "categorica"))
         ).startswith(
-            f"{ROTULO}As variáveis categóricas foram descritas por frequências absolutas "
+            "As variáveis categóricas foram descritas por frequências absolutas "
             "e relativas, e as numéricas, por média e desvio padrão, mediana e quartis."
         )
 
@@ -244,7 +249,7 @@ class TestDescritiva:
 
     def test_so_datas(self):
         assert _texto(_manifesto(ANALISE_DESCRITIVA, tipos=("data",))).startswith(
-            f"{ROTULO}As datas foram descritas pelo período e pela distribuição no tempo."
+            "As datas foram descritas pelo período e pela distribuição no tempo."
         )
 
     def test_so_a_descritiva_nao_fala_de_significancia(self):
@@ -526,24 +531,49 @@ class TestSignificancia:
         )
 
 
-class TestProgramas:
-    def test_sem_scipy_a_biblioteca_e_uma_so(self):
-        ambiente = {chave: valor for chave, valor in AMBIENTE.items() if chave != "scipy"}
-        texto = _texto(_manifesto(ANALISE_DESCRITIVA, tipos=("categorica",), ambiente=ambiente))
-        assert texto.endswith("em Python 3.13, com a biblioteca pandas 3.0.6.")
-
-    def test_rodadas_de_versoes_diferentes_dizem_as_duas(self):
+class TestPython:
+    def test_so_a_linguagem_e_a_versao_dela(self):
         """
-        Não é para esconder: duas versões no parágrafo são o sinal de que uma análise
-        ficou para trás, e é melhor que o cliente leia isso do que um número só.
+        A frase é só a do Python: nem o FlatCap, nem o endereço, nem as bibliotecas,
+        que estão no manifesto de cada rodada.
         """
         texto = _texto(
-            _manifesto(ANALISE_DESCRITIVA, tipos=("categorica",), flatcap="1.9.0"),
+            _manifesto(ANALISE_COMPARACAO, {"dois_grupos": [_linha("t de Welch")]})
+        )
+        assert texto.endswith("As análises foram feitas usando a linguagem Python versão 3.13.")
+        for fora in ("FlatCap", "github", "pandas", "SciPy", "3.13.18"):
+            assert fora not in texto
+
+    def test_o_ultimo_numero_da_versao_nao_entra(self):
+        """O 3.11.15 de uma máquina e o 3.11.9 de outra são o mesmo Python."""
+        texto = _texto(
+            _manifesto(ANALISE_DESCRITIVA, tipos=("categorica",), ambiente={"python": "3.11.15"}),
             _manifesto(
-                ANALISE_COMPARACAO, {"dois_grupos": [_linha("t de Welch")]}, flatcap="1.16.0"
+                ANALISE_COMPARACAO,
+                {"dois_grupos": [_linha("t de Welch")]},
+                ambiente={"python": "3.11.9"},
             ),
         )
-        assert "o FlatCap, versão 1.9.0 e 1.16.0 (" in texto
+        assert texto.endswith("usando a linguagem Python versão 3.11.")
+
+    def test_rodadas_de_pythons_diferentes_dizem_os_dois(self):
+        """
+        Não é para esconder: duas versões no parágrafo são o sinal de que uma análise
+        rodou noutra máquina, e é melhor que o cliente leia isso do que um número só.
+        """
+        texto = _texto(
+            _manifesto(ANALISE_DESCRITIVA, tipos=("categorica",), ambiente={"python": "3.13.1"}),
+            _manifesto(
+                ANALISE_COMPARACAO,
+                {"dois_grupos": [_linha("t de Welch")]},
+                ambiente={"python": "3.11.9"},
+            ),
+        )
+        assert texto.endswith("usando a linguagem Python versões 3.11 e 3.13.")
+
+    def test_sem_o_python_no_ambiente_a_frase_sai_sem_versao(self):
+        texto = _texto(_manifesto(ANALISE_DESCRITIVA, tipos=("categorica",), ambiente={}))
+        assert texto.endswith("As análises foram feitas usando a linguagem Python.")
 
 
 class TestSemFrase:
@@ -617,14 +647,9 @@ class TestComAsRodadasDeVerdade:
         # O t da uma amostra foi escrito na ficha; o dos dois grupos, não.
         assert "Exceto quando o teste foi definido de antemão" in texto
 
-    def test_as_versoes_sao_as_do_ambiente_da_rodada(self, rodadas):
-        import pandas
-        import scipy
-
-        from flatcap import __version__
-
+    def test_a_versao_e_a_do_python_que_rodou(self, rodadas):
         texto = montar_metodologia(rodadas).texto
         python = ".".join(str(parte) for parte in sys.version_info[:2])
-        assert f"o FlatCap, versão {__version__} (" in texto
-        assert f"em Python {python}, com as bibliotecas pandas {pandas.__version__} e " \
-               f"SciPy {scipy.__version__}." in texto
+        assert texto.endswith(
+            f"As análises foram feitas usando a linguagem Python versão {python}."
+        )
