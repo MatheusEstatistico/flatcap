@@ -8,7 +8,8 @@ Dois compromissos, e os dois têm teste com nome próprio:
 **"Edite à vontade, o FlatCap não sobrescreve o que você escreveu."** É o que o
 cabeçalho da ficha promete literalmente. Um comando que apagasse o `prazo` que
 você preencheu, ou a lista `analises` combinada na reunião, tornaria a promessa
-falsa.
+falsa. A exceção é uma, e o cabeçalho a diz: o `status`, que o relatório passa para
+`pronto` — e mesmo ela não toca no comentário escrito ao lado.
 
 **A escrita é atômica.** Um `write_text` que morre na metade — falta de espaço,
 unidade de rede que cai, OneDrive sincronizando — deixaria a ficha perdida.
@@ -32,14 +33,19 @@ from flatcap.ficha import (
     Versao,
     acrescentar_versao,
     caminho_da_ficha,
+    data_escrita,
+    definir_status,
     escrever_atomico,
     ler,
     ler_yaml,
     localizar_projeto,
     numero_escrito,
     sequencia_do_nome,
+    status_reconhecido,
+    varrer,
     versao_vigente,
 )
+from flatcap.projeto import STATUS
 
 UMA_VERSAO = Versao(
     "01_revisado_2026-09-04_banco.xlsx", "cliente_pos_reuniao", "b" * 64, 187904,
@@ -493,3 +499,193 @@ class TestNumeroEscrito:
 
         for valor in (25, 24.9, "24,9", " 25 ", True, "2.500,00", None, float("nan")):
             assert referencia_escrita(valor) == numero_escrito(valor)
+
+
+# ── O status e o prazo ──────────────────────────────────────────────────────
+
+
+class TestStatusReconhecido:
+    @pytest.mark.parametrize("status", STATUS)
+    def test_os_cinco_como_estao_na_lista(self, status):
+        assert status_reconhecido(status) == status
+
+    @pytest.mark.parametrize(
+        ("escrito", "esperado"),
+        [
+            ("Em andamento", "em andamento"),
+            ("EM ANDAMENTO", "em andamento"),
+            ("em_andamento", "em andamento"),
+            ("  em   andamento ", "em andamento"),
+            ("nao iniciado", "não iniciado"),
+            ("Não Iniciado", "não iniciado"),
+            ("aguardando-banco-de-dados", "aguardando banco de dados"),
+            ("Finalizado", "finalizado"),
+            ("PRONTO", "pronto"),
+        ],
+    )
+    def test_sem_maiuscula_nem_acento_nem_sublinhado(self, escrito, esperado):
+        """
+        A leitura é tolerante e a escrita é estrita, como no `dicionario.csv`: o
+        status se digita à mão, e o que volta é a grafia da lista.
+        """
+        assert status_reconhecido(escrito) == esperado
+
+    @pytest.mark.parametrize(
+        ("escrito", "esperado"), [("novo", "não iniciado"), ("em_analise", "em andamento")]
+    )
+    def test_os_dois_do_cabecalho_de_antes(self, escrito, esperado):
+        """
+        Toda ficha criada antes da 1.17.0 diz `status: novo`, e o cabeçalho delas
+        sugeria `em_analise`.
+        """
+        assert status_reconhecido(escrito) == esperado
+
+    @pytest.mark.parametrize(
+        "escrito", ["entregue", "", "aguardando banco", "pronta", "em análise do cliente"]
+    )
+    def test_o_que_nao_e_nenhum_dos_cinco(self, escrito):
+        """
+        `entregue`, o terceiro do cabeçalho de antes, pode ser o `pronto` ou o
+        `finalizado` — e adivinhar não é ler.
+        """
+        assert status_reconhecido(escrito) is None
+
+
+class TestDataEscrita:
+    @pytest.mark.parametrize(
+        ("valor", "esperado"),
+        [
+            (date(2026, 11, 4), date(2026, 11, 4)),
+            ("2026-11-04", date(2026, 11, 4)),
+            ("2026-11-4", date(2026, 11, 4)),
+            ("04/11/2026", date(2026, 11, 4)),
+            ("4/11/2026", date(2026, 11, 4)),
+            (" 04/11/2026 ", date(2026, 11, 4)),
+        ],
+    )
+    def test_as_duas_formas(self, valor, esperado):
+        assert data_escrita(valor) == esperado
+
+    @pytest.mark.parametrize(
+        "valor",
+        ["04/11/26", "31/02/2026", "11/2026", "semana que vem", "2026/11/04", "", None, 20261104],
+    )
+    def test_o_que_nao_e_data(self, valor):
+        """
+        `04/11/26` é 2026 ou 1926; a data que não existe também não é data.
+        """
+        assert data_escrita(valor) is None
+
+
+class TestPrazoEStatusNaLeitura:
+    def test_o_prazo_entra_como_esta_escrito(self, projeto_vazio):
+        escrever_ficha(projeto_vazio, prazo="04/11/2026")
+        assert ler(projeto_vazio).prazo == "04/11/2026"
+
+    def test_o_prazo_sem_aspas_e_a_data_em_texto(self, projeto_vazio):
+        escrever_ficha(projeto_vazio, prazo="2026-11-04")
+        ficha = ler(projeto_vazio)
+        assert ficha.prazo == "2026-11-04"
+        assert data_escrita(ficha.prazo) == date(2026, 11, 4)
+
+    def test_prazo_nulo_e_vazio(self, projeto_vazio):
+        assert ler(projeto_vazio).prazo == ""
+
+    def test_prazo_que_nao_e_data_nao_impede_a_ficha_de_abrir(self, projeto_vazio):
+        escrever_ficha(projeto_vazio, prazo="semana que vem")
+        assert ler(projeto_vazio).prazo == "semana que vem"
+
+    def test_o_status_entra_como_esta_escrito(self, projeto_vazio):
+        escrever_ficha(projeto_vazio, status="Em Andamento")
+        assert ler(projeto_vazio).status == "Em Andamento"
+
+
+class TestDefinirStatus:
+    def test_escreve_o_status(self, projeto_vazio):
+        definir_status(projeto_vazio, "pronto")
+        assert ler(projeto_vazio).status == "pronto"
+
+    def test_o_resto_da_ficha_fica(self, projeto_vazio):
+        """
+        A exceção à promessa do cabeçalho é a linha do status, e só ela: o comentário
+        escrito ao lado dela, o prazo, a lista e as aspas da matrícula ficam.
+        """
+        caminho = caminho_da_ficha(projeto_vazio)
+        caminho.write_text(
+            "# a ficha deste atendimento\n"
+            "record_id: '42'\n"
+            "matricula: '00742'\n"
+            "nome: José\n"
+            "prazo: 04/11/2026     # combinado na reunião de terça\n"
+            "status: em andamento  # mexi à mão\n"
+            "analises:\n"
+            "  - descritiva\n"
+            "dados: []\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        definir_status(projeto_vazio, "pronto")
+        texto = caminho.read_text(encoding="utf-8")
+        assert "# a ficha deste atendimento" in texto
+        assert "prazo: 04/11/2026     # combinado na reunião de terça" in texto
+        assert "status: pronto" in texto and "# mexi à mão" in texto
+        assert "matricula: '00742'" in texto
+        assert "  - descritiva" in texto
+        assert texto.count("status:") == 1
+
+    def test_a_ficha_sem_status_o_ganha_depois_do_prazo(self, projeto_vazio):
+        caminho = caminho_da_ficha(projeto_vazio)
+        caminho.write_text(
+            "record_id: '42'\nprazo: null\nanalises: []\ndados: []\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        definir_status(projeto_vazio, "pronto")
+        linhas = caminho.read_text(encoding="utf-8").splitlines()
+        assert linhas[linhas.index("prazo: null") + 1] == "status: pronto"
+
+    def test_o_status_fora_da_lista_e_defeito_de_quem_chama(self, projeto_vazio):
+        """
+        O FlatCap escreve na ficha só um dos cinco, na grafia da lista: um texto
+        qualquer seria um status que o painel não reconhece.
+        """
+        antes = caminho_da_ficha(projeto_vazio).read_bytes()
+        for errado in ("Pronto", "entregue", ""):
+            with pytest.raises(ValueError):
+                definir_status(projeto_vazio, errado)
+        assert caminho_da_ficha(projeto_vazio).read_bytes() == antes
+
+    def test_sem_ficha_recusa_sem_criar_nada(self, root):
+        pasta = root / "00999 - Sem Ficha"
+        pasta.mkdir()
+        with pytest.raises(FichaAusenteError):
+            definir_status(pasta, "pronto")
+        assert not caminho_da_ficha(pasta).exists()
+
+
+class TestVarrer:
+    def test_os_projetos_as_fichas_quebradas_e_as_pastas_antigas(self, projeto_vazio, root):
+        quebrada = root / "00999 - Quebrada" / "Projeto 999"
+        quebrada.mkdir(parents=True)
+        caminho_da_ficha(quebrada).write_text("nome: Fulano: o Segundo\n", encoding="utf-8")
+        antiga = root / "00888 - Antiga"
+        antiga.mkdir()
+        escrever_ficha(antiga, record_id="88", matricula="00888")
+
+        varredura = varrer(root)
+        assert [ficha.raiz for ficha in varredura.projetos] == [projeto_vazio]
+        assert [erro.caminho.parent for erro in varredura.ilegiveis] == [quebrada]
+        assert varredura.antigas == (antiga,)
+
+    def test_a_ficha_esquecida_nas_versoes_antigas_nao_e_projeto(self, projeto_vazio, root):
+        """
+        Dois níveis, explícitos — a regra do `localizar_projeto`.
+        """
+        esquecida = projeto_vazio / "2. Versões antigas" / "Projeto 041"
+        esquecida.mkdir(parents=True)
+        escrever_ficha(esquecida, record_id="41")
+        assert [ficha.record_id for ficha in varrer(root).projetos] == [RECORD_ID]
+
+    def test_root_que_nao_existe(self, tmp_path):
+        varredura = varrer(tmp_path / "nao-existe")
+        assert (varredura.projetos, varredura.ilegiveis, varredura.antigas) == ((), (), ())
