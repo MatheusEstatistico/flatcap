@@ -10,10 +10,12 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 ## [1.16.0] — a metodologia na primeira página
 
 ### Acrescentado
-- O parágrafo de metodologia na primeira página do relatório, depois da finalidade e dos
-  objetivos, começando com "Análise estatística:", para o cliente levar para a seção de
-  métodos do artigo. Diz como as variáveis foram descritas, quais testes rodaram, o nível de
-  significância e as versões do FlatCap, do Python e das bibliotecas.
+- O texto padrão de metodologia na primeira página do relatório, depois da finalidade e dos
+  objetivos, para o cliente levar para a seção de métodos do artigo: o subtítulo
+  "Metodologia Estatística (texto padrão)", no estilo de subtítulo do documento, e um
+  parágrafo que diz como as variáveis foram descritas, quais testes rodaram e o nível de
+  significância, e termina com a versão do Python ("As análises foram feitas usando a
+  linguagem Python versão 3.11.").
 - O parágrafo é montado dos manifestos das rodadas, e nomeia só os testes que de fato rodaram;
   a regra que escolheu entre eles só é explicada quando escolheu. A redação mora no bloco
   editável no topo do `metodologia.py`.
