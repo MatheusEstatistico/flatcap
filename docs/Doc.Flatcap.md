@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.15.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.16.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -453,6 +453,13 @@ com quais versões de biblioteca, com quais regras e quais colunas do banco — 
 fora, e por quê. O número de `formato` na primeira chave faz um manifesto de outra versão ser
 recusado com uma frase, e não lido errado.
 
+É também de onde sai o parágrafo de metodologia da primeira página do relatório — "Análise
+estatística: …", depois da finalidade e dos objetivos. Os testes de cada par, item e
+delineamento estão nos `detalhes`, o alfa e a correção para comparações múltiplas nas
+`regras`, e as versões do FlatCap, do Python e das bibliotecas no `ambiente`; o parágrafo
+nomeia só o que está ali, e acompanha a rodada quando ela é refeita. A redação se ajusta no
+bloco editável do topo de `src/flatcap/metodologia.py`.
+
 ### 7.7 O `historico.md` e o `perfil.md`
 
 O `historico.md` ganha uma linha por ação do FlatCap na pasta, e nunca é reescrito: é a
@@ -506,7 +513,7 @@ do `__init__.py` na Parte II):
 | o banco e a reunião | `banco`, `dicionario`, `perfil` | `pandas`, `openpyxl` |
 | o contrato de saída | `manifesto`, `graficos` | `matplotlib` (só o `graficos`) |
 | as análises | `descritiva`, `normalidade`, `cruzamento`, `associacao`, `correlacao`, `hipoteses`, `comparacao`, `analises` | `pandas`, `scipy` |
-| o documento | `relatorio`, `documento` | `python-docx` (só o `documento`) |
+| o documento | `metodologia`, `relatorio`, `documento` | `python-docx` (só o `documento`) |
 | a amostragem | `amostral`, `amostragem` | nenhuma: a conta é da biblioteca padrão, e o `.docx` sai pelo `documento` |
 | a interface | `cli` | `typer`, `rich` |
 
@@ -683,6 +690,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 - [`flatcap/hipoteses.py`](#flatcaphipotesespy)
 - [`flatcap/comparacao.py`](#flatcapcomparacaopy)
 - [`flatcap/analises.py`](#flatcapanalisespy)
+- [`flatcap/metodologia.py`](#flatcapmetodologiapy)
 - [`flatcap/relatorio.py`](#flatcaprelatoriopy)
 - [`flatcap/documento.py`](#flatcapdocumentopy)
 - [`flatcap/amostral.py`](#flatcapamostralpy)
@@ -694,7 +702,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*582 linhas.*
+*621 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -718,6 +726,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
+    metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
     amostral.py    a aritmética do tamanho da amostra, só com a biblioteca padrão
@@ -727,11 +736,12 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
 `projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
-e `manifesto`, `relatorio` conhece `manifesto`, `dicionario`, `dados` e `ficha`, e nenhuma
-delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento` conhece o
-`Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
-e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
+e `manifesto`, `metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`,
+`metodologia`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é
+o par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe, e o
+`relatorio` só chama o `documento` de dentro do `executar_relatorio`. A `amostragem` conhece
+`amostral`, `ficha`, `manifesto` e `relatorio`, e chama o `documento` do mesmo jeito, de
+dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -1272,6 +1282,43 @@ novo. O tamanho que muda em relação à rodada vigente sai com aviso, antes de 
 **As propriedades do `.docx` dizem de qual rodada ele é.** O comentário dizia "a partir da
 descritiva" em todo documento e, sem banco, "banco ?"; passa a dizer a análise do manifesto,
 e "sem banco" quando não há.
+### 1.16.0 — a metodologia na primeira página
+
+**O relatório ganha um parágrafo de metodologia, para o cliente levar para o artigo.** Ele
+fecha a primeira página, depois da finalidade e dos objetivos que vieram do REDCap, e antes da
+quebra que abre a primeira seção. Começa com "Análise estatística:" e diz, no registro de uma
+seção de métodos, como os números do documento foram produzidos: como cada tipo de variável
+foi descrito, quais testes rodaram, o nível de significância, e o FlatCap, o Python e as
+bibliotecas, com as versões.
+
+**O parágrafo sai das rodadas, e não de um texto fixo.** Um texto fixo citaria todos os testes
+que o FlatCap sabe fazer, e um artigo que nomeia nos métodos um teste que não aparece em
+resultado nenhum é a primeira coisa que o parecerista marca. Cada análise com rodada em
+`3. Análises/` contribui com uma frase, e a frase nomeia só os testes que rodaram — o
+Mann-Whitney entra quando alguma linha da comparação saiu com ele, o Fisher quando algum par da
+associação foi para ele. A explicação da regra entra só quando ela escolheu: com mais de um
+método na correlação, ou com o paramétrico e o de postos na comparação; e o teste escrito na
+ficha não é atribuído à regra.
+
+**Nada aqui abre o banco.** Tudo o que o parágrafo afirma está nos manifestos: o teste de cada
+par, item e delineamento nos `detalhes`, o alfa e a falta de correção para comparações
+múltiplas nas `regras`, e as versões no `ambiente`. Rodar uma análise de novo reescreve o
+manifesto dela, e o parágrafo acompanha sem ninguém lembrar de editá-lo. Duas versões do
+FlatCap no parágrafo ("1.14.1 e 1.16.0") são de propósito: dizem que uma rodada ficou para
+trás.
+
+**Um módulo novo, `metodologia.py`, e nenhuma linha nova no `documento.py`.** O parágrafo
+chega ao documento pelo `Relatorio.texto`, como a finalidade e os objetivos. A redação mora num
+bloco emoldurado no topo do módulo, como o `TEXTO_PADRAO`: o rótulo, a frase de cada análise,
+o nome de cada teste. O módulo não importa as análises — elas trazem o `pandas`, e o
+`relatorio.py`, que o importa, tem o teste em subprocesso que falha se o `pandas` for
+carregado —, e por isso os nomes que os manifestos gravam estão escritos nele como texto; o
+`test_metodologia.py` confere que são, letra por letra, as constantes das análises.
+
+**Rodada sem frase é aviso, e não texto inventado.** Uma análise cujo manifesto não diz o que
+rodou — uma que esta versão não conheça — sai do parágrafo, e o terminal diz qual. A que não
+testou nada (toda linha "não testado") sai sem frase e sem aviso: a tabela dela já diz o
+motivo.
 
 ## `flatcap/config.py`
 
@@ -12984,11 +13031,273 @@ Sem artigo antes do nome, pelo motivo que o relatório escreveu na função dele
 
 *linha 984*
 
+## `flatcap/metodologia.py`
+
+`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
+
+*518 linhas.*
+
+A metodologia — o parágrafo da primeira página que o cliente leva para o artigo.
+
+O relatório abre com a finalidade e os objetivos, que vieram do REDCap. Este módulo
+escreve o que vem logo depois: um parágrafo curto, no registro de uma seção de
+*Análise estatística*, dizendo como os números do documento foram produzidos — para
+o cliente copiar, ajustar e citar.
+
+### O parágrafo sai das rodadas, e não de um texto fixo
+
+Um texto fixo diria "qui-quadrado ou exato de Fisher, Pearson, Spearman ou Kendall,
+t, ANOVA, Mann-Whitney, Kruskal-Wallis…" em todo relatório, e a seção de métodos de
+um artigo que cita um teste que não aparece em resultado nenhum é a primeira coisa que
+o parecerista marca. Então cada análise com rodada em `3. Análises/` contribui com uma
+frase, e a frase nomeia **só os testes que rodaram** — lidos do manifesto, onde cada
+análise já escreve o teste de cada par, de cada item e de cada delineamento.
+
+É a mesma régua do resto do relatório: **nada aqui abre o banco.** O que o parágrafo
+afirma está no `manifesto.json` da rodada — o teste de cada linha (`detalhes`), o alfa
+e a correção para comparações múltiplas (`regras`), as versões do Python e das
+bibliotecas (`ambiente`). Rodar a análise de novo reescreve o manifesto, e o parágrafo
+acompanha sem ninguém lembrar de editá-lo.
+
+### O que se edita, e onde
+
+A redação mora no bloco emoldurado logo abaixo, como o `TEXTO_PADRAO` do
+`relatorio.py`: o rótulo, a frase de cada análise, o nome de cada teste. Mudar uma
+palavra é mudar uma string. O que muda de projeto para projeto — quais testes, quais
+versões, o alfa — vem do manifesto e não se escreve à mão.
+
+### Os nomes dos testes são os do manifesto
+
+Este módulo não importa as análises: elas trazem o `pandas` e o `scipy`, e o
+`relatorio.py` — que importa este — tem um teste em subprocesso que falha se o
+`pandas` for carregado. Os nomes que o manifesto grava (`t de Welch`,
+`Kruskal-Wallis`, `Qui-quadrado com correção de Yates`) estão escritos aqui como
+texto, e o `test_metodologia.py` confere que são, letra por letra, as constantes das
+análises. Um teste novo que entre numa análise sem entrar aqui aparece nesse teste,
+e não num artigo.
+
+*No módulo, linha 61:*
+
+> ─────────────────────────────────────────────────────────────────────────────
+>  O TEXTO DA METODOLOGIA — é aqui que se escreve.
+>
+>  O parágrafo é a soma das frases das análises que têm rodada, na ordem da
+>  `ORDEM` abaixo, mais a do nível de significância e a dos programas. Cada frase
+>  só nomeia o que rodou: os testes saem do manifesto, e os nomes deles, deste
+>  bloco. Mudar a redação é mudar as strings; nada no resto do módulo depende do
+>  que está escrito nelas.
+>
+>  Em `{}`, o que o manifesto preenche. Uma chave escrita errada aqui é um
+>  `KeyError` no primeiro teste, e não um `{versao}` impresso no documento.
+> ─────────────────────────────────────────────────────────────────────────────
+
+### `ROTULO`
+
+*linha 74*
+
+> O rótulo que abre o parágrafo, como o "Finalidade do estudo: " de duas linhas acima.
+> `""` tira o rótulo, e o parágrafo começa direto na primeira frase.
+
+### `ORDEM`
+
+*linha 80*
+
+> A ordem das frases é a de uma seção de métodos — descrever, cruzar, testar —, e não
+> a das seções do relatório, que é a da lista `analises:` da ficha.
+
+### `DESCRICAO`
+
+*linha 91*
+
+> A descritiva: como cada tipo do dicionário foi resumido. Com mais de um tipo, o
+> primeiro vira o sujeito da frase e os outros vêm depois dele, elípticos: «As
+> variáveis categóricas foram descritas por …, e as numéricas, por …». Cada tipo traz
+> as duas formas — a de sujeito e a elíptica — e o como.
+
+### `FISHER_PELA_REGRA`
+
+*linha 117*
+
+> Quando os dois rodaram, a frase diz quando foi um e quando foi o outro: a regra de
+> Cochran, como o `associacao.py` a aplica.
+
+### `POR_QUE`
+
+*linha 135*
+
+> Por que a regra escolheu cada um. Saem só quando mais de um método rodou e a ficha
+> não escreveu nenhum: com um método só não há escolha a explicar, e com o método
+> escrito na ficha a escolha não foi da regra.
+
+### `DELINEAMENTOS`
+
+*linha 145*
+
+> A comparação: o que se comparou, e com quais testes. As chaves de dentro são os
+> nomes que o manifesto grava; os valores, como eles se escrevem na frase.
+
+### `FRASE_REGRA_DA_COMPARACAO`
+
+*linha 175*
+
+> Sai quando a regra escolheu algum teste. Com algum escrito na ficha, a frase abre
+> com a exceção, porque ali a escolha não foi da regra.
+
+*No módulo, linha 192:*
+
+> ─────────────────────────────────────────────────────────────────────────────
+
+### `_TESTAM`
+
+*linha 194*
+
+> As análises que testam hipótese, e por isso pedem a frase do nível de significância.
+
+### `_ALFA_PADRAO`
+
+*linha 197*
+
+> O alfa de quem não o registra: a associação só relata o p. É o das outras análises.
+
+### `class Metodologia`
+
+*linha 206*
+
+O parágrafo, e o que ficou sem frase.
+
+`paragrafos` é o que vai para a primeira página — um parágrafo, ou nenhum. `sem_frase`
+são as análises com rodada que não deram frase porque o manifesto delas não diz o que
+rodou: um aviso de terminal, e não um texto inventado no documento.
+
+#### `def texto(self)`
+
+*linha 219*
+
+### `def montar_metodologia(manifestos)`
+
+*linha 223*
+
+O parágrafo de metodologia das rodadas, na ordem de uma seção de métodos.
+
+Recebe os manifestos — e não o banco, nem a ficha: o que o parágrafo afirma é o que
+as rodadas registraram. Uma análise fora da `ORDEM` (uma que venha depois desta
+versão) não quebra nada: ela fica sem frase e aparece em `sem_frase`.
+
+*linha 253*
+
+> O nível de significância só quando alguma frase nomeou um teste: uma comparação
+> em que toda linha saiu "não testado" não tem p a ler contra ele.
+
+### As frases
+
+### `def _descritiva(manifesto)`
+
+*linha 266*
+
+### `def _cruzamento(manifesto)`
+
+*linha 280*
+
+### `def _associacao(manifesto)`
+
+*linha 284*
+
+### `def _normalidade(manifesto)`
+
+*linha 300*
+
+### `def _correlacao(manifesto)`
+
+*linha 307*
+
+*linha 316*
+
+> «pelo coeficiente de Pearson ou, quando …, pelo de Spearman»: o primeiro é o da
+> regra quando nada a desvia; os outros vêm com o porquê, e sem repetir o nome.
+
+### `def _comparacao(manifesto)`
+
+*linha 331*
+
+*linha 349*
+
+> O verbo concorda com os testes do primeiro delineamento, que é o sujeito dele; nos
+> outros ele fica subentendido: «usou-se o t para uma amostra; entre dois grupos, …».
+
+### `def _significancia(manifestos)`
+
+*linha 382*
+
+### `def _programas(manifestos)`
+
+*linha 399*
+
+#### `def versoes(chave, partes)`
+
+*linha 400*
+
+### Miúdos
+
+### `def _detalhes(manifesto)`
+
+*linha 431*
+
+Os `detalhes` do item da rodada. As análises que testam escrevem um item só, com
+todos os pares, linhas e delineamentos dentro dele.
+
+### `def _linhas(manifesto, chave)`
+
+*linha 442*
+
+### `def _testados(manifesto)`
+
+*linha 449*
+
+Quantos testes de hipótese a rodada fez — para a frase das comparações múltiplas.
+
+A normalidade não conta: o Shapiro-Wilk ali é pressuposto, e não resultado.
+
+### `def _nada_testado(manifesto)`
+
+*linha 464*
+
+A rodada não deu frase porque não testou nada — e o manifesto diz isso.
+
+É o caso da comparação em que toda linha saiu "não testado": a tabela está no
+documento com o motivo, e o parágrafo não tem teste a nomear. Diferente de um
+manifesto que não registra o que rodou, que vira aviso.
+
+### `def _sem_repetir_teste(testes)`
+
+*linha 476*
+
+«o teste t de Welch e o de Mann-Whitney»: o segundo «teste» fica subentendido.
+
+### `def _maiuscula(texto)`
+
+*linha 487*
+
+### `def _lista(itens)`
+
+*linha 491*
+
+`["a"]` → «a»; `["a", "b", "c"]` → «a, b e c».
+
+### `def _numero(valor)`
+
+*linha 499*
+
+5.0 → «5»; 2.5 → «2,5». O alfa em percentual, sem zero sobrando.
+
+### `def _chave_de_versao(versao)`
+
+*linha 504*
+
 ## `flatcap/relatorio.py`
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1466 linhas.*
+*1487 linhas.*
 
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -13062,17 +13371,24 @@ texto que está na célula do `.csv` é o texto que vai para a célula do Word.
 ### O que sai na primeira página
 
 Título, subtítulo com `matrícula - nome`, os alertas quando houver, e a
-**abertura** — três pedaços que `montar_abertura` junta, nesta ordem:
+**abertura** — quatro pedaços, nesta ordem:
 
     1. o `TEXTO_PADRAO`, os parágrafos fixos que abrem todo relatório de todo
        projeto, definidos logo abaixo em um bloco só para serem reescritos sem
        se procurar código;
     2. a **finalidade** do estudo;
-    3. os **objetivos**, geral e específicos.
+    3. os **objetivos**, geral e específicos;
+    4. a **metodologia**: um parágrafo, no registro de uma seção de *Análise
+       estatística*, para o cliente levar para o artigo.
 
-Os dois últimos vêm da ficha, que os recebeu do formulário do REDCap (`fin` e
-`obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir à mão,
-porque o `projeto.yaml` é seu.
+O segundo e o terceiro vêm da ficha, que os recebeu do formulário do REDCap
+(`fin` e `obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir
+à mão, porque o `projeto.yaml` é seu. Os três primeiros são o `montar_abertura`.
+
+O quarto vem das rodadas, pelo `metodologia.py`: cada análise com rodada dá uma
+frase que nomeia só os testes que rodaram, lidos do manifesto, com as versões do
+`ambiente` no fim. Também não abre o banco — o que ele afirma é o que os
+manifestos registraram.
 
 Campo da ficha em branco não encolhe a página em silêncio: vira um marcador
 visível **e** um `Alerta` de código `texto_ausente`. Nada disso fere a regra da
@@ -13089,7 +13405,7 @@ tabelas: as duas saíram na revisão de formatação, e o que elas diziam sobre 
 procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 `manifesto.json` da rodada.
 
-*No módulo, linha 142:*
+*No módulo, linha 150:*
 
 > `ARQUIVO_TEMPLATE` vem do `projeto.py`, e não mais escrito aqui uma segunda
 > vez. A duplicação existia porque importar o `documento.py` no topo traria o
@@ -13098,7 +13414,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 > `versao_vigente` e `PASTA_DESCRITIVA` já tinham feito. O `documento.py`
 > reexporta o nome, então quem o importava de lá não mudou.
 
-*No módulo, linha 150:*
+*No módulo, linha 158:*
 
 > ─────────────────────────────────────────────────────────────────────────────
 >  O TEXTO FIXO DA PRIMEIRA PÁGINA — é aqui que se escreve.
@@ -13120,7 +13436,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 
 ### `_NOTA_REDUNDANTE`
 
-*linha 170*
+*linha 178*
 
 > A nota de comentário que todo `.csv` da Fase 5 traz na segunda linha. Ela é
 > descartada na leitura porque o título da seção já diz de qual variável se trata,
@@ -13129,7 +13445,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 
 ### `class RelatorioError(RuntimeError)`
 
-*linha 179*
+*linha 187*
 
 Falha ao montar o relatório, já traduzida para o usuário.
 
@@ -13140,7 +13456,7 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class AnaliseAusenteError(RelatorioError)`
 
-*linha 190*
+*linha 198*
 
 O projeto não tem nenhuma rodada de análise para relatar.
 
@@ -13155,19 +13471,19 @@ um traceback na cara do usuário.
 
 ### `class TabelaIlegivelError(RelatorioError)`
 
-*linha 208*
+*linha 216*
 
 Um `.csv` da rodada existe e não dá para interpretar.
 
 ### `class ModeloAusenteError(RelatorioError)`
 
-*linha 214*
+*linha 222*
 
 O `template.docx` indicado em `--template` não existe.
 
 ### `class Alerta`
 
-*linha 221*
+*linha 229*
 
 Uma divergência entre a rodada e o que está na pasta hoje.
 
@@ -13177,7 +13493,7 @@ anexado a um e-mail e aberto por outra pessoa em outro dia.
 
 ### `class TabelaLida`
 
-*linha 236*
+*linha 244*
 
 Um `.csv` da descritiva, separado em cabeçalho de comentário e dados.
 
@@ -13187,21 +13503,21 @@ fluxo, exatamente o arredondamento que a Fase 5 já resolveu.
 
 #### `def largura(self)`
 
-*linha 253*
+*linha 261*
 
 #### `def total(self)`
 
-*linha 257*
+*linha 265*
 
 ### `class Figura`
 
-*linha 262*
+*linha 270*
 
 Um `.png` da descritiva, com o caminho já conferido.
 
 ### `class Secao`
 
-*linha 274*
+*linha 282*
 
 Uma variável no documento: o que ela mostra, na ordem em que mostra.
 
@@ -13211,11 +13527,11 @@ tocar em código — é a decisão da Fase 5 aparecendo aqui.
 
 #### `def preenchidos(self)`
 
-*linha 292*
+*linha 300*
 
 ### `class Rodada`
 
-*linha 297*
+*linha 305*
 
 Uma rodada de análise encontrada em `3. Análises/`, já lida.
 
@@ -13227,7 +13543,7 @@ manifesto antigo não declara a análise dele.
 
 ### `class ForaDoRelatorio`
 
-*linha 315*
+*linha 323*
 
 Uma variável do dicionário que não gerou nada, e por quê.
 
@@ -13237,18 +13553,18 @@ aparece no terminal pelo mesmo motivo da Fase 5: "não está no relatório" e
 
 ### `class Relatorio`
 
-*linha 330*
+*linha 338*
 
 O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
-*linha 336*
+*linha 344*
 
 > O manifesto que responde pelo documento quando a pergunta é uma só — a
 > data da rodada nas propriedades do `.docx`, o banco no cabeçalho do
 > terminal. É o da descritiva quando ela existe; ver `_manifesto_principal`.
 > As rodadas todas estão em `rodadas`.
 
-*linha 347*
+*linha 355*
 
 > Sem `type: ignore`: o campo tem default e o default é `None`, então o tipo
 > é `datetime | None`. Declarar `datetime` e atribuir `None` era pedir ao
@@ -13256,17 +13572,17 @@ O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
 #### `def raiz(self)`
 
-*linha 354*
+*linha 362*
 
 #### `def analises(self)`
 
-*linha 358*
+*linha 366*
 
 As análises que entraram no documento, na ordem em que entraram.
 
 #### `def subtitulo(self)`
 
-*linha 365*
+*linha 373*
 
 `00742 - José Antônio de Sá`, embaixo do título.
 
@@ -13281,15 +13597,15 @@ sai só com a matrícula, em vez de sair com um separador solto no fim.
 
 #### `def tabelas(self)`
 
-*linha 382*
+*linha 390*
 
 #### `def figuras(self)`
 
-*linha 386*
+*linha 394*
 
 ### `class PlanoRelatorio`
 
-*linha 391*
+*linha 399*
 
 Tudo o que o `relatorio` faria, decidido e ainda não escrito.
 
@@ -13299,23 +13615,23 @@ aparece no terminal é lida deste objeto.
 
 #### `def raiz(self)`
 
-*linha 406*
+*linha 414*
 
 #### `def secoes(self)`
 
-*linha 410*
+*linha 418*
 
 #### `def total_tabelas(self)`
 
-*linha 414*
+*linha 422*
 
 #### `def total_figuras(self)`
 
-*linha 418*
+*linha 426*
 
 ### `class ResultadoRelatorio`
 
-*linha 423*
+*linha 431*
 
 O que a execução de fato escreveu.
 
@@ -13323,7 +13639,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_relatorio(raiz, template, conferir, agora, titulo)`
 
-*linha 436*
+*linha 444*
 
 Lê as rodadas de análise da pasta e monta o documento inteiro. Não escreve nada.
 
@@ -13346,29 +13662,36 @@ Raises:
     TabelaIlegivelError: um `.csv` da rodada não abre.
     ModeloAusenteError: o `--template` indicado não existe.
 
-*linha 494*
+*linha 502*
 
 > Análise combinada na reunião e ainda não rodada. Aviso de terminal, e não
 > `Alerta`: quem precisa saber é você, agora, antes de enviar — e o que está
 > escrito no documento continua verdadeiro sem ela. Pôr isto dentro do
 > `.docx` seria contar ao cliente uma combinação que é sua com ele.
 
-*linha 506*
+*linha 514*
 
 > Por último de propósito: os quatro alertas acima falam da validade dos
 > números, e este fala do acabamento do documento. Um alerta de dado errado
 > não deve ficar abaixo de um alerta de texto por preencher.
 
-*linha 519*
+*linha 521*
+
+> A metodologia sai das rodadas, e não da ficha: o que ela afirma é o que os
+> manifestos registraram. Análise com rodada e sem frase é aviso de terminal —
+> o parágrafo sai sem ela, e quem precisa saber disso antes de enviar é você.
+
+*linha 539*
 
 > O texto entra no `Relatorio` como dado, e o `documento.py` não lê
 > constante nenhuma. É o que mantém a divisão da fase — e é o que fez
 > esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
-> primeira página passaria a vir do `projeto.yaml`, é este.
+> primeira página passaria a vir do `projeto.yaml`, é este. A
+> metodologia entrou do mesmo jeito, sem mudar o `documento.py`.
 
 ### `def executar_relatorio(plano)`
 
-*linha 538*
+*linha 559*
 
 Escreve o documento no disco. Não decide mais nada.
 
@@ -13385,7 +13708,7 @@ O `documento.py` entra aqui dentro, e não no topo do arquivo, pelo mesmo
 motivo que o `matplotlib` entra dentro do `executar_descritiva`: a simulação
 não desenha documento nenhum e não deve pagar pelo `python-docx`.
 
-*linha 579*
+*linha 600*
 
 > `Exception`, como no `executar_*` de cada análise, e não só `OSError` e
 > `RelatorioError`: até a 1.13.0 um `.png` ilegível estourava o `python-docx`
@@ -13396,7 +13719,7 @@ não desenha documento nenhum e não deve pagar pelo `python-docx`.
 
 ### `def nome_do_relatorio(matricula, quando)`
 
-*linha 604*
+*linha 625*
 
 Monta `Relatorio_00742_2026-09-20.docx`, como o roteiro pede.
 
@@ -13406,7 +13729,7 @@ caminho.
 
 ### `def relatorios_na_pasta(raiz)`
 
-*linha 617*
+*linha 638*
 
 Os relatórios que já estão na raiz do projeto, em ordem.
 
@@ -13415,11 +13738,11 @@ um desvio deliberado do apêndice A do roteiro, já registrado no `projeto.py`:
 o relatório é o produto que se entrega, e ele fica onde a mão alcança
 primeiro ao abrir a pasta.
 
-- *linha 636* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
+- *linha 657* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
 
 ### `def _arquivamentos(raiz)`
 
-*linha 641*
+*linha 662*
 
 O que sai da raiz e vai para `2. Versões antigas/`.
 
@@ -13439,7 +13762,7 @@ dizer está na docstring, que é onde se diz.
 
 ### `def localizar_template(raiz, template)`
 
-*linha 674*
+*linha 695*
 
 Qual `.docx` empresta os estilos, e nesta ordem.
 
@@ -13468,7 +13791,7 @@ Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
 procura o modelo pelos mesmos degraus, e dois caminhos de busca é como um dos
 dois relatórios sai sem o logotipo.
 
-*linha 714*
+*linha 735*
 
 > O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
 > de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
@@ -13477,7 +13800,7 @@ dois relatórios sai sem o logotipo.
 
 ### `def _rodadas(raiz, ficha)`
 
-*linha 731*
+*linha 752*
 
 As rodadas de `3. Análises/`, na ordem do documento.
 
@@ -13497,7 +13820,7 @@ Raises:
 
 ### `def _ordenar(rodadas, analises_da_ficha)`
 
-*linha 779*
+*linha 800*
 
 A ordem das seções do documento: a ficha primeiro, o padrão depois.
 
@@ -13515,7 +13838,7 @@ escrito na ficha e sem rodada no disco não entra aqui — ele vira aviso, em
 
 ### `def _manifesto_principal(rodadas)`
 
-*linha 813*
+*linha 834*
 
 O manifesto que responde pelo documento quando a pergunta é uma só.
 
@@ -13528,7 +13851,7 @@ primeira rodada da ordem — que é a que o documento apresenta primeiro.
 
 ### `def _variaveis_de_fora(rodadas)`
 
-*linha 830*
+*linha 851*
 
 As variáveis do dicionário que **nenhuma** rodada descreveu.
 
@@ -13540,11 +13863,11 @@ aparece em rodada nenhuma.
 
 ### `def _mensagem_sem_rodada(raiz)`
 
-*linha 857*
+*linha 878*
 
 ### `def _analises_em_texto(analises)`
 
-*linha 868*
+*linha 889*
 
 `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
 
@@ -13554,7 +13877,7 @@ manifesto é escrito por quem escreveu a análise.
 
 ### `def _secoes(pasta, manifesto)`
 
-*linha 882*
+*linha 903*
 
 Uma seção por variável do manifesto, na ordem dele.
 
@@ -13565,7 +13888,7 @@ reversível em um comando que não roda.
 
 ### `def ler_tabela(caminho, especie, titulo)`
 
-*linha 930*
+*linha 951*
 
 Lê um `.csv` de uma análise sem o `pandas` e sem converter valor nenhum.
 
@@ -13583,7 +13906,7 @@ que está no arquivo. Aqui o texto atravessa intacto.
 
 ### `def tabela_do_texto(texto, especie, titulo, caminho)`
 
-*linha 960*
+*linha 981*
 
 O miolo do `ler_tabela`: o texto de um `.csv` de análise, já lido, virando tabela.
 
@@ -13596,14 +13919,14 @@ tabela não têm como dizer números diferentes.
 O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM que o
 `manifesto.Tabela.texto` escreve é tirado aqui, como o `utf-8-sig` o tira na leitura.
 
-*linha 978*
+*linha 999*
 
 > Os comentários são só os do começo, como no `dicionario.csv`: depois do
 > cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
 > que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
 > tabela do documento e virava nota, e o `Total` deixava de somar.
 
-*linha 1000*
+*linha 1021*
 
 > O primeiro comentário é o título do arquivo; o título do manifesto é o
 > mesmo texto e tem precedência, para que o documento e o índice não possam
@@ -13613,7 +13936,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `_MARCADOR`
 
-*linha 1024*
+*linha 1045*
 
 > O que ocupa o lugar de um campo que veio em branco.
 >
@@ -13629,7 +13952,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `def montar_abertura(ficha, texto_padrao)`
 
-*linha 1041*
+*linha 1062*
 
 Os parágrafos da primeira página: o texto fixo, a finalidade, os objetivos.
 
@@ -13650,7 +13973,7 @@ estiver escrito na constante hoje.
 
 ### `def _paragrafos(texto)`
 
-*linha 1073*
+*linha 1094*
 
 Cada quebra de linha do campo `notes` vira um parágrafo do documento.
 
@@ -13664,7 +13987,7 @@ linha aqui".
 
 ### `def conferir_texto(ficha)`
 
-*linha 1089*
+*linha 1110*
 
 Quais campos da primeira página vieram em branco.
 
@@ -13678,7 +14001,7 @@ abre com a mesma primeira página, e o campo em branco precisa do mesmo aviso l�
 
 ### `def _conferir_banco(raiz, ficha, rodadas, conferir)`
 
-*linha 1130*
+*linha 1151*
 
 As rodadas ainda descrevem a versão vigente do banco?
 
@@ -13701,11 +14024,11 @@ versões diferentes são dois — que é a informação que interessa, porque a�
 documento está misturando números de dois bancos e as análises que ele nomeia
 são as que precisam ser refeitas.
 
-- *linha 1196* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
+- *linha 1217* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
 
 ### `def _conferir_dicionario(raiz, rodadas)`
 
-*linha 1234*
+*linha 1255*
 
 O `dicionario.csv` de hoje é o que dirigiu as rodadas?
 
@@ -13739,13 +14062,13 @@ Perguntar a pergunta a todas as rodadas faria toda categórica do dicionário
 ser dada como «entrou depois» em um projeto que só rodou a normalidade —
 um alerta dentro do documento do cliente, sobre nada.
 
-- *linha 1272* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
+- *linha 1293* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
 
-*linha 1294*
+*linha 1315*
 
 > Quais colunas do banco cada rodada tocou, e qual rodada tocou primeiro.
 
-*linha 1300*
+*linha 1321*
 
 > Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
 > para eles: uma seção que fala de doze colunas não tem um tipo do
@@ -13753,7 +14076,7 @@ um alerta dentro do documento do cliente, sobre nada.
 
 ### `def _faixas_mudaram(faixas, detalhes)`
 
-*linha 1375*
+*linha 1396*
 
 Compara os cortes do dicionário com os que a rodada usou.
 
@@ -13761,17 +14084,17 @@ O manifesto guarda `origem` (`dicionario` ou `quartis`) e os `cortes` já
 arredondados. As três formas de divergir são: faixas preenchidas depois de a
 rodada ter usado quartis, faixas apagadas, e cortes diferentes.
 
-- *linha 1399* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+- *linha 1420* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
 
 ### Mensagens
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 1413*
+*linha 1434*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1424*
+*linha 1445*
 
 ## `flatcap/documento.py`
 
