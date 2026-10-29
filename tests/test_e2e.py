@@ -606,6 +606,66 @@ class TestFluxoDaAmostragem:
         assert historico.count("- **") == 3
 
 
+class TestFluxoDoStatus:
+    """
+    O status acompanha o projeto: o `novo` o escreve `não iniciado`, o relatório o
+    passa para `pronto`, e o `finalizado` escrito à mão o tira do painel — tudo com o
+    servidor derrubado depois do `novo`, porque o painel lê o disco.
+    """
+
+    def test_do_novo_ao_finalizado(self, tmp_path, anexo):
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+        env.write_text(
+            "REDCAP_API_URL=https://servidor.derrubado.invalido/redcap/api/\n"
+            "REDCAP_TOKEN=token_invalido\n"
+            f"FLATCAP_ROOT={tmp_path / 'FlatCapRoot'}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        raiz = tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+        ficha = raiz / "projeto.yaml"
+
+        def painel() -> str:
+            resultado = flatcap("status", env=env)
+            assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+            return " ".join(resultado.stdout.split())
+
+        assert "status: não iniciado" in ficha.read_text(encoding="utf-8")
+        saida = painel()
+        assert "Projeto 040" in saida and "não iniciado" in saida
+
+        # o prazo que você escreve depois da reunião: passado, ATRASADO; futuro, a data
+        texto = ficha.read_text(encoding="utf-8")
+        ficha.write_text(
+            texto.replace("prazo: null", "prazo: 2020-01-10"), encoding="utf-8", newline="\n"
+        )
+        assert "ATRASADO" in painel()
+        ficha.write_text(
+            texto.replace("prazo: null", "prazo: 10/01/2099"), encoding="utf-8", newline="\n"
+        )
+        assert "10/01/2099" in painel()
+
+        for comando in (("perfil", "40", "--sim"), ("descritiva", "40", "--sim")):
+            assert flatcap(*comando, env=env).returncode == 0
+        resultado = flatcap("relatorio", "40", "--sim", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        assert "status: pronto" in ficha.read_text(encoding="utf-8")
+        assert "pronto" in painel()
+
+        ficha.write_text(
+            ficha.read_text(encoding="utf-8").replace("status: pronto", "status: finalizado"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        saida = painel()
+        assert "Projeto 040" not in saida
+        assert "1 finalizado" in saida
+
+
 class TestSemRede:
     """
     Do `dados adicionar` em diante, nada toca o REDCap — e a prova é rodar com
@@ -639,6 +699,7 @@ class TestSemRede:
     @pytest.mark.parametrize(
         "comando",
         [
+            ("status",),
             ("dados", "listar", "40"),
             ("amostragem", "40", "--sim"),
             ("perfil", "40", "--sim"),
