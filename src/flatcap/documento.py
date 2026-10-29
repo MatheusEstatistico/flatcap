@@ -63,9 +63,11 @@ alternadas. A numeração é contínua e separada — `Tabela 1`, `Tabela 2`,
 `Figura 1` — porque é assim que se cita um número no corpo de um e-mail: "veja a
 Tabela 3".
 
-**A primeira página é título, subtítulo, alertas e o texto padrão.** Nessa ordem:
-o alerta vem antes do texto de abertura porque ele é a única coisa da página que
-pode fazer alguém parar de enviar o documento.
+**A primeira página é título, subtítulo, alertas, o texto padrão e a
+metodologia.** Nessa ordem: o alerta vem antes do texto de abertura porque ele é a
+única coisa da página que pode fazer alguém parar de enviar o documento; e a
+metodologia fecha a página, com o subtítulo dela no mesmo estilo da linha
+`matrícula - nome`.
 
 **A última linha da tabela sai em negrito quando é o `Total`.** Uma tabela de
 frequência é lida de cima para baixo até o total; é a linha em que o olho para.
@@ -269,10 +271,13 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
         _caixa_de_aviso(documento, alerta, estilos)
 
     # A primeira página já tem conteúdo? É disso que depende a quebra antes da
-    # primeira seção, mais abaixo. O texto de abertura responde quase sempre; o
-    # alerta responde no caso em que ele não existe, porque uma página com uma
-    # caixa amarela dentro não é uma página em branco.
-    abriu = _texto_padrao(documento, relatorio, estilos) or bool(relatorio.alertas)
+    # primeira seção, mais abaixo. O texto de abertura responde quase sempre; a
+    # metodologia e o alerta respondem no caso em que ele não existe, porque uma
+    # página com um parágrafo ou uma caixa amarela dentro não é uma página em
+    # branco. As duas funções são chamadas antes do `or`: as duas escrevem.
+    abriu = _texto_padrao(documento, relatorio, estilos)
+    abriu = _metodologia(documento, relatorio, estilos) or abriu
+    abriu = abriu or bool(relatorio.alertas)
 
     numero_tabela = 0
     numero_figura = 0
@@ -403,14 +408,51 @@ def _texto_padrao(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
     for paragrafo in relatorio.texto:
         if not paragrafo.strip():
             continue
-        escrito = documento.add_paragraph()
-        if estilos.corpo:
-            escrito.style = estilos.corpo
-        _texto(escrito, paragrafo.strip(), aplicar_estilo=False)
-        escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-        escrito.paragraph_format.space_after = Pt(8)
+        _corrido(documento, paragrafo, estilos)
         escreveu = True
     return escreveu
+
+
+def _metodologia(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
+    """
+    O subtítulo da metodologia e o parágrafo dela. Devolve se escreveu algum.
+
+    O subtítulo vai no estilo de subtítulo — o mesmo da linha `matrícula - nome`,
+    ajustável no Word pelo `FlatCap Subtitulo` —, preso ao parágrafo que vem depois,
+    para nunca terminar uma página sozinho. Sem parágrafo, ele não sai: um título
+    sem nada embaixo é o tipo de sobra que só aparece no papel.
+
+    O parágrafo é texto corrido, como o da abertura. O que ele diz é decisão do
+    `metodologia.py`; aqui, só a forma.
+    """
+    paragrafos = [paragrafo for paragrafo in relatorio.metodologia if paragrafo.strip()]
+    if not paragrafos:
+        return False
+    if relatorio.titulo_da_metodologia.strip():
+        titulo = _paragrafo(
+            documento,
+            relatorio.titulo_da_metodologia.strip(),
+            estilos.subtitulo,
+            tamanho=13,
+            cor=TINTA_SECUNDARIA,
+            espaco_antes=10,
+            espaco_depois=6,
+        )
+        titulo.paragraph_format.keep_with_next = True
+    for paragrafo in paragrafos:
+        _corrido(documento, paragrafo, estilos)
+    return True
+
+
+def _corrido(documento, texto: str, estilos: Estilos):
+    """Um parágrafo de texto corrido: o estilo do corpo, justificado, 8 pt depois."""
+    escrito = documento.add_paragraph()
+    if estilos.corpo:
+        escrito.style = estilos.corpo
+    _texto(escrito, texto.strip(), aplicar_estilo=False)
+    escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    escrito.paragraph_format.space_after = Pt(8)
+    return escrito
 
 
 def _caixa_de_aviso(documento, alerta: Any, estilos: Estilos) -> None:
@@ -1351,7 +1393,7 @@ para todo relatório gerado daí em diante.
 | peça do documento | estilo |
 | --- | --- |
 | título | `FlatCap Titulo` |
-| subtítulo (`matrícula - nome`) | `FlatCap Subtitulo` |
+| subtítulo (`matrícula - nome`) e o da metodologia | `FlatCap Subtitulo` |
 | nome de cada variável | `FlatCap Secao` |
 | texto corrido e células de tabela | `FlatCap Corpo` |
 | `Tabela 1. …` e `Figura 1. …` | `FlatCap Legenda` |
