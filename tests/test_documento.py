@@ -71,18 +71,72 @@ class TestPrimeiraPagina:
 
     def test_a_metodologia_fecha_a_primeira_pagina(self, documento):
         """
-        Depois dos objetivos e antes da quebra: é o último parágrafo da abertura, e a
-        primeira seção começa na página seguinte. Entrou pelo `Relatorio.texto`, sem
-        uma linha nova aqui.
+        Depois dos objetivos: o subtítulo, o parágrafo, e a primeira seção na página
+        seguinte.
         """
-        from flatcap.metodologia import ROTULO
-
         doc, plano = documento()
+        relatorio = plano.relatorio
         textos = _textos(doc)
-        metodologia = next(texto for texto in textos if texto.startswith(ROTULO))
-        posicao = textos.index(metodologia)
-        assert textos[posicao - 1] == plano.relatorio.texto[-2]
-        assert textos[posicao + 1] == plano.secoes[0].rotulo
+        posicao = textos.index(relatorio.titulo_da_metodologia)
+        assert textos[posicao - 1] == relatorio.texto[-1]
+        assert textos[posicao + 1] == relatorio.metodologia[0]
+        assert textos[posicao + 2] == plano.secoes[0].rotulo
+
+    def test_o_subtitulo_da_metodologia_e_o_do_documento(self, documento):
+        """
+        "Em formato de subtítulo": o mesmo estilo da linha `matrícula - nome`, que se
+        ajusta no Word pelo `FlatCap Subtitulo`, e preso ao parágrafo que vem depois.
+        """
+        doc, plano = documento()
+        relatorio = plano.relatorio
+        subtitulo = next(p for p in doc.paragraphs if p.text == relatorio.subtitulo)
+        titulo = next(p for p in doc.paragraphs if p.text == relatorio.titulo_da_metodologia)
+        assert titulo.text == "Metodologia Estatística (texto padrão)"
+        assert titulo.style.name == subtitulo.style.name == "FlatCap Subtitulo"
+        assert titulo.paragraph_format.keep_with_next is True
+        corpo = next(p for p in doc.paragraphs if p.text == relatorio.metodologia[0])
+        assert corpo.style.name != titulo.style.name
+
+    def test_sem_subtitulo_o_paragrafo_sai_assim_mesmo(self, documento, tmp_path):
+        """`TITULO = ""` no `metodologia.py`: o parágrafo vem logo depois dos objetivos."""
+        from dataclasses import replace
+
+        from flatcap.documento import escrever
+
+        _, plano = documento()
+        destino = escrever(
+            replace(plano.relatorio, titulo_da_metodologia=""), tmp_path / "sem_titulo.docx"
+        )
+        textos = _textos(Document(str(destino)))
+        assert "Metodologia Estatística (texto padrão)" not in textos
+        posicao = textos.index(plano.relatorio.metodologia[0])
+        assert textos[posicao - 1] == plano.relatorio.texto[-1]
+
+    def test_sem_paragrafo_nao_sai_subtitulo_sozinho(self, documento, tmp_path):
+        from dataclasses import replace
+
+        from flatcap.documento import escrever
+
+        _, plano = documento()
+        destino = escrever(replace(plano.relatorio, metodologia=()), tmp_path / "sem.docx")
+        assert plano.relatorio.titulo_da_metodologia not in _textos(Document(str(destino)))
+
+    def test_so_a_metodologia_ja_abre_a_pagina(self, documento, tmp_path):
+        """
+        Sem texto de abertura e sem alerta, a metodologia sozinha já faz da primeira
+        página uma página, e a primeira seção continua começando na seguinte.
+        """
+        from dataclasses import replace
+
+        from flatcap.documento import escrever
+
+        _, plano = documento()
+        destino = escrever(
+            replace(plano.relatorio, texto=(), alertas=()), tmp_path / "so_metodologia.docx"
+        )
+        doc = Document(str(destino))
+        titulo = next(p for p in doc.paragraphs if p.text == plano.secoes[0].rotulo)
+        assert titulo.paragraph_format.page_break_before is True
 
     def test_a_primeira_variavel_comeca_em_pagina_nova(self, documento):
         """
@@ -113,7 +167,8 @@ class TestPrimeiraPagina:
 
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
         destino = escrever(
-            replace(plano.relatorio, texto=(), alertas=()), tmp_path / "sem_abertura.docx"
+            replace(plano.relatorio, texto=(), metodologia=(), alertas=()),
+            tmp_path / "sem_abertura.docx",
         )
         doc = Document(str(destino))
         titulo = next(p for p in doc.paragraphs if p.text == plano.secoes[0].rotulo)
