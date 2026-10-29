@@ -73,17 +73,24 @@ texto que está na célula do `.csv` é o texto que vai para a célula do Word.
 ## O que sai na primeira página
 
 Título, subtítulo com `matrícula - nome`, os alertas quando houver, e a
-**abertura** — três pedaços que `montar_abertura` junta, nesta ordem:
+**abertura** — quatro pedaços, nesta ordem:
 
     1. o `TEXTO_PADRAO`, os parágrafos fixos que abrem todo relatório de todo
        projeto, definidos logo abaixo em um bloco só para serem reescritos sem
        se procurar código;
     2. a **finalidade** do estudo;
-    3. os **objetivos**, geral e específicos.
+    3. os **objetivos**, geral e específicos;
+    4. a **metodologia**: um parágrafo, no registro de uma seção de *Análise
+       estatística*, para o cliente levar para o artigo.
 
-Os dois últimos vêm da ficha, que os recebeu do formulário do REDCap (`fin` e
-`obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir à mão,
-porque o `projeto.yaml` é seu.
+O segundo e o terceiro vêm da ficha, que os recebeu do formulário do REDCap
+(`fin` e `obj1`) quando o `flatcap novo` criou a pasta — e que você pode corrigir
+à mão, porque o `projeto.yaml` é seu. Os três primeiros são o `montar_abertura`.
+
+O quarto vem das rodadas, pelo `metodologia.py`: cada análise com rodada dá uma
+frase que nomeia só os testes que rodaram, lidos do manifesto, com as versões do
+`ambiente` no fim. Também não abre o banco — o que ele afirma é o que os
+manifestos registraram.
 
 Campo da ficha em branco não encolhe a página em silêncio: vira um marcador
 visível **e** um `Alerta` de código `texto_ausente`. Nada disso fere a regra da
@@ -125,6 +132,7 @@ from .manifesto import (
     Manifesto,
 )
 from .manifesto import ler as ler_manifesto
+from .metodologia import montar_metodologia
 from .nomes import SEPARADOR, sanitizar
 from .projeto import (
     ARQUIVO_PROJETO,
@@ -510,6 +518,18 @@ def preparar_relatorio(
     if alerta_texto is not None:
         alertas.append(alerta_texto)
 
+    # A metodologia sai das rodadas, e não da ficha: o que ela afirma é o que os
+    # manifestos registraram. Análise com rodada e sem frase é aviso de terminal —
+    # o parágrafo sai sem ela, e quem precisa saber disso antes de enviar é você.
+    metodologia = montar_metodologia(rodada.manifesto for rodada in rodadas)
+    if metodologia.sem_frase:
+        avisos.append(
+            f"O parágrafo de metodologia da primeira página saiu sem "
+            f"{_analises_em_texto(metodologia.sem_frase)}: o manifesto da rodada não "
+            "diz quais testes rodaram. Rode a análise de novo com esta versão, ou "
+            "complete o parágrafo no documento antes de enviar."
+        )
+
     relatorio = Relatorio(
         ficha=ficha,
         manifesto=_manifesto_principal(rodadas),
@@ -519,8 +539,9 @@ def preparar_relatorio(
         # O texto entra no `Relatorio` como dado, e o `documento.py` não lê
         # constante nenhuma. É o que mantém a divisão da fase — e é o que fez
         # esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
-        # primeira página passaria a vir do `projeto.yaml`, é este.
-        texto=montar_abertura(ficha),
+        # primeira página passaria a vir do `projeto.yaml`, é este. A
+        # metodologia entrou do mesmo jeito, sem mudar o `documento.py`.
+        texto=montar_abertura(ficha) + metodologia.paragrafos,
         fora=_variaveis_de_fora(rodadas),
         alertas=tuple(alertas),
         avisos=tuple(avisos),
