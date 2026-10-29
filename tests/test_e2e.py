@@ -436,6 +436,19 @@ class TestFluxoCompleto:
         )
         assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == k_csv
 
+        # A metodologia da primeira página nomeia os testes das tabelas acima, e só
+        # eles: três dos quatro itens trazem o método escrito na ficha.
+        metodologia = next(
+            p.text for p in documento.paragraphs if p.text.startswith("Análise estatística: ")
+        )
+        assert (
+            "Na comparação com um valor de referência, usou-se o teste t de Student para "
+            "uma amostra; entre dois grupos, o teste t de Student; e entre três grupos ou "
+            "mais, a ANOVA de um fator." in metodologia
+        )
+        assert "Exceto quando o teste foi definido de antemão" in metodologia
+        assert "Welch" not in metodologia
+
 
     def test_o_lote_roda_a_lista_e_o_relatorio_a_segue(self, tmp_path, anexo):
         """
