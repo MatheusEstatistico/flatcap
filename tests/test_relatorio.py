@@ -26,7 +26,7 @@ import bancos
 from conftest import escrever_ficha
 from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO
-from flatcap.metodologia import ROTULO as ROTULO_METODOLOGIA
+from flatcap.metodologia import TITULO as TITULO_DA_METODOLOGIA
 from flatcap.metodologia import montar_metodologia
 from flatcap.projeto import PASTA_ANTIGAS, PASTA_DADOS
 from flatcap.relatorio import (
@@ -157,32 +157,37 @@ class TestSecoes:
         """
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
         # A `TEXTO_PADRAO` abre a página, e a finalidade e os objetivos da ficha
-        # vêm depois dela — os três pedaços que o `montar_abertura` junta. A
-        # metodologia, que sai das rodadas, fecha a abertura.
-        abertura = montar_abertura(plano.relatorio.ficha)
-        metodologia = montar_metodologia(r.manifesto for r in plano.relatorio.rodadas)
-        assert plano.relatorio.texto == abertura + metodologia.paragrafos
+        # vêm depois dela — os três pedaços que o `montar_abertura` junta.
+        assert plano.relatorio.texto == montar_abertura(plano.relatorio.ficha)
         assert plano.relatorio.texto[: len(TEXTO_PADRAO)] == TEXTO_PADRAO
 
 
 class TestMetodologia:
     """
-    O quarto pedaço da primeira página. O texto em si é do `test_metodologia.py`;
-    aqui, o lugar dele e o aviso.
+    O que fecha a primeira página: o subtítulo e o parágrafo. O texto em si é do
+    `test_metodologia.py`; aqui, os campos do `Relatorio` e o aviso.
     """
 
-    def test_vem_depois_da_finalidade_e_dos_objetivos(self, projeto_com_rodada):
+    def test_viaja_fora_do_texto_de_abertura(self, projeto_com_rodada):
+        """
+        O subtítulo é um título, e não texto corrido: por isso a metodologia tem os
+        campos dela, e o `documento.py` sabe o que escrever no estilo de subtítulo.
+        """
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
-        texto = plano.relatorio.texto
-        assert texto[-1].startswith(ROTULO_METODOLOGIA)
-        assert any(paragrafo.startswith("Finalidade do estudo") for paragrafo in texto[:-1])
+        relatorio = plano.relatorio
+        metodologia = montar_metodologia(r.manifesto for r in relatorio.rodadas)
+        assert relatorio.metodologia == metodologia.paragrafos
+        assert relatorio.titulo_da_metodologia == TITULO_DA_METODOLOGIA
+        assert not any(TITULO_DA_METODOLOGIA in paragrafo for paragrafo in relatorio.texto)
+        assert not set(relatorio.metodologia) & set(relatorio.texto)
 
     def test_fala_da_rodada_que_esta_na_pasta(self, projeto_com_rodada):
         """O projeto da casa só tem a descritiva: nenhum teste, nenhum alfa."""
-        metodologia = preparar_relatorio(projeto_com_rodada(), agora=QUANDO).relatorio.texto[-1]
-        assert "foram descritas" in metodologia
+        relatorio = preparar_relatorio(projeto_com_rodada(), agora=QUANDO).relatorio
+        (metodologia,) = relatorio.metodologia
+        assert metodologia.startswith("As variáveis categóricas foram descritas")
         assert "significância" not in metodologia
-        assert "As análises foram feitas com o FlatCap" in metodologia
+        assert "usando a linguagem Python versão" in metodologia
 
     def test_rodada_sem_frase_vira_aviso_de_terminal(self, projeto_com_rodada, pasta_da_rodada):
         """
@@ -205,7 +210,7 @@ class TestMetodologia:
         assert any(
             "metodologia" in aviso and "`regressao`" in aviso for aviso in plano.relatorio.avisos
         )
-        assert "regressao" not in plano.relatorio.texto[-1]
+        assert "regressao" not in " ".join(plano.relatorio.metodologia)
 
 
 class TestLerTabela:
