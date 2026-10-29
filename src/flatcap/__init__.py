@@ -581,12 +581,13 @@ descritiva" em todo documento e, sem banco, "banco ?"; passa a dizer a análise 
 e "sem banco" quando não há.
 ## 1.16.0 — a metodologia na primeira página
 
-**O relatório ganha um parágrafo de metodologia, para o cliente levar para o artigo.** Ele
+**O relatório ganha um texto padrão de metodologia, para o cliente levar para o artigo.** Ele
 fecha a primeira página, depois da finalidade e dos objetivos que vieram do REDCap, e antes da
-quebra que abre a primeira seção. Começa com "Análise estatística:" e diz, no registro de uma
-seção de métodos, como os números do documento foram produzidos: como cada tipo de variável
-foi descrito, quais testes rodaram, o nível de significância, e o FlatCap, o Python e as
-bibliotecas, com as versões.
+quebra que abre a primeira seção: o subtítulo "Metodologia Estatística (texto padrão)" e um
+parágrafo que diz, no registro de uma seção de métodos, como os números do documento foram
+produzidos — como cada tipo de variável foi descrito, quais testes rodaram, o nível de
+significância — e termina com "As análises foram feitas usando a linguagem Python versão
+3.11.", com a versão das rodadas.
 
 **O parágrafo sai das rodadas, e não de um texto fixo.** Um texto fixo citaria todos os testes
 que o FlatCap sabe fazer, e um artigo que nomeia nos métodos um teste que não aparece em
@@ -599,16 +600,19 @@ ficha não é atribuído à regra.
 
 **Nada aqui abre o banco.** Tudo o que o parágrafo afirma está nos manifestos: o teste de cada
 par, item e delineamento nos `detalhes`, o alfa e a falta de correção para comparações
-múltiplas nas `regras`, e as versões no `ambiente`. Rodar uma análise de novo reescreve o
-manifesto dela, e o parágrafo acompanha sem ninguém lembrar de editá-lo. Duas versões do
-FlatCap no parágrafo ("1.14.1 e 1.16.0") são de propósito: dizem que uma rodada ficou para
-trás.
+múltiplas nas `regras`, e a versão do Python no `ambiente`, sem o último número. Rodar uma
+análise de novo reescreve o manifesto dela, e o parágrafo acompanha sem ninguém lembrar de
+editá-lo. Duas versões no parágrafo ("versões 3.11 e 3.13") são de propósito: dizem que uma
+rodada foi feita noutra máquina.
 
-**Um módulo novo, `metodologia.py`, e nenhuma linha nova no `documento.py`.** O parágrafo
-chega ao documento pelo `Relatorio.texto`, como a finalidade e os objetivos. A redação mora num
-bloco emoldurado no topo do módulo, como o `TEXTO_PADRAO`: o rótulo, a frase de cada análise,
-o nome de cada teste. O módulo não importa as análises — elas trazem o `pandas`, e o
-`relatorio.py`, que o importa, tem o teste em subprocesso que falha se o `pandas` for
+**Um módulo novo, `metodologia.py`, e o subtítulo no `documento.py`.** A redação mora num bloco
+emoldurado no topo do módulo, como o `TEXTO_PADRAO`: o subtítulo, a frase de cada análise, o
+nome de cada teste, a frase do Python. O `Relatorio` leva a metodologia em dois campos dela,
+`metodologia` e `titulo_da_metodologia`, e não no `texto`, porque o subtítulo é um título: o
+`documento.py` o escreve no estilo de subtítulo — o `FlatCap Subtitulo` da linha
+`matrícula - nome`, que se ajusta no Word —, preso ao parágrafo que vem depois, e o parágrafo
+como o texto corrido da abertura. O módulo não importa as análises — elas trazem o `pandas`, e
+o `relatorio.py`, que o importa, tem o teste em subprocesso que falha se o `pandas` for
 carregado —, e por isso os nomes que os manifestos gravam estão escritos nele como texto; o
 `test_metodologia.py` confere que são, letra por letra, as constantes das análises.
 
@@ -618,4 +622,4 @@ testou nada (toda linha "não testado") sai sem frase e sem aviso: a tabela dela
 motivo.
 """
 
-__version__ = "1.16.0"
+__version__ = "1.16.1"
