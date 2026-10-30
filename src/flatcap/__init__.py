@@ -681,6 +681,25 @@ magenta do status fora da lista.
 **As fichas de antes continuam valendo**: o cabeçalho delas lista cinco status, e o sexto é
 lido nelas do mesmo jeito — `calculo amostral`, sem acento, também. E o próximo status que
 entrar na lista sem cor quebra um teste, em vez de sair sem cor no painel.
+
+## 1.18.1 — a matrícula com zero na frente
+
+**A matrícula `01928` perdia o zero em tudo que lê a ficha.** O `flatcap status` mostrava
+`1928` — o `listar`, que a lê do REDCap, mostrava `01928` —, o relatório saía
+`Relatorio_1928_….docx`, e o `<id>` pela matrícula não achava o projeto. A causa é a
+diferença entre as duas versões de YAML do FlatCap: o `projeto.py` escreve a ficha com o
+PyYAML, que segue o YAML 1.1, e o `ficha.py` a lê com o ruamel, que segue o 1.2. No 1.1, um
+número com zero na frente é octal, e o PyYAML punha aspas em `00742`, que seria o octal 482,
+mas não em `01928`, que tem 8 e 9 e não é octal; no 1.2, `01928` é o inteiro 1928. Os testes
+não pegavam porque toda matrícula deles — `00742`, `00740` — só tinha algarismos de 0 a 7.
+
+**O conserto está dos dois lados.** O `novo` escreve entre aspas todo texto só de algarismos
+(`projeto._representar_texto`), e a leitura devolve o número com o zero que estava escrito
+(`ficha._texto`), porque o ruamel guarda quantos algarismos ele tinha. A ficha escrita antes,
+sem as aspas, continua valendo sem edição, e o `0189` que você digitar sem aspas também. O
+relatório já gerado com o nome sem o zero vai para as versões antigas no próximo
+`flatcap relatorio`, como qualquer anterior: o arquivamento procura o prefixo, e não a
+matrícula.
 """
 
-__version__ = "1.18.0"
+__version__ = "1.18.1"

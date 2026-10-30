@@ -679,6 +679,37 @@ class TestFluxoDoStatus:
         assert "Projeto 040" not in saida
         assert "1 finalizado" in saida
 
+    def test_a_matricula_com_zero_na_frente_chega_inteira(self, tmp_path, monkeypatch):
+        """
+        REGRESSÃO da 1.18.0, pelo caminho de verdade: o `novo` escreve a ficha com o
+        PyYAML, e o `status` a lê com o ruamel. Uma matrícula com zero na frente e um 8
+        ou um 9 saía sem aspas, e sem o zero no painel — no `listar`, que a lê do
+        REDCap, saía certa. E o `<id>` pela matrícula não achava o projeto.
+        """
+        monkeypatch.setenv("COLUMNS", "120")
+        registro = {
+            **REGISTROS[1], "record_id": "43", "matricula1": "01928",
+            "prof1": "Bruna Teixeira",
+        }
+        with servidor_falso.subir(registros=[registro]) as api:
+            env = api.env(tmp_path)
+            assert flatcap("novo", "43", "--sim", env=env).returncode == 0
+            listar = " ".join(flatcap("listar", env=env).stdout.split())
+
+        ficha = (
+            tmp_path / "FlatCapRoot" / "01928 - Bruna Teixeira" / "Projeto 043" / "projeto.yaml"
+        )
+        assert "matricula: '01928'" in ficha.read_text(encoding="utf-8")
+
+        resultado = flatcap("status", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        status = " ".join(resultado.stdout.split())
+        assert "01928" in listar and "01928" in status
+        assert status.count("1928") == status.count("01928"), "nenhum 1928 sem o zero"
+
+        resultado = flatcap("dados", "listar", "01928", env=env)
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
 
 class TestSemRede:
     """

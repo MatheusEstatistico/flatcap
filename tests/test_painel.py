@@ -23,6 +23,8 @@ import subprocess
 import sys
 from datetime import date, datetime
 
+import pytest
+
 from conftest import MATRICULA, NOME, PASTA, escrever_ficha
 from flatcap.painel import LinhaDoPainel, montar_painel
 from flatcap.projeto import (
@@ -78,6 +80,26 @@ class TestQuemEntra:
         assert linha.nome == NOME
         assert linha.pasta == raiz
         assert linha.pasta_local == "Projeto 006"
+
+    @pytest.mark.parametrize("matricula", ["0189", "01928"])
+    def test_a_matricula_sai_com_o_zero_da_frente(self, root, matricula):
+        """
+        REGRESSÃO da 1.18.0: a ficha escrita pelo `flatcap novo` até ali dizia
+        `matricula: 0189`, sem aspas, e o painel mostrava 189 — o `listar`, que lê o
+        REDCap, mostrava 0189.
+        """
+        raiz = _projeto(root, "6", matricula=matricula)
+        ficha = raiz / "projeto.yaml"
+        texto = ficha.read_text(encoding="utf-8")
+        ficha.write_text(
+            texto.replace(f"matricula: '{matricula}'", f"matricula: {matricula}"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        assert f"matricula: {matricula}\n" in ficha.read_text(encoding="utf-8")
+
+        (linha,) = montar_painel(root, agora=AGORA).linhas
+        assert linha.matricula == matricula
 
     def test_o_nome_e_o_da_ficha_e_nao_o_da_pasta(self, root):
         """

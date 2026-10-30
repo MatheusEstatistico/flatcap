@@ -21,6 +21,7 @@ import yaml
 
 from conftest import AGORA, linhas_do_historico
 from flatcap.config import Config
+from flatcap.ficha import ler as ler_ficha
 from flatcap.modelo import CAMPO_ANEXO
 from flatcap.projeto import (
     ARQUIVO_HISTORICO,
@@ -292,6 +293,20 @@ class TestProjetoYaml:
         texto = preparar(cfg, "42", agora=AGORA).projeto_yaml
         assert "matricula: '00742'" in texto
         assert "record_id: '42'" in texto
+
+    @pytest.mark.parametrize("matricula", ["0189", "01928", "08"])
+    def test_a_matricula_com_8_ou_9_tambem_sai_entre_aspas(self, cfg, redcap, matricula):
+        """
+        REGRESSÃO da 1.18.0: o PyYAML segue o YAML 1.1, em que `00742` seria o octal
+        482 — e ganha aspas —, mas `0189`, com 8 e 9, não é octal, e saía sem elas. O
+        ruamel, que lê a ficha, segue o 1.2, e lia 189: o zero sumia do `flatcap
+        status`, do nome do relatório e da busca pela matrícula.
+        """
+        redcap([{**REGISTRO, "matricula1": matricula}])
+        plano = preparar(cfg, "42", agora=AGORA)
+        assert f"matricula: '{matricula}'" in plano.projeto_yaml
+        executar(plano)
+        assert ler_ficha(plano.raiz).matricula == matricula
 
     def test_o_prazo_nasce_nulo(self, cfg, redcap):
         """

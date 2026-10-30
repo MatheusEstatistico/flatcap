@@ -502,6 +502,30 @@ class TestNomeELugar:
         plano = preparar_relatorio(projeto_com_rodada(), agora=QUANDO)
         assert plano.destino.parent == plano.raiz
 
+    def test_a_matricula_sem_aspas_na_ficha_da_o_nome_com_o_zero(self, projeto_com_rodada):
+        """
+        REGRESSÃO da 1.18.0: com `matricula: 01928` sem aspas — como o `flatcap novo`
+        a escrevia quando ela tinha 8 ou 9 —, o relatório saía `Relatorio_1928_….docx`,
+        o nome que vai para o cliente. O de antes, sem o zero, vai para as antigas: o
+        arquivamento procura o prefixo, e não a matrícula.
+        """
+        raiz = projeto_com_rodada()
+        ficha = raiz / "projeto.yaml"
+        texto = ficha.read_text(encoding="utf-8")
+        assert "matricula: '00742'" in texto
+        ficha.write_text(
+            texto.replace("matricula: '00742'", "matricula: 01928"),
+            encoding="utf-8",
+            newline="\n",
+        )
+        (raiz / "Relatorio_1928_2026-09-01.docx").write_bytes(b"sem o zero")
+
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        assert plano.destino.name == "Relatorio_01928_2026-09-09.docx"
+        assert [antes.name for antes, _ in plano.arquivamentos] == [
+            "Relatorio_1928_2026-09-01.docx"
+        ]
+
     def test_o_lixo_do_word_nao_conta_como_relatorio(self, projeto_com_rodada):
         raiz = projeto_com_rodada()
         (raiz / "~$Relatorio_00742_2026-09-01.docx").write_bytes(b"lixo")

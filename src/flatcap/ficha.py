@@ -47,7 +47,8 @@ Toda a persistência do `projeto.yaml` está atrás das funções públicas abai
 em uso. Desde a 1.15.0, o `ler_yaml` estende o mesmo leitor aos outros YAML editados
 à mão — o `desenho.yaml` da amostragem é o primeiro —, e o `numero_escrito` é a regra
 de ler um número escrito num deles. Desde a 1.17.0, o `status_reconhecido` e o
-`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve.
+`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve. Desde a
+1.18.1, a matrícula e o `record_id` escritos sem aspas voltam com o zero da frente.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -73,6 +74,7 @@ from typing import Any
 from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
+from ruamel.yaml.scalarint import ScalarInt
 
 from .nomes import (
     PREFIXO_PROJETO,
@@ -1007,9 +1009,10 @@ def _construtor(recuo_da_lista: int = RECUO_PADRAO) -> YAML:
     O leitor/escritor round-trip, configurado.
 
     `typ="rt"` é o modo que carrega comentários e formatação junto com os dados
-    e os devolve na hora de gravar. `preserve_quotes` mantém `matricula: "00742"`
-    entre aspas — sem isso a matrícula voltaria como o número 742 e a pasta
-    deixaria de bater com o registro. E `width` alto impede que o ruamel quebre
+    e os devolve na hora de gravar. `preserve_quotes` mantém as aspas que cada valor
+    tinha: `matricula: "00742"` continua com as duplas, em vez de voltar como
+    `'00742'` — reescrever a ficha não muda o que você não mexeu. (O zero da frente
+    não depende delas: ver o `_texto`.) E `width` alto impede que o ruamel quebre
     um nome de arquivo longo em duas linhas: é YAML válido, mas ilegível em um
     arquivo feito para ser aberto no editor.
 
@@ -1167,9 +1170,25 @@ def temporario_ao_lado(destino: Path) -> tuple[int, Path]:
 
 
 def _texto(documento, chave: str) -> str:
+    """
+    O campo como texto, como está escrito na ficha — com o zero da frente.
+
+    A matrícula é um código, e não uma quantidade: `0189` é uma, e 189 é outra. O
+    `flatcap novo` escrevia a ficha com o PyYAML, que segue o YAML 1.1, e ela é lida
+    pelo ruamel, que segue o 1.2. No 1.1, um número com zero na frente é octal, e o
+    PyYAML põe aspas em `00742`, mas não em `0189`, que tem 8 e 9 e não é octal; no
+    1.2, `0189` é o inteiro 189. A matrícula perdia o zero no `flatcap status`, no nome
+    do relatório, no manifesto e na busca — `flatcap relatorio 0189` não achava o
+    projeto. O ruamel guarda quantos algarismos o número tinha, e é com eles que o zero
+    volta: a ficha escrita assim não precisa ser editada. Vale para qualquer campo, e
+    para o `0189` que você digitar sem aspas.
+    """
     valor = documento.get(chave)
     if valor is None:
         return ""
+    algarismos = getattr(valor, "_width", None)
+    if isinstance(valor, ScalarInt) and algarismos:
+        return f"{int(valor):0{algarismos}d}"
     return str(valor).strip()
 
 

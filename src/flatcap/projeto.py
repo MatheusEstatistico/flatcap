@@ -703,11 +703,12 @@ class _SemAncoras(yaml.SafeDumper):
         return True
 
 
-def _texto_em_bloco(dumper: yaml.SafeDumper, dado: str) -> yaml.ScalarNode:
+def _representar_texto(dumper: yaml.SafeDumper, dado: str) -> yaml.ScalarNode:
     """
-    Texto com quebra de linha sai como bloco literal, e não entre aspas.
+    Como cada texto sai na ficha: o de várias linhas, em bloco literal; o só de
+    algarismos, entre aspas; o resto, como o PyYAML decidir.
 
-    Sem isso os `objetivos` do cliente saem assim:
+    **Várias linhas, em bloco.** Sem isso os `objetivos` do cliente saem assim:
 
         objetivos: "Objetivo geral: avaliar o perfil.\\n\\nObjetivos específicos:\\n..."
 
@@ -723,12 +724,25 @@ def _texto_em_bloco(dumper: yaml.SafeDumper, dado: str) -> yaml.ScalarNode:
     O PyYAML só aceita o bloco literal se nenhuma linha terminar em espaço e não
     houver `\\r` no meio — quem garante isso é o `modelo._texto_longo`, na
     fronteira onde o texto entra.
+
+    **Só de algarismos, entre aspas.** A matrícula é um código, e não um número:
+    `0189` é uma, e 189 é outra. O PyYAML segue o YAML 1.1, em que um número com zero na
+    frente é octal: ele põe aspas em `00742`, que o 1.1 leria como o octal 482, mas não
+    em `0189`, que tem 8 e 9 e não é octal. O ruamel, que lê a ficha, segue o 1.2, em
+    que `0189` é o inteiro 189 — e a matrícula perdia o zero. Entre aspas, os dois leem
+    o mesmo texto. Vale para o `record_id` e para qualquer outro texto só de algarismos;
+    a ficha escrita antes, sem as aspas, é lida com o zero pelo `ficha._texto`.
     """
-    estilo = "|" if "\n" in dado else None
+    if "\n" in dado:
+        estilo = "|"
+    elif dado.isascii() and dado.isdigit():
+        estilo = "'"
+    else:
+        estilo = None
     return dumper.represent_scalar("tag:yaml.org,2002:str", dado, style=estilo)
 
 
-_SemAncoras.add_representer(str, _texto_em_bloco)
+_SemAncoras.add_representer(str, _representar_texto)
 
 _CABECALHO_YAML = """
 # projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.

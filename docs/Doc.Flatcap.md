@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.18.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.18.1.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -371,7 +371,7 @@ acrescenta versões em `dados:` e, quando o relatório é escrito, passa o `stat
 ```yaml
 record_id: '6'
 tipo: professor                 # professor | aluno
-matricula: '00742'              # entre aspas: sem elas, voltaria como o número 742
+matricula: '00742'              # um código, e não um número: o zero da frente vale
 nome: José Antônio de Sá
 criado_em: 2026-09-01
 prazo: 2026-09-15               # a data final: 10 dias úteis da reunião — ou 15/09/2026
@@ -725,7 +725,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*686 linhas.*
+*705 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1407,6 +1407,25 @@ magenta do status fora da lista.
 **As fichas de antes continuam valendo**: o cabeçalho delas lista cinco status, e o sexto é
 lido nelas do mesmo jeito — `calculo amostral`, sem acento, também. E o próximo status que
 entrar na lista sem cor quebra um teste, em vez de sair sem cor no painel.
+
+### 1.18.1 — a matrícula com zero na frente
+
+**A matrícula `01928` perdia o zero em tudo que lê a ficha.** O `flatcap status` mostrava
+`1928` — o `listar`, que a lê do REDCap, mostrava `01928` —, o relatório saía
+`Relatorio_1928_….docx`, e o `<id>` pela matrícula não achava o projeto. A causa é a
+diferença entre as duas versões de YAML do FlatCap: o `projeto.py` escreve a ficha com o
+PyYAML, que segue o YAML 1.1, e o `ficha.py` a lê com o ruamel, que segue o 1.2. No 1.1, um
+número com zero na frente é octal, e o PyYAML punha aspas em `00742`, que seria o octal 482,
+mas não em `01928`, que tem 8 e 9 e não é octal; no 1.2, `01928` é o inteiro 1928. Os testes
+não pegavam porque toda matrícula deles — `00742`, `00740` — só tinha algarismos de 0 a 7.
+
+**O conserto está dos dois lados.** O `novo` escreve entre aspas todo texto só de algarismos
+(`projeto._representar_texto`), e a leitura devolve o número com o zero que estava escrito
+(`ficha._texto`), porque o ruamel guarda quantos algarismos ele tinha. A ficha escrita antes,
+sem as aspas, continua valendo sem edição, e o `0189` que você digitar sem aspas também. O
+relatório já gerado com o nome sem o zero vai para as versões antigas no próximo
+`flatcap relatorio`, como qualquer anterior: o arquivamento procura o prefixo, e não a
+matrícula.
 
 ## `flatcap/config.py`
 
@@ -2138,7 +2157,7 @@ sai com o próprio nome, sem inventar um cliente que não existe.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*873 linhas.*
+*887 linhas.*
 
 A pasta do projeto no disco: decidir o que criar e depois criar.
 
@@ -2613,13 +2632,14 @@ continua valendo.
 
 - *linha 702* — `def ignore_aliases(self, data: object) -> bool:` — noqa: ARG002
 
-### `def _texto_em_bloco(dumper, dado)`
+### `def _representar_texto(dumper, dado)`
 
 *linha 706*
 
-Texto com quebra de linha sai como bloco literal, e não entre aspas.
+Como cada texto sai na ficha: o de várias linhas, em bloco literal; o só de
+algarismos, entre aspas; o resto, como o PyYAML decidir.
 
-Sem isso os `objetivos` do cliente saem assim:
+**Várias linhas, em bloco.** Sem isso os `objetivos` do cliente saem assim:
 
     objetivos: "Objetivo geral: avaliar o perfil.\n\nObjetivos específicos:\n..."
 
@@ -2636,13 +2656,21 @@ O PyYAML só aceita o bloco literal se nenhuma linha terminar em espaço e não
 houver `\r` no meio — quem garante isso é o `modelo._texto_longo`, na
 fronteira onde o texto entra.
 
+**Só de algarismos, entre aspas.** A matrícula é um código, e não um número:
+`0189` é uma, e 189 é outra. O PyYAML segue o YAML 1.1, em que um número com zero na
+frente é octal: ele põe aspas em `00742`, que o 1.1 leria como o octal 482, mas não
+em `0189`, que tem 8 e 9 e não é octal. O ruamel, que lê a ficha, segue o 1.2, em
+que `0189` é o inteiro 189 — e a matrícula perdia o zero. Entre aspas, os dois leem
+o mesmo texto. Vale para o `record_id` e para qualquer outro texto só de algarismos;
+a ficha escrita antes, sem as aspas, é lida com o zero pelo `ficha._texto`.
+
 ### `def _texto_projeto_yaml(cliente, banco, hoje)`
 
-*linha 765*
+*linha 779*
 
 Monta o `projeto.yaml`.
 
-*linha 789*
+*linha 803*
 
 > `or None` para que o campo em branco saia `finalidade: null`, do mesmo
 > jeito que o `prazo` — uma linha terminada em dois-pontos parece uma
@@ -2650,7 +2678,7 @@ Monta o `projeto.yaml`.
 
 ### `def _texto_historico(cliente, banco, quando)`
 
-*linha 807*
+*linha 821*
 
 Monta o `historico.md` com a primeira linha de log já escrita.
 
@@ -2660,23 +2688,23 @@ existe justamente para ser aberto seis meses depois.
 
 ### `def _linha_historico(acao, quando)`
 
-*linha 840*
+*linha 854*
 
 ### Funções auxiliares
 
 ### `def _escrever_texto(caminho, conteudo)`
 
-*linha 846*
+*linha 860*
 
 Escreve texto sempre em UTF-8 e sempre com `\n`.
 
 ### `def _extensao_do_mime(tipo_mime)`
 
-*linha 852*
+*linha 866*
 
 ### `def tamanho_legivel(bytes_)`
 
-*linha 858*
+*linha 872*
 
 Formata o tamanho para leitura humana, com vírgula decimal.
 
@@ -2688,7 +2716,7 @@ relatório acaba com "1,5 MiB" numa tabela e "1572864" na seguinte.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1270 linhas.*
+*1289 linhas.*
 
 Leitura e escrita do `projeto.yaml` — a ficha do atendimento.
 
@@ -2736,7 +2764,8 @@ Toda a persistência do `projeto.yaml` está atrás das funções públicas abai
 em uso. Desde a 1.15.0, o `ler_yaml` estende o mesmo leitor aos outros YAML editados
 à mão — o `desenho.yaml` da amostragem é o primeiro —, e o `numero_escrito` é a regra
 de ler um número escrito num deles. Desde a 1.17.0, o `status_reconhecido` e o
-`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve.
+`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve. Desde a
+1.18.1, a matrícula e o `record_id` escritos sem aspas voltam com o zero da frente.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -2748,14 +2777,14 @@ esta implementação de YAML por outra precisa levá-las junto.
 
 ### `CAMPOS_VERSAO`
 
-*linha 98*
+*linha 100*
 
 > Ordem em que os campos de uma versão aparecem no arquivo. Fixa de propósito:
 > o `projeto.yaml` é lido por humanos, e coluna que muda de lugar cansa.
 
 ### `class FichaError(RuntimeError)`
 
-*linha 103*
+*linha 105*
 
 Falha ao lidar com o `projeto.yaml`, já traduzida para o usuário.
 
@@ -2765,13 +2794,13 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class ProjetoNaoEncontradoError(FichaError)`
 
-*linha 113*
+*linha 115*
 
 Nenhuma pasta em `FLATCAP_ROOT` corresponde ao identificador pedido.
 
 ### `class FichaAusenteError(FichaError)`
 
-*linha 119*
+*linha 121*
 
 A pasta existe, mas não tem `projeto.yaml`.
 
@@ -2780,11 +2809,11 @@ usuário: é um projeto que ainda não foi adotado pela ferramenta.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 127*
+*linha 129*
 
 ### `class ProjetoAmbiguoError(FichaError)`
 
-*linha 132*
+*linha 134*
 
 A matrícula pedida tem mais de um projeto, e nenhum deles é "o" projeto.
 
@@ -2800,11 +2829,11 @@ REDCap, e dois iguais querem dizer pasta copiada.
 
 #### `def __init__(self, mensagem, projetos)`
 
-*linha 147*
+*linha 149*
 
 ### `class LayoutAntigoError(FichaError)`
 
-*linha 152*
+*linha 154*
 
 A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
 à 1.1.0.
@@ -2816,21 +2845,21 @@ um só, e mora em `projeto.texto_da_migracao`.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 163*
+*linha 165*
 
 ### `class FichaInvalidaError(FichaError)`
 
-*linha 168*
+*linha 170*
 
 O `projeto.yaml` existe mas não é YAML válido, ou não tem o formato esperado.
 
 #### `def __init__(self, mensagem, caminho)`
 
-*linha 173*
+*linha 175*
 
 ### `class Versao`
 
-*linha 179*
+*linha 181*
 
 Uma versão do banco, do jeito que ela é registrada em `dados:`.
 
@@ -2840,14 +2869,14 @@ mandou o mesmo de novo?" sem abrir planilha nenhuma.
 
 #### `def sequencia(self)`
 
-*linha 195*
+*linha 197*
 
 O número do prefixo (`00`, `01`, `02`...), ou `None` se o nome não seguir
 a convenção. É o índice da versão na história do projeto.
 
 ### `class Ficha`
 
-*linha 204*
+*linha 206*
 
 O conteúdo do `projeto.yaml` que o FlatCap precisa conhecer.
 
@@ -2886,18 +2915,18 @@ o `bloco(raiz, chave)`, mais abaixo.
 
 #### `def versao_redcap(self)`
 
-*linha 255*
+*linha 257*
 
 A versão baixada do REDCap — a intocável. Identificada pela origem, e não
 pelo prefixo `00_`, porque a origem é o fato e o nome é convenção.
 
 #### `def ultima_versao(self)`
 
-*linha 266*
+*linha 268*
 
 ### `def versao_vigente(ficha)`
 
-*linha 270*
+*linha 272*
 
 A versão do banco que vale hoje: a de maior número de sequência.
 
@@ -2924,11 +2953,11 @@ meio segundo de partida para consultar uma lista que ele já tinha na mão. O
 
 ### `def caminho_da_ficha(raiz)`
 
-*linha 308*
+*linha 310*
 
 ### `def localizar_projeto(root, identificador)`
 
-*linha 312*
+*linha 314*
 
 Encontra a pasta do projeto a partir de um `record_id` ou de uma matrícula.
 
@@ -2968,20 +2997,20 @@ Raises:
     FichaAusenteError: a pasta foi encontrada pelo nome, mas não tem ficha.
     FichaInvalidaError: há ficha que não abre, e pode ser justamente a pedida.
 
-*linha 387*
+*linha 389*
 
 > Nada bateu. Antes de dizer "não existe", os três diagnósticos que dizem o
 > que fazer, em vez de mandar o usuário procurar erro de digitação.
 
-*linha 390*
+*linha 392*
 
 > 1. A pasta do cliente ficou no formato de antes da 1.1.0.
 
-*linha 401*
+*linha 403*
 
 > 2. A pasta existe pelo nome, e não tem projeto dentro.
 
-*linha 421*
+*linha 423*
 
 > 3. Uma ficha ilegível não é uma nota de rodapé: enquanto houver uma, a
 > busca não pode afirmar que o projeto não existe — ele pode ser justamente
@@ -2990,7 +3019,7 @@ Raises:
 
 ### `def projetos_da_matricula(root, matricula)`
 
-*linha 445*
+*linha 447*
 
 Todos os projetos de um cliente, em ordem, lendo as fichas.
 
@@ -3001,7 +3030,7 @@ de todos os projetos, que a Fase 8 previa aqui, é o `varrer`, logo abaixo.
 
 ### `class Varredura`
 
-*linha 462*
+*linha 464*
 
 O que há no `FLATCAP_ROOT`, lido ficha por ficha.
 
@@ -3009,11 +3038,11 @@ As três listas do `_varrer`, cada item com o que já carrega: a `Ficha` sabe a
 pasta dela (`raiz`), e a `FichaInvalidaError`, o arquivo que não abriu
 (`caminho`).
 
-- *linha 473* — `antigas: tuple[Path, ...] = ()` — as pastas de cliente no formato anterior à 1.1.0
+- *linha 475* — `antigas: tuple[Path, ...] = ()` — as pastas de cliente no formato anterior à 1.1.0
 
 ### `def varrer(root)`
 
-*linha 476*
+*linha 478*
 
 Todos os projetos do `FLATCAP_ROOT`, lendo as fichas: o painel do
 `flatcap status` parte daqui.
@@ -3026,7 +3055,7 @@ mesmo vale para a pasta no formato antigo.
 
 ### `def _varrer(root)`
 
-*linha 495*
+*linha 497*
 
 Percorre o `FLATCAP_ROOT` inteiro e devolve o que encontrou, em três listas:
 os projetos legíveis, as fichas que não abrem, e as pastas de cliente que
@@ -3037,14 +3066,14 @@ Duas voltas, e não um `rglob`, para que a profundidade seja explícita: um
 uma ficha esquecida dentro de `2. Versões antigas/` de ser confundida com um
 projeto — e é o que permite reconhecer o layout antigo em vez de ignorá-lo.
 
-*linha 524*
+*linha 526*
 
 > A ficha antiga não abrir não impede o diagnóstico de layout;
 > só tira dele o número do projeto a criar.
 
 ### `def _mesmo_record(da_ficha, procurado)`
 
-*linha 539*
+*linha 541*
 
 O `record_id` da ficha é o que o usuário digitou?
 
@@ -3060,7 +3089,7 @@ outra pessoa.
 
 ### `def _mensagem_ambigua(identificador, projetos, achados)`
 
-*linha 562*
+*linha 564*
 
 A lista de projetos do cliente, com o que distingue um do outro.
 
@@ -3072,7 +3101,7 @@ sozinho não responde isso seis meses depois.
 
 ### `def ler(raiz)`
 
-*linha 603*
+*linha 605*
 
 Lê o `projeto.yaml` de uma pasta de projeto.
 
@@ -3082,7 +3111,7 @@ Raises:
 
 ### `def bloco(raiz, chave)`
 
-*linha 643*
+*linha 645*
 
 O bloco cru de uma chave qualquer do `projeto.yaml`, ou `None`.
 
@@ -3109,13 +3138,13 @@ Raises:
 
 ### `def _simples(valor)`
 
-*linha 682*
+*linha 684*
 
 Converte o que o `ruamel` devolveu para `dict`, `list` e escalares comuns.
 
 ### `def _analises(documento)`
 
-*linha 693*
+*linha 695*
 
 A lista `analises:`, com o que não for texto descartado.
 
@@ -3127,7 +3156,7 @@ com a lista — por um erro de digitação em uma linha que nenhum deles lê.
 
 ### `def ler_yaml(caminho)`
 
-*linha 713*
+*linha 715*
 
 O conteúdo de outro YAML editado à mão, em tipos comuns de Python.
 
@@ -3146,14 +3175,14 @@ Raises:
 
 ### `_NUMERO_ESCRITO`
 
-*linha 737*
+*linha 739*
 
 > Um número escrito como texto num YAML editado à mão: `"24,9"`, `"24.9"`, `" 25 "`.
 > Sem separador de milhar — `1.234,5` é ambíguo, e ambiguidade numa ficha se recusa.
 
 ### `def numero_escrito(valor)`
 
-*linha 742*
+*linha 744*
 
 Um número, a partir de como o YAML o trouxe; `None` quando não é um.
 
@@ -3169,7 +3198,7 @@ número escrito à mão é como uma ficha aceita `2,5` e a outra o recusa.
 
 ### `_DATA_ISO`
 
-*linha 768*
+*linha 770*
 
 > As duas formas de escrever uma data à mão que a ficha aceita: a do YAML
 > (`2026-11-04`, que ele já entrega como data) e a do Brasil (`04/11/2026`, que ele
@@ -3177,7 +3206,7 @@ número escrito à mão é como uma ficha aceita `2,5` e a outra o recusa.
 
 ### `def data_escrita(valor)`
 
-*linha 775*
+*linha 777*
 
 Uma data, a partir de como o YAML a trouxe; `None` quando não é uma.
 
@@ -3190,7 +3219,7 @@ numa ficha se recusa, como no `numero_escrito`. A data que não existe —
 
 ### `_STATUS_DE_ANTES`
 
-*linha 805*
+*linha 807*
 
 > Os status que o cabeçalho de toda ficha anterior à 1.17.0 sugeria. O `novo` é o que
 > o `flatcap novo` escrevia, e é o `não iniciado` de hoje; o `em_analise` é o
@@ -3200,14 +3229,14 @@ numa ficha se recusa, como no `numero_escrito`. A data que não existe —
 
 ### `def _chave_do_status(texto)`
 
-*linha 816*
+*linha 818*
 
 O status reduzido ao que se compara: minúsculas, sem acento, `_` e `-` como
 espaço, e um espaço só entre as palavras.
 
 ### `def status_reconhecido(escrito)`
 
-*linha 832*
+*linha 834*
 
 Qual dos status do `projeto.STATUS` está escrito na ficha; `None` quando não é
 nenhum deles.
@@ -3226,7 +3255,7 @@ está, marcado.
 
 ### `def acrescentar_versao(raiz, versao)`
 
-*linha 853*
+*linha 855*
 
 Acrescenta uma entrada ao fim da lista `dados:`, preservando o resto.
 
@@ -3235,11 +3264,11 @@ Não é um "reescreve o arquivo com os campos que eu conheço". O `projeto.yaml`
 e um comando que apagasse o `prazo` que você preencheu, ou a lista `analises`
 que você combinou na reunião, tornaria a promessa falsa.
 
-*linha 878*
+*linha 880*
 
 > Chave ausente, `dados:` vazio (que vira None) ou sobrescrito por engano.
 
-*linha 884*
+*linha 886*
 
 > Uma lista que veio do arquivo como `dados: []` mantém o estilo em linha, e
 > a entrada nova sairia toda espremida em uma linha só. Bloco é o formato em
@@ -3247,7 +3276,7 @@ que você combinou na reunião, tornaria a promessa falsa.
 
 ### `def definir_status(raiz, status)`
 
-*linha 893*
+*linha 895*
 
 Escreve o `status:` da ficha, preservando o resto — os comentários, as aspas e a
 ordem das chaves, como o `acrescentar_versao`.
@@ -3272,7 +3301,7 @@ Raises:
 
 ### `RECUO_PADRAO`
 
-*linha 941*
+*linha 943*
 
 > O `indent()` do ruamel vale para o documento inteiro — não há como preservar o
 > recuo de cada lista separadamente. Então a escolha é entre impor um estilo e
@@ -3280,18 +3309,18 @@ Raises:
 > `  - descritiva` escrito à mão em `- descritiva`: YAML idêntico, e um diff
 > gratuito num arquivo que o cabeçalho da ficha promete não mexer.
 
-- *linha 946* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
+- *linha 948* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
 
 ### `_ABRE_BLOCO`
 
-*linha 948*
+*linha 950*
 
 > Uma chave que termina em `|` ou `>` abre um bloco literal. O `[-+]?\d*` cobre
 > os indicadores (`|-`, `>+`, `|2`) e o `(#.*)?` o comentário na mesma linha.
 
 ### `def _recuo_das_listas(texto)`
 
-*linha 953*
+*linha 955*
 
 Em que coluna, em relação à chave que as contém, este arquivo escreve o `-`.
 
@@ -3316,14 +3345,15 @@ do cliente, não item de lista.
 
 ### `def _construtor(recuo_da_lista)`
 
-*linha 1005*
+*linha 1007*
 
 O leitor/escritor round-trip, configurado.
 
 `typ="rt"` é o modo que carrega comentários e formatação junto com os dados
-e os devolve na hora de gravar. `preserve_quotes` mantém `matricula: "00742"`
-entre aspas — sem isso a matrícula voltaria como o número 742 e a pasta
-deixaria de bater com o registro. E `width` alto impede que o ruamel quebre
+e os devolve na hora de gravar. `preserve_quotes` mantém as aspas que cada valor
+tinha: `matricula: "00742"` continua com as duplas, em vez de voltar como
+`'00742'` — reescrever a ficha não muda o que você não mexeu. (O zero da frente
+não depende delas: ver o `_texto`.) E `width` alto impede que o ruamel quebre
 um nome de arquivo longo em duas linhas: é YAML válido, mas ilegível em um
 arquivo feito para ser aberto no editor.
 
@@ -3333,7 +3363,7 @@ decide no código: ela vem do arquivo que está sendo reescrito. Ver
 
 ### `def _representar_nulo(dumper, _dados)`
 
-*linha 1028*
+*linha 1031*
 
 Escreve o vazio como `null`, e não como uma linha terminada em dois-pontos.
 
@@ -3344,13 +3374,13 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _carregar_documento(caminho)`
 
-*linha 1040*
+*linha 1043*
 
 ### `def _gravar_documento(caminho, documento)`
 
-*linha 1048*
-
 *linha 1051*
+
+*linha 1054*
 
 > O recuo é lido do arquivo que está no disco, e não do documento carregado:
 > o ruamel prende os comentários aos dados, mas não a coluna em que as listas
@@ -3358,7 +3388,7 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _mapa_da_versao(versao)`
 
-*linha 1061*
+*linha 1064*
 
 Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
@@ -3366,7 +3396,7 @@ Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
 ### `def sequencia_do_nome(nome)`
 
-*linha 1077*
+*linha 1080*
 
 Extrai o prefixo numérico de `02_revisado_2026-03-14_banco.xlsx` → 2.
 
@@ -3376,7 +3406,7 @@ e é por isso que a função não devolve `-1` nem `0` como "não sei".
 
 ### `def _ler_texto(caminho)`
 
-*linha 1091*
+*linha 1094*
 
 Lê sempre em UTF-8, nunca na codificação do sistema.
 
@@ -3385,7 +3415,7 @@ voltaria diferente do que foi gravado — ou estouraria na leitura.
 
 ### `def escrever_atomico(caminho, texto)`
 
-*linha 1110*
+*linha 1113*
 
 Grava o arquivo inteiro ou não grava nada.
 
@@ -3403,7 +3433,7 @@ arquivo vazio.
 
 ### `def temporario_ao_lado(destino)`
 
-*linha 1139*
+*linha 1142*
 
 Cria um arquivo vazio, de nome único, na pasta do destino. Devolve o
 descritor aberto para escrita e o caminho.
@@ -3420,28 +3450,40 @@ quem decide é a permissão da pasta, e nada mudou por lá.
 Pública porque o `documento.py` grava o `.docx` atomicamente com o mesmo
 temporário — e duas formas de criá-lo é como uma delas fica com o defeito.
 
-*linha 1157*
+*linha 1160*
 
 > `O_BINARY` só existe no Windows: sem ele a biblioteca C trocaria cada `\n`
 > por `\r\n` na escrita, por baixo do `newline="\n"`.
 
 ### `def _texto(documento, chave)`
 
-*linha 1169*
+*linha 1172*
+
+O campo como texto, como está escrito na ficha — com o zero da frente.
+
+A matrícula é um código, e não uma quantidade: `0189` é uma, e 189 é outra. O
+`flatcap novo` escrevia a ficha com o PyYAML, que segue o YAML 1.1, e ela é lida
+pelo ruamel, que segue o 1.2. No 1.1, um número com zero na frente é octal, e o
+PyYAML põe aspas em `00742`, mas não em `0189`, que tem 8 e 9 e não é octal; no
+1.2, `0189` é o inteiro 189. A matrícula perdia o zero no `flatcap status`, no nome
+do relatório, no manifesto e na busca — `flatcap relatorio 0189` não achava o
+projeto. O ruamel guarda quantos algarismos o número tinha, e é com eles que o zero
+volta: a ficha escrita assim não precisa ser editada. Vale para qualquer campo, e
+para o `0189` que você digitar sem aspas.
 
 ### `def _versoes(documento, caminho)`
 
-*linha 1176*
+*linha 1195*
 
 Traduz a lista `dados:` para objetos, recusando o que não dá para interpretar.
 
 ### `def _inteiro(valor)`
 
-*linha 1211*
+*linha 1230*
 
 ### `def _data(valor)`
 
-*linha 1218*
+*linha 1237*
 
 O YAML já entrega `date` quando a data está sem aspas. Com aspas vem texto,
 e é isso que esta função resgata — o arquivo é editado à mão, e digitar
@@ -3449,7 +3491,7 @@ e é isso que esta função resgata — o arquivo é editado à mão, e digitar
 
 ### `def _diagnostico(texto, caminho, erro)`
 
-*linha 1236*
+*linha 1255*
 
 Traduz o estouro do parser, com um caso especial que vale ouro.
 

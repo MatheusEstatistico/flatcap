@@ -7,6 +7,17 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.18.1] — a matrícula com zero na frente
+
+### Corrigido
+- A matrícula com zero na frente e um 8 ou um 9 — `0189`, `01928` — perdia o zero em tudo
+  que lê o `projeto.yaml`: o `flatcap status` mostrava `1928` (o `listar`, que a lê do
+  REDCap, mostrava `01928`), o relatório saía `Relatorio_1928_….docx`, e o `<id>` pela
+  matrícula não achava o projeto. O `flatcap novo` passa a escrevê-la entre aspas, e a ficha
+  escrita antes, sem elas, é lida com o zero: **nenhuma ficha precisa ser editada**. O
+  relatório já gerado sem o zero vai para `2. Versões antigas/` no próximo
+  `flatcap relatorio`, como qualquer anterior.
+
 ## [1.18.0] — o status do cálculo amostral
 
 ### Acrescentado
