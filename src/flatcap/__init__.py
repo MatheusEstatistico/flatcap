@@ -10,6 +10,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     projeto.py     monta a pasta do projeto: decide um Plano e depois o escreve
     ficha.py       lê e escreve o projeto.yaml; encontra o projeto a partir de um id
     dados.py       versiona os bancos: adiciona, roda a anterior, confere o disco
+    painel.py      o painel do `flatcap status`: o status e o prazo de cada projeto
     banco.py       abre a versão vigente do banco como um quadro do pandas
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
@@ -32,13 +33,13 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     cli.py         expõe os comandos no terminal
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
-`projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
-e `manifesto`, `metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`,
-`metodologia`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é
-o par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe, e o
-`relatorio` só chama o `documento` de dentro do `executar_relatorio`. A `amostragem` conhece
-`amostral`, `ficha`, `manifesto` e `relatorio`, e chama o `documento` do mesmo jeito, de
-dentro do `executar_amostragem`.
+`projeto`, `painel` conhece só `ficha` e `projeto`, `perfil` conhece `banco` e `dicionario`,
+`descritiva` conhece `banco`, `dicionario` e `manifesto`, `metodologia` conhece só o
+`manifesto`, `relatorio` conhece `manifesto`, `metodologia`, `dicionario`, `dados` e `ficha`,
+e nenhuma delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento`
+conhece o `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
+`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
+e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -620,6 +621,43 @@ carregado —, e por isso os nomes que os manifestos gravam estão escritos nele
 rodou — uma que esta versão não conheça — sai do parágrafo, e o terminal diz qual. A que não
 testou nada (toda linha "não testado") sai sem frase e sem aviso: a tabela dela já diz o
 motivo.
+
+## 1.17.0 — o painel de status
+
+**`flatcap status`: os projetos que já têm pasta, com o status e o prazo de cada um.** Uma
+tabela como a do `listar` — id, matrícula, pasta local, status e prazo —, uma linha por
+`Projeto NNN`, na ordem do `record_id`. O `listar` parte do REDCap e procura a pasta de cada
+solicitação; o `status` faz o caminho inverso, ficha por ficha, e não fala com o REDCap: fica
+de pé quando o servidor cai, e mostra a pasta cuja matrícula foi corrigida no REDCap depois de
+ela existir.
+
+**O status tem cinco valores**: `não iniciado`, `aguardando banco de dados`, `em andamento`,
+`pronto` e `finalizado`, no `projeto.STATUS`. O `flatcap novo` escreve o primeiro, o
+`flatcap relatorio` escreve o `pronto` quando escreve o documento, e os outros três são
+escritos à mão. O `finalizado` tira o projeto do painel. A leitura é tolerante e a escrita é
+estrita (`ficha.status_reconhecido`): `Em Andamento` e `nao iniciado` são os de sempre, e os
+dois do cabeçalho de antes — `novo` e `em_analise` — também, porque toda ficha criada até a
+1.16 diz `novo`. O terceiro de antes, `entregue`, pode ser o `pronto` ou o `finalizado`, e não
+é adivinhado: sai como está escrito, em amarelo, com o aviso do que escrever no lugar.
+
+**O prazo é a data final**, escrita à mão depois da reunião, como `2026-11-04` ou
+`04/11/2026` (`ficha.data_escrita`). O painel mostra a data, e ATRASADO, em vermelho, quando
+ela passou sem o projeto estar `pronto` — o prazo é o do relatório, e o projeto pronto já o
+tem. O dia do prazo ainda não é atraso. A palavra vai escrita, e não só a cor, para o painel
+dizer o mesmo sem cor nenhuma. O prazo que não é data aparece como está escrito, em amarelo;
+o `Ficha.prazo` entra como texto para um prazo digitado errado não impedir a ficha de abrir.
+
+**O relatório é a única escrita nova na ficha** (`ficha.definir_status`), e a exceção que o
+cabeçalho de toda ficha nova passa a dizer: o resto continua intocado, e o comentário escrito
+ao lado do `status:` também. O documento vem primeiro; o status que não se escreve vira aviso
+e não desfaz o relatório, e uma falha depois dele devolve a ficha ao texto que tinha. A
+simulação diz que o status vai mudar, e o histórico diz que mudou.
+
+**Um módulo novo, `painel.py`**, que monta dados e não texto: uma `LinhaDoPainel` por projeto,
+com o prazo como data e o atraso como um sim ou não. A CLI os desenha; uma interface gráfica
+pode ordenar, filtrar e abrir a pasta sem ler a tabela do terminal. O painel parte do
+`ficha.varrer`, a mesma varredura de dois níveis do `localizar_projeto`, e lista a ficha que
+não abre e a pasta no formato de antes da 1.1.0, em vez de deixá-las sumir.
 """
 
-__version__ = "1.16.1"
+__version__ = "1.17.0"

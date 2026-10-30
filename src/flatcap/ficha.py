@@ -41,12 +41,13 @@ devolve na gravação. É o que sustenta literalmente a promessa do cabeçalho d
 ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 
 Toda a persistência do `projeto.yaml` está atrás das funções públicas abaixo —
-`ler`, `bloco`, `acrescentar_versao`, `localizar_projeto`, `projetos_da_matricula`,
-`caminho_da_ficha`, `versao_vigente` e `sequencia_do_nome`. Quem importa este
-módulo não sabe qual biblioteca de YAML está em uso. Desde a 1.15.0, o `ler_yaml`
-estende o mesmo leitor aos outros YAML editados à mão — o `desenho.yaml` da
-amostragem é o primeiro —, e o `numero_escrito` é a regra de ler um número escrito
-num deles.
+`ler`, `bloco`, `acrescentar_versao`, `definir_status`, `localizar_projeto`,
+`projetos_da_matricula`, `varrer`, `caminho_da_ficha`, `versao_vigente` e
+`sequencia_do_nome`. Quem importa este módulo não sabe qual biblioteca de YAML está
+em uso. Desde a 1.15.0, o `ler_yaml` estende o mesmo leitor aos outros YAML editados
+à mão — o `desenho.yaml` da amostragem é o primeiro —, e o `numero_escrito` é a regra
+de ler um número escrito num deles. Desde a 1.17.0, o `status_reconhecido` e o
+`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -63,6 +64,7 @@ import math
 import os
 import re
 import secrets
+import unicodedata
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
@@ -79,11 +81,19 @@ from .nomes import (
     rotulo_do_projeto,
     sanitizar,
 )
-from .projeto import ARQUIVO_PROJETO, texto_da_migracao
+from .projeto import (
+    ARQUIVO_PROJETO,
+    STATUS,
+    STATUS_EM_ANDAMENTO,
+    STATUS_NAO_INICIADO,
+    texto_da_migracao,
+)
 
 IMPLEMENTACAO = "ruamel.yaml (round-trip — preserva comentários e formatação)"
 
 CHAVE_DADOS = "dados"
+CHAVE_STATUS = "status"
+CHAVE_PRAZO = "prazo"
 
 # Ordem em que os campos de uma versão aparecem no arquivo. Fixa de propósito:
 # o `projeto.yaml` é lido por humanos, e coluna que muda de lugar cansa.
@@ -195,9 +205,9 @@ class Ficha:
     """
     O conteúdo do `projeto.yaml` que o FlatCap precisa conhecer.
 
-    Deliberadamente **não** carrega tudo o que está no arquivo. `prazo` e
-    `analises` são seus, e as fases seguintes leem o que precisarem. O que entra
-    aqui é o mínimo para identificar o projeto e versionar o banco.
+    Deliberadamente **não** carrega tudo o que está no arquivo: os blocos de cada
+    análise são seus, e quem precisa de um o lê pelo `bloco`. O que entra aqui é o
+    mínimo para identificar o projeto e versionar o banco.
 
     A exceção são `finalidade` e `objetivos`, e ela tem uma regra por trás: entra
     aqui o que alguma camada de cima **imprime**. Os dois saem na primeira página
@@ -216,6 +226,13 @@ class Ficha:
     cima consulta: é a ordem das seções do relatório quando há mais de uma rodada
     na pasta.
 
+    `prazo` é a quarta, pela regra da primeira: o `flatcap status` o imprime, e lê
+    todas as fichas do `FLATCAP_ROOT` de uma vez — pedir o prazo pelo `bloco`
+    abriria cada arquivo duas vezes. Entra como está escrito (`2026-11-04`,
+    `04/11/2026`, ou o que estiver lá), e quem o lê como data é o `data_escrita`: um
+    prazo digitado errado não pode fazer a ficha inteira deixar de abrir. O `status`
+    entra do mesmo jeito, como texto, e quem o reconhece é o `status_reconhecido`.
+
     Os parâmetros de cada análise — os pares da correlação, a lista de variáveis
     da normalidade — **não** entram aqui. Eles são de um módulo só, e um campo na
     `Ficha` por análise faria esta classe crescer a cada análise nova. Quem os lê é
@@ -232,6 +249,7 @@ class Ficha:
     finalidade: str = ""
     objetivos: str = ""
     analises: tuple[str, ...] = ()
+    prazo: str = ""
 
     @property
     def versao_redcap(self) -> Versao | None:
@@ -428,17 +446,50 @@ def projetos_da_matricula(root: Path, matricula: str) -> tuple[Path, ...]:
     """
     Todos os projetos de um cliente, em ordem, lendo as fichas.
 
-    Pública porque é a pergunta que a `ProjetoAmbiguoError` responde, e porque a
-    Fase 8 — o painel de todos os projetos — vai precisar exatamente disto. Lê
-    as fichas, ao contrário do `nomes.projetos_do_cliente`, que só olha nomes:
-    aqui a matrícula vem da ficha, então uma pasta renomeada à mão continua
-    sendo encontrada.
+    Pública porque é a pergunta que a `ProjetoAmbiguoError` responde. Lê as fichas,
+    ao contrário do `nomes.projetos_do_cliente`, que só olha nomes: aqui a matrícula
+    vem da ficha, então uma pasta renomeada à mão continua sendo encontrada. O painel
+    de todos os projetos, que a Fase 8 previa aqui, é o `varrer`, logo abaixo.
     """
     procurado = sanitizar(str(matricula))
     if not procurado:
         return ()
     projetos, _, _ = _varrer(Path(root))
     return tuple(pasta for pasta, ficha in projetos if ficha.matricula == procurado)
+
+
+@dataclass(frozen=True)
+class Varredura:
+    """
+    O que há no `FLATCAP_ROOT`, lido ficha por ficha.
+
+    As três listas do `_varrer`, cada item com o que já carrega: a `Ficha` sabe a
+    pasta dela (`raiz`), e a `FichaInvalidaError`, o arquivo que não abriu
+    (`caminho`).
+    """
+
+    projetos: tuple[Ficha, ...] = ()
+    ilegiveis: tuple[FichaInvalidaError, ...] = ()
+    antigas: tuple[Path, ...] = ()  # as pastas de cliente no formato anterior à 1.1.0
+
+
+def varrer(root: Path) -> Varredura:
+    """
+    Todos os projetos do `FLATCAP_ROOT`, lendo as fichas: o painel do
+    `flatcap status` parte daqui.
+
+    É a varredura do `localizar_projeto` e do `projetos_da_matricula`, e não uma
+    segunda: dois níveis, explícitos, para uma ficha esquecida em
+    `2. Versões antigas/` não virar projeto. A ficha que não abre não interrompe a
+    varredura — volta em `ilegiveis`, para quem pediu dizer o que fazer com ela, e o
+    mesmo vale para a pasta no formato antigo.
+    """
+    projetos, ilegiveis, antigas = _varrer(Path(root))
+    return Varredura(
+        projetos=tuple(ficha for _, ficha in projetos),
+        ilegiveis=tuple(erro for _, erro in ilegiveis),
+        antigas=tuple(pasta for pasta, _ in antigas),
+    )
 
 
 def _varrer(
@@ -580,11 +631,12 @@ def ler(raiz: Path) -> Ficha:
         matricula=_texto(documento, "matricula"),
         nome=_texto(documento, "nome"),
         tipo=_texto(documento, "tipo"),
-        status=_texto(documento, "status"),
+        status=_texto(documento, CHAVE_STATUS),
         dados=_versoes(documento, caminho),
         finalidade=_texto(documento, "finalidade"),
         objetivos=_texto(documento, "objetivos"),
         analises=_analises(documento),
+        prazo=_texto(documento, CHAVE_PRAZO),
     )
 
 
@@ -713,6 +765,88 @@ def numero_escrito(valor: Any) -> float | None:
     return None
 
 
+# As duas formas de escrever uma data à mão que a ficha aceita: a do YAML
+# (`2026-11-04`, que ele já entrega como data) e a do Brasil (`04/11/2026`, que ele
+# entrega como texto). Dia e mês com um algarismo só valem nas duas.
+_DATA_ISO = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
+_DATA_BR = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
+
+
+def data_escrita(valor: Any) -> date | None:
+    """
+    Uma data, a partir de como o YAML a trouxe; `None` quando não é uma.
+
+    É a regra do `prazo:`, que se escreve à mão depois da reunião. Sem aspas,
+    `2026-11-04` chega do YAML como data, e entra como está; `04/11/2026` chega como
+    texto, e é lido como dia, mês e ano — a ordem de quem escreve em português. O ano
+    tem quatro algarismos nas duas formas: `04/11/26` é 2026 ou 1926, e ambiguidade
+    numa ficha se recusa, como no `numero_escrito`. A data que não existe —
+    `31/02/2026` — também não é data.
+    """
+    if isinstance(valor, datetime):
+        return valor.date()
+    if isinstance(valor, date):
+        return valor
+    if not isinstance(valor, str):
+        return None
+    limpo = valor.strip()
+    if achado := _DATA_ISO.match(limpo):
+        ano, mes, dia = (int(parte) for parte in achado.groups())
+    elif achado := _DATA_BR.match(limpo):
+        dia, mes, ano = (int(parte) for parte in achado.groups())
+    else:
+        return None
+    try:
+        return date(ano, mes, dia)
+    except ValueError:
+        return None
+
+
+# Os status que o cabeçalho de toda ficha anterior à 1.17.0 sugeria. O `novo` é o que
+# o `flatcap novo` escrevia, e é o `não iniciado` de hoje; o `em_analise` é o
+# `em andamento`. O terceiro, `entregue`, fica de fora de propósito: ele pode ser o
+# `pronto` ou o `finalizado`, e adivinhar o segundo tiraria do painel um projeto que
+# ainda não terminou.
+_STATUS_DE_ANTES = {
+    "novo": STATUS_NAO_INICIADO,
+    "em analise": STATUS_EM_ANDAMENTO,
+}
+
+
+def _chave_do_status(texto: str) -> str:
+    """
+    O status reduzido ao que se compara: minúsculas, sem acento, `_` e `-` como
+    espaço, e um espaço só entre as palavras.
+    """
+    decomposto = unicodedata.normalize("NFKD", str(texto))
+    sem_acento = "".join(letra for letra in decomposto if not unicodedata.combining(letra))
+    return " ".join(sem_acento.replace("_", " ").replace("-", " ").casefold().split())
+
+
+_STATUS_POR_CHAVE = {
+    **{_chave_do_status(status): status for status in STATUS},
+    **_STATUS_DE_ANTES,
+}
+
+
+def status_reconhecido(escrito: str) -> str | None:
+    """
+    Qual dos cinco status do `projeto.STATUS` está escrito na ficha; `None` quando não
+    é nenhum deles.
+
+    A leitura é tolerante e a escrita é estrita, como no `dicionario.csv`: o status se
+    digita à mão, e `Em andamento`, `EM ANDAMENTO` e `nao iniciado` são os de sempre —
+    o que volta é sempre a grafia do `projeto.STATUS`. Os dois que a ficha anterior à
+    1.17.0 sugeria no cabeçalho, `novo` e `em_analise`, também são reconhecidos,
+    porque toda ficha criada até ali diz `novo`.
+
+    O que não é nenhum deles volta `None`, e não um palpite: quem mostra o status é
+    quem decide o que fazer com um texto que não se reconhece — o painel o mostra como
+    está, marcado.
+    """
+    return _STATUS_POR_CHAVE.get(_chave_do_status(escrito or ""))
+
+
 # Escrita
 
 
@@ -752,6 +886,51 @@ def acrescentar_versao(raiz: Path, versao: Versao) -> None:
     # que este arquivo é lido e editado.
     if hasattr(lista, "fa"):
         lista.fa.set_block_style()
+
+    _gravar_documento(caminho, documento)
+
+
+def definir_status(raiz: Path, status: str) -> None:
+    """
+    Escreve o `status:` da ficha, preservando o resto — os comentários, as aspas e a
+    ordem das chaves, como o `acrescentar_versao`.
+
+    É a exceção à promessa do cabeçalho — "o FlatCap não sobrescreve o que você
+    escreveu" —, e o cabeçalho de toda ficha nova a diz: o `flatcap relatorio`,
+    quando escreve o documento, passa o projeto para `pronto`. Por isso o valor é
+    sempre um dos cinco do `projeto.STATUS`, na grafia de lá: um texto qualquer aqui
+    seria o FlatCap escrevendo na ficha um status que o painel não reconhece.
+
+    O comentário escrito ao lado do `status:` fica onde está. A ficha sem a chave a
+    ganha logo depois do `prazo`, que é onde o `flatcap novo` a escreve; sem `prazo`,
+    no fim.
+
+    Raises:
+        FichaAusenteError, FichaInvalidaError
+        ValueError: o status não é um dos cinco — defeito de quem chamou, e não do
+            arquivo.
+    """
+    if status not in STATUS:
+        raise ValueError(f"status desconhecido: {status!r}; os cinco são {STATUS}")
+
+    caminho = caminho_da_ficha(Path(raiz))
+    if not caminho.exists():
+        raise FichaAusenteError(
+            f"Não há {ARQUIVO_PROJETO} em {raiz}. O status não foi escrito.", Path(raiz)
+        )
+
+    documento = _carregar_documento(caminho)
+    if not isinstance(documento, dict):
+        raise FichaInvalidaError(
+            f"{caminho} não contém um mapeamento de campos; não sei onde escrever o "
+            "status.",
+            caminho,
+        )
+
+    if CHAVE_STATUS in documento or CHAVE_PRAZO not in documento:
+        documento[CHAVE_STATUS] = status
+    else:
+        documento.insert(list(documento).index(CHAVE_PRAZO) + 1, CHAVE_STATUS, status)
 
     _gravar_documento(caminho, documento)
 

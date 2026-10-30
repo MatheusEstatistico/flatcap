@@ -135,6 +135,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 |---|---|
 | `flatcap doctor` | Testa a configuração, a conexão com o REDCap, o `FLATCAP_ROOT` e as bibliotecas. |
 | `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
+| `flatcap status` | Mostra os projetos que já têm pasta, com o status e o prazo de cada um. |
 | `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
 | `flatcap amostragem <id>` | Calcula o tamanho da amostra a partir do `desenho.yaml` e escreve o relatório da amostra, em `4. Amostragem/`. |
 | `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco. |
@@ -184,6 +185,42 @@ diário: mostra o que chegou de um lado e o que já virou pasta do outro.
 |---|---|
 | `-n N`, `--ultimos N` | Só as N solicitações mais recentes (maior `record_id`). |
 | `--conferir-anexos` | Confirma cada anexo na API. Mais lento; só necessário se a coluna `Anexo` vier vazia para todo mundo. |
+
+### `flatcap status`
+
+O painel dos projetos que já têm pasta: uma linha por projeto, com o status e o prazo, na
+ordem do `record_id`. Lê o `projeto.yaml` de cada pasta — não fala com o REDCap e não escreve
+nada.
+
+```
+┏━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃  id ┃ Matrícula ┃ Pasta local ┃ Status                    ┃ Prazo      ┃
+┡━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│   6 │ 00742     │ Projeto 006 │ pronto                    │ 20/10/2026 │
+│  23 │ 12346     │ Projeto 023 │ não iniciado              │ —          │
+│  41 │ 00742     │ Projeto 041 │ em andamento              │ 04/11/2026 │
+│  58 │ 31207     │ Projeto 058 │ aguardando banco de dados │ —          │
+│ 137 │ 00742     │ Projeto 137 │ em andamento              │ ATRASADO   │
+└─────┴───────────┴─────────────┴───────────────────────────┴────────────┘
+
+5 projetos · 1 atrasado · 2 sem prazo · 1 finalizado fora do painel.
+```
+
+O `status:` da ficha é um destes cinco:
+
+| Status | Quem escreve |
+|---|---|
+| `não iniciado` | o `flatcap novo`, quando cria a pasta |
+| `aguardando banco de dados` | você, depois da reunião |
+| `em andamento` | você |
+| `pronto` | o `flatcap relatorio`, quando escreve o documento |
+| `finalizado` | você, quando o atendimento termina — e o projeto sai do painel |
+
+O `prazo:` é a data final, escrita à mão depois da reunião, como `2026-11-04` ou
+`04/11/2026`. Quando ela passa sem o projeto estar `pronto`, o painel mostra **ATRASADO**, em
+vermelho. Maiúscula e acento não importam no status (`Em andamento` vale); o que não é nenhum
+dos cinco, e o prazo que não é data, aparecem como estão escritos, em amarelo, com o aviso do
+que escrever no lugar.
 
 ### `flatcap novo <record_id>`
 
@@ -309,7 +346,8 @@ Monta o `.docx` a partir das análises já rodadas: lê o `manifesto.json` de ca
 recalcula nada. O documento sai na raiz da pasta do projeto como
 `Relatorio_<matrícula>_AAAA-MM-DD.docx`, e o anterior vai para `2. Versões antigas/`. Quando
 uma rodada já não descreve o que está na pasta — banco novo, dicionário mexido —, o documento
-sai assim mesmo, com o aviso escrito dentro dele.
+sai assim mesmo, com o aviso escrito dentro dele. Escrito o documento, o `status:` da ficha
+passa para `pronto`.
 
 A primeira página traz a finalidade e os objetivos que vieram do REDCap e, depois deles, o
 texto padrão de metodologia — o subtítulo "Metodologia Estatística (texto padrão)" e um
@@ -338,6 +376,7 @@ assim que uma capa institucional continua sendo a capa. Ao lado dele, o
 ```bash
 flatcap doctor                                   # a configuração está de pé?
 flatcap listar -n 10                             # o que chegou de novo?
+flatcap status                                   # como está cada projeto, e o que atrasou
 flatcap novo 42 --sim                            # cria a pasta do projeto
 flatcap perfil 42 --sim                          # perfil.md + dicionario.csv
 #   reunião com o cliente: revise o dicionario.csv e escreva as listas no projeto.yaml
@@ -362,7 +401,7 @@ FLATCAP_ROOT/                                   fora do Git
 ├── template.docx                               o modelo institucional do relatório
 └── 00742 - José Antônio de Sá/                 o cliente: matrícula - nome
     └── Projeto 006/                            o projeto: o record_id, em três dígitos
-        ├── projeto.yaml                        a ficha: o cliente, as listas, as versões
+        ├── projeto.yaml                        a ficha: cliente, status, prazo, listas e versões
         ├── historico.md                        uma linha por ação do FlatCap
         ├── perfil.md                           o documento da reunião
         ├── dicionario.csv                      as decisões da reunião

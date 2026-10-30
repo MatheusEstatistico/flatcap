@@ -65,6 +65,12 @@ Cada uma vira um `Alerta`, e o `Alerta` viaja para dentro do `.docx`, logo abaix
 da identificação. Um aviso que fica só no terminal é um aviso que ninguém lê
 depois de anexar o documento ao e-mail.
 
+**Que o projeto fica pronto.** Escrito o documento, o `status:` da ficha passa para
+`pronto` — é o que o `flatcap status` mostra, e o que tira dele o ATRASADO. É a
+única linha da ficha que este módulo escreve, e a simulação diz que vai escrevê-la.
+O documento vem primeiro: um status que não se escreve vira aviso, e não desfaz o
+relatório.
+
 **Como cada tabela vira tabela.** Os `.csv` da Fase 5 já trazem os números
 formatados em português e um cabeçalho de comentário com o denominador. A leitura
 aqui é fiel: separa os comentários das linhas de dados e não converte nada — o
@@ -125,7 +131,16 @@ from typing import Any
 from .dados import linha_do_tempo
 from .dicionario import ARQUIVO_DICIONARIO, linhas_de_comentario
 from .dicionario import ler as ler_dicionario
-from .ficha import Ficha, Versao, versao_vigente
+from .ficha import (
+    Ficha,
+    FichaError,
+    Versao,
+    caminho_da_ficha,
+    definir_status,
+    escrever_atomico,
+    status_reconhecido,
+    versao_vigente,
+)
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_DESCRITIVA,
@@ -142,6 +157,7 @@ from .projeto import (
     ARQUIVO_TEMPLATE,
     PASTA_ANALISES,
     PASTA_ANTIGAS,
+    STATUS_PRONTO,
     anotar,
     pastas_das_analises,
 )
@@ -417,6 +433,9 @@ class PlanoRelatorio:
     destino: Path
     arquivamentos: tuple[tuple[Path, Path], ...] = ()
     template: Path | None = None
+    # A ficha passa para `pronto` depois do documento? Falso quando ela já está: um
+    # arquivo que não muda não é reescrito.
+    muda_o_status: bool = False
 
     @property
     def raiz(self) -> Path:
@@ -444,6 +463,7 @@ class ResultadoRelatorio:
     caminho: Path
     arquivados: tuple[tuple[Path, Path], ...] = ()
     avisos: tuple[str, ...] = ()
+    status_trocado: bool = False  # a ficha passou para `pronto` nesta execução
 
 
 # Casos de uso
@@ -563,6 +583,7 @@ def preparar_relatorio(
         destino=raiz / nome_do_relatorio(ficha.matricula, quando.date()),
         arquivamentos=_arquivamentos(raiz),
         template=localizar_template(raiz, template),
+        muda_o_status=status_reconhecido(ficha.status) != STATUS_PRONTO,
     )
 
 
@@ -579,6 +600,10 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
     É o mesmo cuidado do `executar_adicao` da Fase 3 e do `executar_descritiva`
     da Fase 5.
 
+    Depois do documento, e antes do histórico, a ficha passa para `pronto` — e a
+    linha do histórico diz isso só quando a troca aconteceu. O que se desfaz inclui a
+    ficha: ela volta ao texto que tinha, letra por letra.
+
     O `documento.py` entra aqui dentro, e não no topo do arquivo, pelo mesmo
     motivo que o `matplotlib` entra dentro do `executar_descritiva`: a simulação
     não desenha documento nenhum e não deve pagar pelo `python-docx`.
@@ -588,6 +613,7 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
     arquivados: list[tuple[Path, Path]] = []
     avisos: list[str] = []
     desfazer: list[Any] = []
+    status_trocado = False
 
     try:
         for de, para in plano.arquivamentos:
@@ -599,8 +625,15 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
         escrever(plano.relatorio, plano.destino, plano.template)
         desfazer.append(lambda p=plano.destino: p.unlink(missing_ok=True))
 
+        if plano.muda_o_status:
+            status_trocado = _marcar_pronto(plano.raiz, avisos, desfazer)
+
         try:
-            anotar(plano.raiz, _acao_do_historico(plano), plano.relatorio.quando)
+            anotar(
+                plano.raiz,
+                _acao_do_historico(plano, status_trocado),
+                plano.relatorio.quando,
+            )
         except OSError as erro:
             avisos.append(
                 f"O relatório foi escrito, mas não consegui escrever no "
@@ -626,7 +659,37 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
         caminho=plano.destino,
         arquivados=tuple(arquivados),
         avisos=tuple(avisos),
+        status_trocado=status_trocado,
     )
+
+
+def _marcar_pronto(raiz: Path, avisos: list[str], desfazer: list[Any]) -> bool:
+    """
+    Passa a ficha para `pronto`, depois de o documento estar no disco. Devolve se
+    passou.
+
+    O documento é o produto e o status é o recibo dele: um `projeto.yaml` que não se
+    deixa escrever — aberto noutro programa, a ficha que deixou de abrir entre a
+    simulação e a execução — vira aviso, com o que escrever à mão, e o relatório fica.
+    É a regra do somente-leitura do `flatcap novo`: perder a marca é aceitável,
+    perder o produto por causa dela não.
+    """
+    caminho = caminho_da_ficha(raiz)
+    try:
+        # `newline=""` para o desfazer devolver o arquivo como estava, até o `\r\n` de
+        # uma ficha editada no Windows.
+        with caminho.open(encoding="utf-8", newline="") as arquivo:
+            antes = arquivo.read()
+        definir_status(raiz, STATUS_PRONTO)
+    except (FichaError, OSError, UnicodeDecodeError) as erro:
+        avisos.append(
+            f"O relatório foi escrito, mas não consegui passar o projeto para "
+            f"`{STATUS_PRONTO}` no {ARQUIVO_PROJETO}: {erro}\n"
+            f"Escreva `status: {STATUS_PRONTO}` à mão."
+        )
+        return False
+    desfazer.append(lambda: escrever_atomico(caminho, antes))
+    return True
 
 
 # Nome e lugar do arquivo
@@ -1452,7 +1515,7 @@ def _mensagem_ilegivel(caminho: Path, erro: Exception) -> str:
     )
 
 
-def _acao_do_historico(plano: PlanoRelatorio) -> str:
+def _acao_do_historico(plano: PlanoRelatorio, status_trocado: bool = False) -> str:
     relatorio = plano.relatorio
     partes = [
         f"`flatcap relatorio {relatorio.ficha.record_id}` — `{plano.destino.name}` "
@@ -1468,6 +1531,10 @@ def _acao_do_historico(plano: PlanoRelatorio) -> str:
     if relatorio.alertas:
         quais = ", ".join(alerta.codigo for alerta in relatorio.alertas)
         partes.append(f"Com aviso no documento: {quais}.")
+    if status_trocado:
+        anterior = relatorio.ficha.status
+        de = f"de `{anterior}` " if anterior else ""
+        partes.append(f"Status {de}para `{STATUS_PRONTO}`.")
     return " ".join(partes)
 
 

@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.16.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.17.0.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -235,6 +235,7 @@ Um dia típico:
 ```bash
 flatcap doctor                                   # a configuração está de pé?
 flatcap listar -n 10                             # o que chegou de novo?
+flatcap status                                   # como está cada projeto, e o que atrasou
 flatcap novo 42 --sim                            # cria a pasta do projeto
 flatcap perfil 42 --sim                          # perfil.md + dicionario.csv
 #   reunião: revise o dicionario.csv e escreva as listas no projeto.yaml
@@ -267,6 +268,7 @@ do projeto — esta só quando o cliente tem um projeto.
 |---|:---:|---|---|
 | `flatcap doctor` | sim | nada (ou o `FLATCAP_ROOT`, o `.env` da conta) | confere a configuração, as bibliotecas e a conexão |
 | `flatcap listar [-n N]` | sim | nada | as solicitações do REDCap, e quais já viraram pasta |
+| `flatcap status` | não | nada | os projetos com pasta, com o status e o prazo de cada um; os finalizados não aparecem |
 | `flatcap novo <record_id>` | sim | a pasta do projeto | cria a pasta, baixa o anexo, escreve a ficha e o histórico |
 | `flatcap amostragem <id>` | não | `4. Amostragem/` | o `desenho.yaml` na primeira vez; depois, o tamanho da amostra e o relatório dela |
 | `flatcap dados adicionar <id> <arquivo>` | não | `1. Dados originais/` | registra uma versão nova do banco |
@@ -362,8 +364,8 @@ não vê as análises. Em `4. Amostragem/`, o FlatCap só move o que ele escreve
 
 A ficha do atendimento: quem é o cliente, o que foi combinado e a cronologia dos bancos. O
 `novo` a escreve uma vez, com um cabeçalho que explica cada campo; daí em diante o FlatCap só
-acrescenta versões em `dados:`, preservando os seus comentários. Um exemplo com todos os
-blocos:
+acrescenta versões em `dados:` e, quando o relatório é escrito, passa o `status:` para
+`pronto` — preservando os seus comentários. Um exemplo com todos os blocos:
 
 ```yaml
 record_id: '6'
@@ -371,8 +373,8 @@ tipo: professor                 # professor | aluno
 matricula: '00742'              # entre aspas: sem elas, voltaria como o número 742
 nome: José Antônio de Sá
 criado_em: 2026-09-01
-prazo: null                     # 10 dias úteis da reunião — a data está no calendário
-status: em_analise              # novo | em_analise | entregue
+prazo: 2026-09-15               # a data final: 10 dias úteis da reunião — ou 15/09/2026
+status: em andamento            # um dos cinco: ver abaixo
 finalidade: Artigo científico   # sai na primeira página do relatório
 objetivos: Avaliar a pressão…   # corrija aqui o que veio truncado do formulário
 analises: [descritiva, normalidade, comparacao]   # o que o `analisar` roda, e a ordem do relatório
@@ -399,6 +401,23 @@ comparacao:
   - repetidas: [pas_0, pas_1, pas_2]         # a mesma medida, três vezes
     metodo: anova
 ```
+
+O **`status:`** é um de cinco, e é o que o `flatcap status` mostra:
+
+| Status | Quem escreve |
+|---|---|
+| `não iniciado` | o `flatcap novo`, quando cria a pasta |
+| `aguardando banco de dados` | você, depois da reunião |
+| `em andamento` | você |
+| `pronto` | o `flatcap relatorio`, quando escreve o documento |
+| `finalizado` | você, quando o atendimento termina — e o projeto sai do `flatcap status` |
+
+Maiúscula, acento e `_` não importam (`Em andamento` vale), e o `novo` e o `em_analise` das
+fichas anteriores à 1.17.0 são lidos como `não iniciado` e `em andamento`. O **`prazo:`** é a
+data final, escrita à mão depois da reunião, como `2026-09-15` ou `15/09/2026`; o
+`flatcap status` mostra a data, e **ATRASADO**, em vermelho, quando ela passa sem o projeto
+estar `pronto`. O status fora da lista e o prazo que não é data aparecem como estão escritos,
+em amarelo, com o aviso do que escrever no lugar.
 
 O YAML tem armadilhas com número, e a comparação as reconhece: `[imc, 24,9]` são três itens (a
 vírgula decimal separa), `05` é o inteiro 5, e o sinal de `-0,5` não sobrevive à leitura. A
@@ -509,7 +528,7 @@ do `__init__.py` na Parte II):
 | Camada | Módulos | Bibliotecas de fora |
 |---|---|---|
 | a configuração e o REDCap | `config`, `redcap`, `modelo`, `nomes` | `python-dotenv`, `requests` |
-| a pasta e a ficha | `projeto`, `ficha`, `dados` | `pyyaml`, `ruamel.yaml` |
+| a pasta e a ficha | `projeto`, `ficha`, `dados`, `painel` | `pyyaml`, `ruamel.yaml` |
 | o banco e a reunião | `banco`, `dicionario`, `perfil` | `pandas`, `openpyxl` |
 | o contrato de saída | `manifesto`, `graficos` | `matplotlib` (só o `graficos`) |
 | as análises | `descritiva`, `normalidade`, `cruzamento`, `associacao`, `correlacao`, `hipoteses`, `comparacao`, `analises` | `pandas`, `scipy` |
@@ -677,6 +696,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 - [`flatcap/projeto.py`](#flatcapprojetopy)
 - [`flatcap/ficha.py`](#flatcapfichapy)
 - [`flatcap/dados.py`](#flatcapdadospy)
+- [`flatcap/painel.py`](#flatcappainelpy)
 - [`flatcap/banco.py`](#flatcapbancopy)
 - [`flatcap/dicionario.py`](#flatcapdicionariopy)
 - [`flatcap/perfil.py`](#flatcapperfilpy)
@@ -702,7 +722,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*625 linhas.*
+*663 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -713,6 +733,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     projeto.py     monta a pasta do projeto: decide um Plano e depois o escreve
     ficha.py       lê e escreve o projeto.yaml; encontra o projeto a partir de um id
     dados.py       versiona os bancos: adiciona, roda a anterior, confere o disco
+    painel.py      o painel do `flatcap status`: o status e o prazo de cada projeto
     banco.py       abre a versão vigente do banco como um quadro do pandas
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
@@ -735,13 +756,13 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     cli.py         expõe os comandos no terminal
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
-`projeto`, `perfil` conhece `banco` e `dicionario`, `descritiva` conhece `banco`, `dicionario`
-e `manifesto`, `metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`,
-`metodologia`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é
-o par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe, e o
-`relatorio` só chama o `documento` de dentro do `executar_relatorio`. A `amostragem` conhece
-`amostral`, `ficha`, `manifesto` e `relatorio`, e chama o `documento` do mesmo jeito, de
-dentro do `executar_amostragem`.
+`projeto`, `painel` conhece só `ficha` e `projeto`, `perfil` conhece `banco` e `dicionario`,
+`descritiva` conhece `banco`, `dicionario` e `manifesto`, `metodologia` conhece só o
+`manifesto`, `relatorio` conhece `manifesto`, `metodologia`, `dicionario`, `dados` e `ficha`,
+e nenhuma delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento`
+conhece o `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
+`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
+e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -1323,6 +1344,43 @@ carregado —, e por isso os nomes que os manifestos gravam estão escritos nele
 rodou — uma que esta versão não conheça — sai do parágrafo, e o terminal diz qual. A que não
 testou nada (toda linha "não testado") sai sem frase e sem aviso: a tabela dela já diz o
 motivo.
+
+### 1.17.0 — o painel de status
+
+**`flatcap status`: os projetos que já têm pasta, com o status e o prazo de cada um.** Uma
+tabela como a do `listar` — id, matrícula, pasta local, status e prazo —, uma linha por
+`Projeto NNN`, na ordem do `record_id`. O `listar` parte do REDCap e procura a pasta de cada
+solicitação; o `status` faz o caminho inverso, ficha por ficha, e não fala com o REDCap: fica
+de pé quando o servidor cai, e mostra a pasta cuja matrícula foi corrigida no REDCap depois de
+ela existir.
+
+**O status tem cinco valores**: `não iniciado`, `aguardando banco de dados`, `em andamento`,
+`pronto` e `finalizado`, no `projeto.STATUS`. O `flatcap novo` escreve o primeiro, o
+`flatcap relatorio` escreve o `pronto` quando escreve o documento, e os outros três são
+escritos à mão. O `finalizado` tira o projeto do painel. A leitura é tolerante e a escrita é
+estrita (`ficha.status_reconhecido`): `Em Andamento` e `nao iniciado` são os de sempre, e os
+dois do cabeçalho de antes — `novo` e `em_analise` — também, porque toda ficha criada até a
+1.16 diz `novo`. O terceiro de antes, `entregue`, pode ser o `pronto` ou o `finalizado`, e não
+é adivinhado: sai como está escrito, em amarelo, com o aviso do que escrever no lugar.
+
+**O prazo é a data final**, escrita à mão depois da reunião, como `2026-11-04` ou
+`04/11/2026` (`ficha.data_escrita`). O painel mostra a data, e ATRASADO, em vermelho, quando
+ela passou sem o projeto estar `pronto` — o prazo é o do relatório, e o projeto pronto já o
+tem. O dia do prazo ainda não é atraso. A palavra vai escrita, e não só a cor, para o painel
+dizer o mesmo sem cor nenhuma. O prazo que não é data aparece como está escrito, em amarelo;
+o `Ficha.prazo` entra como texto para um prazo digitado errado não impedir a ficha de abrir.
+
+**O relatório é a única escrita nova na ficha** (`ficha.definir_status`), e a exceção que o
+cabeçalho de toda ficha nova passa a dizer: o resto continua intocado, e o comentário escrito
+ao lado do `status:` também. O documento vem primeiro; o status que não se escreve vira aviso
+e não desfaz o relatório, e uma falha depois dele devolve a ficha ao texto que tinha. A
+simulação diz que o status vai mudar, e o histórico diz que mudou.
+
+**Um módulo novo, `painel.py`**, que monta dados e não texto: uma `LinhaDoPainel` por projeto,
+com o prazo como data e o atraso como um sim ou não. A CLI os desenha; uma interface gráfica
+pode ordenar, filtrar e abrir a pasta sem ler a tabela do terminal. O painel parte do
+`ficha.varrer`, a mesma varredura de dois níveis do `localizar_projeto`, e lista a ficha que
+não abre e a pasta no formato de antes da 1.1.0, em vez de deixá-las sumir.
 
 ## `flatcap/config.py`
 
@@ -2054,7 +2112,7 @@ sai com o próprio nome, sem inventar um cliente que não existe.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*839 linhas.*
+*870 linhas.*
 
 A pasta do projeto no disco: decidir o que criar e depois criar.
 
@@ -2253,9 +2311,24 @@ que ela mudar.
 
 - *linha 216* — `PREFIXO_REDCAP = "00_redcap_"` — feito dessa forma para manter uma ordem cronológica
 
+### `STATUS_NAO_INICIADO`
+
+*linha 218*
+
+> O `status:` do `projeto.yaml`: os cinco valores, na ordem do atendimento.
+>
+> Dois são escritos pelo FlatCap. O `não iniciado`, pelo `flatcap novo`, que cria a
+> ficha; e o `pronto`, pelo `flatcap relatorio`, quando escreve o documento. Os outros
+> três são seus, escritos à mão: o `aguardando banco de dados` e o `em andamento`,
+> depois da reunião, e o `finalizado`, quando o atendimento termina — e aí o projeto
+> sai do `flatcap status`.
+>
+> Moram aqui pelo motivo das pastas: este módulo é o dono dos nomes que atravessam o
+> pacote. A ficha os lê, o relatório escreve um deles e o painel mostra os outros.
+
 ### `class ProjetoError(RuntimeError)`
 
-*linha 222*
+*linha 246*
 
 Falha ao montar a pasta do projeto, já traduzida para o usuário.
 
@@ -2265,13 +2338,13 @@ deve subir com o traceback inteiro.
 
 ### `class RegistroNaoEncontradoError(ProjetoError)`
 
-*linha 232*
+*linha 256*
 
 O REDCap não tem nenhum registro com este `record_id`.
 
 ### `class LayoutAntigoError(ProjetoError)`
 
-*linha 238*
+*linha 262*
 
 A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
 à 1.1.0, de quando um cliente tinha um projeto só.
@@ -2283,7 +2356,7 @@ de quem só lê o disco — ver `texto_da_migracao`.
 
 ### `class ClienteIncompletoError(ProjetoError)`
 
-*linha 250*
+*linha 274*
 
 O registro existe, mas não dá para nomear a pasta a partir dele.
 
@@ -2293,7 +2366,7 @@ recusa a produzir uma pasta que você teria de renomear depois.
 
 ### `class ProjetoExistenteError(ProjetoError)`
 
-*linha 260*
+*linha 284*
 
 Já existe pasta para **este projeto**. Nada foi mudado.
 
@@ -2306,11 +2379,11 @@ O caminho fica gravado em `.pasta`, isso previne erros de quando a pasta é cria
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 272*
+*linha 296*
 
 ### `class ArquivoPlanejado`
 
-*linha 278*
+*linha 302*
 
 Um arquivo já baixado com destino e o recibo pronto -> ainda na memória.
 
@@ -2318,17 +2391,17 @@ O `sha256` é calculado aqui. É a diferença entre o recibo e uma anotação.
 
 #### `def tamanho(self)`
 
-*linha 289*
+*linha 313*
 
 #### `def tamanho_legivel(self)`
 
-*linha 293*
+*linha 317*
 
 Tamanho formatado para o terminal e para o `historico.md`.
 
 ### `class Plano`
 
-*linha 301*
+*linha 325*
 
 Tudo o que será criado, decidido e pronto para escrever.
 
@@ -2339,11 +2412,11 @@ nenhuma decisão.
 
 #### `def tem_anexo(self)`
 
-*linha 321*
+*linha 345*
 
 #### `def pasta_do_cliente(self)`
 
-*linha 325*
+*linha 349*
 
 A pasta do cliente, que é onde a pasta do projeto vai morar.
 
@@ -2352,7 +2425,7 @@ para que um `Plano` montado à mão em teste antigo continue válido.
 
 ### `class Resultado`
 
-*linha 336*
+*linha 360*
 
 O que `executar` de fato criou, e o que não foi planejado.
 
@@ -2361,9 +2434,9 @@ nuvem o `chmod` pode não pegar.
 
 ### `def preparar(cfg, record_id, agora)`
 
-*linha 348*
+*linha 372*
 
-*linha 347*
+*linha 371*
 
 > Casos de uso
 
@@ -2381,11 +2454,11 @@ Raises:
 
 ### `def executar(plano)`
 
-*linha 371*
+*linha 395*
 
 Escreve o plano no disco. Escritor puro: não decide, não consulta a rede.
 
-*linha 378*
+*linha 402*
 
 > `parents=True` cria a pasta do cliente quando ela não existe e a aceita
 > quando existe — mas continua estourando `FileExistsError` se a **última**
@@ -2394,19 +2467,19 @@ Escreve o plano no disco. Escritor puro: não decide, não consulta a rede.
 
 ### `def anotar(raiz, acao, agora)`
 
-*linha 420*
+*linha 444*
 
 Acrescenta uma linha para o `historico.md`.
 
 ### `def marcar_somente_leitura(caminho)`
 
-*linha 427*
+*linha 451*
 
 Tira a permissão de escrita do arquivo. Devolve se conseguiu.
 
 ### `def nome_do_banco(anexo, quando, record_id)`
 
-*linha 438*
+*linha 462*
 
 Monta `00_redcap_AAAA-MM-DD_<nome original>`.
 
@@ -2414,18 +2487,18 @@ Monta `00_redcap_AAAA-MM-DD_<nome original>`.
 
 ### `def _buscar_cliente(cfg, record_id)`
 
-*linha 452*
+*linha 476*
 
 Traz um único registro do REDCap e normaliza.
 
-*linha 466*
+*linha 490*
 
 > O `record_id` normalizado vem do corpo da resposta; se por alguma razão vier
 > vazio, o que o usuário digitou é a melhor identificação que temos.
 
 ### `def _rotulos_do_formulario(cfg)`
 
-*linha 470*
+*linha 494*
 
 Os rótulos das opções do `fin`, para que a ficha guarde texto e não código.
 
@@ -2441,13 +2514,13 @@ branco cai no alerta `texto_ausente` do relatório e aparece na sua frente.
 
 ### `def _conferir_identificacao(cliente)`
 
-*linha 491*
+*linha 515*
 
 Recusa registro sem matrícula ou sem nome, dizendo qual dos dois falta.
 
 ### `def _destino(cfg, cliente)`
 
-*linha 511*
+*linha 535*
 
 Decide onde a pasta vai ficar. Devolve (pasta do cliente, raiz, cliente é novo).
 
@@ -2472,7 +2545,7 @@ Três conferências, nesta ordem, e cada uma responde a uma pergunta diferente:
 
 ### `def texto_da_migracao(pasta_do_cliente, record_id)`
 
-*linha 584*
+*linha 608*
 
 O diagnóstico da pasta que ficou no formato de antes da 1.1.0.
 
@@ -2484,13 +2557,13 @@ instrução de conserto é como uma delas fica desatualizada.
 
 ### `def _baixar_anexo(cfg, cliente)`
 
-*linha 621*
+*linha 645*
 
 Baixa o banco anexado. Devolve `None` quando o registro não tem anexo.
 
 ### `def _montar_plano(cliente, pasta_cliente, raiz, cliente_novo, anexo, quando)`
 
-*linha 630*
+*linha 654*
 
 Converte cliente + anexo em um `Plano` inteiramente resolvido.
 
@@ -2498,7 +2571,7 @@ Converte cliente + anexo em um `Plano` inteiramente resolvido.
 
 ### `class _SemAncoras(yaml.SafeDumper)`
 
-*linha 666*
+*linha 690*
 
 Dumper que nunca cria âncora nem alias.
 
@@ -2509,13 +2582,13 @@ continua valendo.
 
 #### `def ignore_aliases(self, data)`
 
-*linha 675*
+*linha 699*
 
-- *linha 675* — `def ignore_aliases(self, data: object) -> bool:` — noqa: ARG002
+- *linha 699* — `def ignore_aliases(self, data: object) -> bool:` — noqa: ARG002
 
 ### `def _texto_em_bloco(dumper, dado)`
 
-*linha 679*
+*linha 703*
 
 Texto com quebra de linha sai como bloco literal, e não entre aspas.
 
@@ -2538,11 +2611,11 @@ fronteira onde o texto entra.
 
 ### `def _texto_projeto_yaml(cliente, banco, hoje)`
 
-*linha 731*
+*linha 762*
 
 Monta o `projeto.yaml`.
 
-*linha 755*
+*linha 786*
 
 > `or None` para que o campo em branco saia `finalidade: null`, do mesmo
 > jeito que o `prazo` — uma linha terminada em dois-pontos parece uma
@@ -2550,7 +2623,7 @@ Monta o `projeto.yaml`.
 
 ### `def _texto_historico(cliente, banco, quando)`
 
-*linha 773*
+*linha 804*
 
 Monta o `historico.md` com a primeira linha de log já escrita.
 
@@ -2560,23 +2633,23 @@ existe justamente para ser aberto seis meses depois.
 
 ### `def _linha_historico(acao, quando)`
 
-*linha 806*
+*linha 837*
 
 ### Funções auxiliares
 
 ### `def _escrever_texto(caminho, conteudo)`
 
-*linha 812*
+*linha 843*
 
 Escreve texto sempre em UTF-8 e sempre com `\n`.
 
 ### `def _extensao_do_mime(tipo_mime)`
 
-*linha 818*
+*linha 849*
 
 ### `def tamanho_legivel(bytes_)`
 
-*linha 824*
+*linha 855*
 
 Formata o tamanho para leitura humana, com vírgula decimal.
 
@@ -2588,7 +2661,7 @@ relatório acaba com "1,5 MiB" numa tabela e "1572864" na seguinte.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1091 linhas.*
+*1270 linhas.*
 
 Leitura e escrita do `projeto.yaml` — a ficha do atendimento.
 
@@ -2630,12 +2703,13 @@ devolve na gravação. É o que sustenta literalmente a promessa do cabeçalho d
 ficha: "edite à vontade, o FlatCap não sobrescreve o que você escreveu".
 
 Toda a persistência do `projeto.yaml` está atrás das funções públicas abaixo —
-`ler`, `bloco`, `acrescentar_versao`, `localizar_projeto`, `projetos_da_matricula`,
-`caminho_da_ficha`, `versao_vigente` e `sequencia_do_nome`. Quem importa este
-módulo não sabe qual biblioteca de YAML está em uso. Desde a 1.15.0, o `ler_yaml`
-estende o mesmo leitor aos outros YAML editados à mão — o `desenho.yaml` da
-amostragem é o primeiro —, e o `numero_escrito` é a regra de ler um número escrito
-num deles.
+`ler`, `bloco`, `acrescentar_versao`, `definir_status`, `localizar_projeto`,
+`projetos_da_matricula`, `varrer`, `caminho_da_ficha`, `versao_vigente` e
+`sequencia_do_nome`. Quem importa este módulo não sabe qual biblioteca de YAML está
+em uso. Desde a 1.15.0, o `ler_yaml` estende o mesmo leitor aos outros YAML editados
+à mão — o `desenho.yaml` da amostragem é o primeiro —, e o `numero_escrito` é a regra
+de ler um número escrito num deles. Desde a 1.17.0, o `status_reconhecido` e o
+`data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve.
 
 Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
@@ -2647,14 +2721,14 @@ esta implementação de YAML por outra precisa levá-las junto.
 
 ### `CAMPOS_VERSAO`
 
-*linha 88*
+*linha 98*
 
 > Ordem em que os campos de uma versão aparecem no arquivo. Fixa de propósito:
 > o `projeto.yaml` é lido por humanos, e coluna que muda de lugar cansa.
 
 ### `class FichaError(RuntimeError)`
 
-*linha 93*
+*linha 103*
 
 Falha ao lidar com o `projeto.yaml`, já traduzida para o usuário.
 
@@ -2664,13 +2738,13 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class ProjetoNaoEncontradoError(FichaError)`
 
-*linha 103*
+*linha 113*
 
 Nenhuma pasta em `FLATCAP_ROOT` corresponde ao identificador pedido.
 
 ### `class FichaAusenteError(FichaError)`
 
-*linha 109*
+*linha 119*
 
 A pasta existe, mas não tem `projeto.yaml`.
 
@@ -2679,11 +2753,11 @@ usuário: é um projeto que ainda não foi adotado pela ferramenta.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 117*
+*linha 127*
 
 ### `class ProjetoAmbiguoError(FichaError)`
 
-*linha 122*
+*linha 132*
 
 A matrícula pedida tem mais de um projeto, e nenhum deles é "o" projeto.
 
@@ -2699,11 +2773,11 @@ REDCap, e dois iguais querem dizer pasta copiada.
 
 #### `def __init__(self, mensagem, projetos)`
 
-*linha 137*
+*linha 147*
 
 ### `class LayoutAntigoError(FichaError)`
 
-*linha 142*
+*linha 152*
 
 A pasta do cliente ainda tem o `projeto.yaml` na raiz — o formato anterior
 à 1.1.0.
@@ -2715,21 +2789,21 @@ um só, e mora em `projeto.texto_da_migracao`.
 
 #### `def __init__(self, mensagem, pasta)`
 
-*linha 153*
+*linha 163*
 
 ### `class FichaInvalidaError(FichaError)`
 
-*linha 158*
+*linha 168*
 
 O `projeto.yaml` existe mas não é YAML válido, ou não tem o formato esperado.
 
 #### `def __init__(self, mensagem, caminho)`
 
-*linha 163*
+*linha 173*
 
 ### `class Versao`
 
-*linha 169*
+*linha 179*
 
 Uma versão do banco, do jeito que ela é registrada em `dados:`.
 
@@ -2739,20 +2813,20 @@ mandou o mesmo de novo?" sem abrir planilha nenhuma.
 
 #### `def sequencia(self)`
 
-*linha 185*
+*linha 195*
 
 O número do prefixo (`00`, `01`, `02`...), ou `None` se o nome não seguir
 a convenção. É o índice da versão na história do projeto.
 
 ### `class Ficha`
 
-*linha 194*
+*linha 204*
 
 O conteúdo do `projeto.yaml` que o FlatCap precisa conhecer.
 
-Deliberadamente **não** carrega tudo o que está no arquivo. `prazo` e
-`analises` são seus, e as fases seguintes leem o que precisarem. O que entra
-aqui é o mínimo para identificar o projeto e versionar o banco.
+Deliberadamente **não** carrega tudo o que está no arquivo: os blocos de cada
+análise são seus, e quem precisa de um o lê pelo `bloco`. O que entra aqui é o
+mínimo para identificar o projeto e versionar o banco.
 
 A exceção são `finalidade` e `objetivos`, e ela tem uma regra por trás: entra
 aqui o que alguma camada de cima **imprime**. Os dois saem na primeira página
@@ -2771,6 +2845,13 @@ Ela entra na `Ficha` porque é a única coisa da ficha que **toda** camada de
 cima consulta: é a ordem das seções do relatório quando há mais de uma rodada
 na pasta.
 
+`prazo` é a quarta, pela regra da primeira: o `flatcap status` o imprime, e lê
+todas as fichas do `FLATCAP_ROOT` de uma vez — pedir o prazo pelo `bloco`
+abriria cada arquivo duas vezes. Entra como está escrito (`2026-11-04`,
+`04/11/2026`, ou o que estiver lá), e quem o lê como data é o `data_escrita`: um
+prazo digitado errado não pode fazer a ficha inteira deixar de abrir. O `status`
+entra do mesmo jeito, como texto, e quem o reconhece é o `status_reconhecido`.
+
 Os parâmetros de cada análise — os pares da correlação, a lista de variáveis
 da normalidade — **não** entram aqui. Eles são de um módulo só, e um campo na
 `Ficha` por análise faria esta classe crescer a cada análise nova. Quem os lê é
@@ -2778,18 +2859,18 @@ o `bloco(raiz, chave)`, mais abaixo.
 
 #### `def versao_redcap(self)`
 
-*linha 237*
+*linha 255*
 
 A versão baixada do REDCap — a intocável. Identificada pela origem, e não
 pelo prefixo `00_`, porque a origem é o fato e o nome é convenção.
 
 #### `def ultima_versao(self)`
 
-*linha 248*
+*linha 266*
 
 ### `def versao_vigente(ficha)`
 
-*linha 252*
+*linha 270*
 
 A versão do banco que vale hoje: a de maior número de sequência.
 
@@ -2816,11 +2897,11 @@ meio segundo de partida para consultar uma lista que ele já tinha na mão. O
 
 ### `def caminho_da_ficha(raiz)`
 
-*linha 290*
+*linha 308*
 
 ### `def localizar_projeto(root, identificador)`
 
-*linha 294*
+*linha 312*
 
 Encontra a pasta do projeto a partir de um `record_id` ou de uma matrícula.
 
@@ -2860,20 +2941,20 @@ Raises:
     FichaAusenteError: a pasta foi encontrada pelo nome, mas não tem ficha.
     FichaInvalidaError: há ficha que não abre, e pode ser justamente a pedida.
 
-*linha 369*
+*linha 387*
 
 > Nada bateu. Antes de dizer "não existe", os três diagnósticos que dizem o
 > que fazer, em vez de mandar o usuário procurar erro de digitação.
 
-*linha 372*
+*linha 390*
 
 > 1. A pasta do cliente ficou no formato de antes da 1.1.0.
 
-*linha 383*
+*linha 401*
 
 > 2. A pasta existe pelo nome, e não tem projeto dentro.
 
-*linha 403*
+*linha 421*
 
 > 3. Uma ficha ilegível não é uma nota de rodapé: enquanto houver uma, a
 > busca não pode afirmar que o projeto não existe — ele pode ser justamente
@@ -2882,19 +2963,43 @@ Raises:
 
 ### `def projetos_da_matricula(root, matricula)`
 
-*linha 427*
+*linha 445*
 
 Todos os projetos de um cliente, em ordem, lendo as fichas.
 
-Pública porque é a pergunta que a `ProjetoAmbiguoError` responde, e porque a
-Fase 8 — o painel de todos os projetos — vai precisar exatamente disto. Lê
-as fichas, ao contrário do `nomes.projetos_do_cliente`, que só olha nomes:
-aqui a matrícula vem da ficha, então uma pasta renomeada à mão continua
-sendo encontrada.
+Pública porque é a pergunta que a `ProjetoAmbiguoError` responde. Lê as fichas,
+ao contrário do `nomes.projetos_do_cliente`, que só olha nomes: aqui a matrícula
+vem da ficha, então uma pasta renomeada à mão continua sendo encontrada. O painel
+de todos os projetos, que a Fase 8 previa aqui, é o `varrer`, logo abaixo.
+
+### `class Varredura`
+
+*linha 462*
+
+O que há no `FLATCAP_ROOT`, lido ficha por ficha.
+
+As três listas do `_varrer`, cada item com o que já carrega: a `Ficha` sabe a
+pasta dela (`raiz`), e a `FichaInvalidaError`, o arquivo que não abriu
+(`caminho`).
+
+- *linha 473* — `antigas: tuple[Path, ...] = ()` — as pastas de cliente no formato anterior à 1.1.0
+
+### `def varrer(root)`
+
+*linha 476*
+
+Todos os projetos do `FLATCAP_ROOT`, lendo as fichas: o painel do
+`flatcap status` parte daqui.
+
+É a varredura do `localizar_projeto` e do `projetos_da_matricula`, e não uma
+segunda: dois níveis, explícitos, para uma ficha esquecida em
+`2. Versões antigas/` não virar projeto. A ficha que não abre não interrompe a
+varredura — volta em `ilegiveis`, para quem pediu dizer o que fazer com ela, e o
+mesmo vale para a pasta no formato antigo.
 
 ### `def _varrer(root)`
 
-*linha 444*
+*linha 495*
 
 Percorre o `FLATCAP_ROOT` inteiro e devolve o que encontrou, em três listas:
 os projetos legíveis, as fichas que não abrem, e as pastas de cliente que
@@ -2905,14 +3010,14 @@ Duas voltas, e não um `rglob`, para que a profundidade seja explícita: um
 uma ficha esquecida dentro de `2. Versões antigas/` de ser confundida com um
 projeto — e é o que permite reconhecer o layout antigo em vez de ignorá-lo.
 
-*linha 473*
+*linha 524*
 
 > A ficha antiga não abrir não impede o diagnóstico de layout;
 > só tira dele o número do projeto a criar.
 
 ### `def _mesmo_record(da_ficha, procurado)`
 
-*linha 488*
+*linha 539*
 
 O `record_id` da ficha é o que o usuário digitou?
 
@@ -2928,7 +3033,7 @@ outra pessoa.
 
 ### `def _mensagem_ambigua(identificador, projetos, achados)`
 
-*linha 511*
+*linha 562*
 
 A lista de projetos do cliente, com o que distingue um do outro.
 
@@ -2940,7 +3045,7 @@ sozinho não responde isso seis meses depois.
 
 ### `def ler(raiz)`
 
-*linha 552*
+*linha 603*
 
 Lê o `projeto.yaml` de uma pasta de projeto.
 
@@ -2950,7 +3055,7 @@ Raises:
 
 ### `def bloco(raiz, chave)`
 
-*linha 591*
+*linha 643*
 
 O bloco cru de uma chave qualquer do `projeto.yaml`, ou `None`.
 
@@ -2977,13 +3082,13 @@ Raises:
 
 ### `def _simples(valor)`
 
-*linha 630*
+*linha 682*
 
 Converte o que o `ruamel` devolveu para `dict`, `list` e escalares comuns.
 
 ### `def _analises(documento)`
 
-*linha 641*
+*linha 693*
 
 A lista `analises:`, com o que não for texto descartado.
 
@@ -2995,7 +3100,7 @@ com a lista — por um erro de digitação em uma linha que nenhum deles lê.
 
 ### `def ler_yaml(caminho)`
 
-*linha 661*
+*linha 713*
 
 O conteúdo de outro YAML editado à mão, em tipos comuns de Python.
 
@@ -3014,14 +3119,14 @@ Raises:
 
 ### `_NUMERO_ESCRITO`
 
-*linha 685*
+*linha 737*
 
 > Um número escrito como texto num YAML editado à mão: `"24,9"`, `"24.9"`, `" 25 "`.
 > Sem separador de milhar — `1.234,5` é ambíguo, e ambiguidade numa ficha se recusa.
 
 ### `def numero_escrito(valor)`
 
-*linha 690*
+*linha 742*
 
 Um número, a partir de como o YAML o trouxe; `None` quando não é um.
 
@@ -3035,11 +3140,66 @@ Morava na comparação, como `referencia_escrita`, e desceu para cá na 1.15.0: 
 amostragem lê o `desenho.yaml` com a mesma regra, e duas regras para o mesmo
 número escrito à mão é como uma ficha aceita `2,5` e a outra o recusa.
 
+### `_DATA_ISO`
+
+*linha 768*
+
+> As duas formas de escrever uma data à mão que a ficha aceita: a do YAML
+> (`2026-11-04`, que ele já entrega como data) e a do Brasil (`04/11/2026`, que ele
+> entrega como texto). Dia e mês com um algarismo só valem nas duas.
+
+### `def data_escrita(valor)`
+
+*linha 775*
+
+Uma data, a partir de como o YAML a trouxe; `None` quando não é uma.
+
+É a regra do `prazo:`, que se escreve à mão depois da reunião. Sem aspas,
+`2026-11-04` chega do YAML como data, e entra como está; `04/11/2026` chega como
+texto, e é lido como dia, mês e ano — a ordem de quem escreve em português. O ano
+tem quatro algarismos nas duas formas: `04/11/26` é 2026 ou 1926, e ambiguidade
+numa ficha se recusa, como no `numero_escrito`. A data que não existe —
+`31/02/2026` — também não é data.
+
+### `_STATUS_DE_ANTES`
+
+*linha 805*
+
+> Os status que o cabeçalho de toda ficha anterior à 1.17.0 sugeria. O `novo` é o que
+> o `flatcap novo` escrevia, e é o `não iniciado` de hoje; o `em_analise` é o
+> `em andamento`. O terceiro, `entregue`, fica de fora de propósito: ele pode ser o
+> `pronto` ou o `finalizado`, e adivinhar o segundo tiraria do painel um projeto que
+> ainda não terminou.
+
+### `def _chave_do_status(texto)`
+
+*linha 816*
+
+O status reduzido ao que se compara: minúsculas, sem acento, `_` e `-` como
+espaço, e um espaço só entre as palavras.
+
+### `def status_reconhecido(escrito)`
+
+*linha 832*
+
+Qual dos cinco status do `projeto.STATUS` está escrito na ficha; `None` quando não
+é nenhum deles.
+
+A leitura é tolerante e a escrita é estrita, como no `dicionario.csv`: o status se
+digita à mão, e `Em andamento`, `EM ANDAMENTO` e `nao iniciado` são os de sempre —
+o que volta é sempre a grafia do `projeto.STATUS`. Os dois que a ficha anterior à
+1.17.0 sugeria no cabeçalho, `novo` e `em_analise`, também são reconhecidos,
+porque toda ficha criada até ali diz `novo`.
+
+O que não é nenhum deles volta `None`, e não um palpite: quem mostra o status é
+quem decide o que fazer com um texto que não se reconhece — o painel o mostra como
+está, marcado.
+
 ### Escrita
 
 ### `def acrescentar_versao(raiz, versao)`
 
-*linha 719*
+*linha 853*
 
 Acrescenta uma entrada ao fim da lista `dados:`, preservando o resto.
 
@@ -3048,21 +3208,44 @@ Não é um "reescreve o arquivo com os campos que eu conheço". O `projeto.yaml`
 e um comando que apagasse o `prazo` que você preencheu, ou a lista `analises`
 que você combinou na reunião, tornaria a promessa falsa.
 
-*linha 744*
+*linha 878*
 
 > Chave ausente, `dados:` vazio (que vira None) ou sobrescrito por engano.
 
-*linha 750*
+*linha 884*
 
 > Uma lista que veio do arquivo como `dados: []` mantém o estilo em linha, e
 > a entrada nova sairia toda espremida em uma linha só. Bloco é o formato em
 > que este arquivo é lido e editado.
 
+### `def definir_status(raiz, status)`
+
+*linha 893*
+
+Escreve o `status:` da ficha, preservando o resto — os comentários, as aspas e a
+ordem das chaves, como o `acrescentar_versao`.
+
+É a exceção à promessa do cabeçalho — "o FlatCap não sobrescreve o que você
+escreveu" —, e o cabeçalho de toda ficha nova a diz: o `flatcap relatorio`,
+quando escreve o documento, passa o projeto para `pronto`. Por isso o valor é
+sempre um dos cinco do `projeto.STATUS`, na grafia de lá: um texto qualquer aqui
+seria o FlatCap escrevendo na ficha um status que o painel não reconhece.
+
+O comentário escrito ao lado do `status:` fica onde está. A ficha sem a chave a
+ganha logo depois do `prazo`, que é onde o `flatcap novo` a escreve; sem `prazo`,
+no fim.
+
+Raises:
+
+    FichaAusenteError, FichaInvalidaError
+    ValueError: o status não é um dos cinco — defeito de quem chamou, e não do
+        arquivo.
+
 ### Backend: ruamel.yaml
 
 ### `RECUO_PADRAO`
 
-*linha 762*
+*linha 941*
 
 > O `indent()` do ruamel vale para o documento inteiro — não há como preservar o
 > recuo de cada lista separadamente. Então a escolha é entre impor um estilo e
@@ -3070,18 +3253,18 @@ que você combinou na reunião, tornaria a promessa falsa.
 > `  - descritiva` escrito à mão em `- descritiva`: YAML idêntico, e um diff
 > gratuito num arquivo que o cabeçalho da ficha promete não mexer.
 
-- *linha 767* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
+- *linha 946* — `RECUO_PADRAO = 0` — o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
 
 ### `_ABRE_BLOCO`
 
-*linha 769*
+*linha 948*
 
 > Uma chave que termina em `|` ou `>` abre um bloco literal. O `[-+]?\d*` cobre
 > os indicadores (`|-`, `>+`, `|2`) e o `(#.*)?` o comentário na mesma linha.
 
 ### `def _recuo_das_listas(texto)`
 
-*linha 774*
+*linha 953*
 
 Em que coluna, em relação à chave que as contém, este arquivo escreve o `-`.
 
@@ -3106,7 +3289,7 @@ do cliente, não item de lista.
 
 ### `def _construtor(recuo_da_lista)`
 
-*linha 826*
+*linha 1005*
 
 O leitor/escritor round-trip, configurado.
 
@@ -3123,7 +3306,7 @@ decide no código: ela vem do arquivo que está sendo reescrito. Ver
 
 ### `def _representar_nulo(dumper, _dados)`
 
-*linha 849*
+*linha 1028*
 
 Escreve o vazio como `null`, e não como uma linha terminada em dois-pontos.
 
@@ -3134,13 +3317,13 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _carregar_documento(caminho)`
 
-*linha 861*
+*linha 1040*
 
 ### `def _gravar_documento(caminho, documento)`
 
-*linha 869*
+*linha 1048*
 
-*linha 872*
+*linha 1051*
 
 > O recuo é lido do arquivo que está no disco, e não do documento carregado:
 > o ruamel prende os comentários aos dados, mas não a coluna em que as listas
@@ -3148,7 +3331,7 @@ escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
 
 ### `def _mapa_da_versao(versao)`
 
-*linha 882*
+*linha 1061*
 
 Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
@@ -3156,7 +3339,7 @@ Converte a `Versao` no mapeamento que vai para o arquivo, na ordem fixa.
 
 ### `def sequencia_do_nome(nome)`
 
-*linha 898*
+*linha 1077*
 
 Extrai o prefixo numérico de `02_revisado_2026-03-14_banco.xlsx` → 2.
 
@@ -3166,7 +3349,7 @@ e é por isso que a função não devolve `-1` nem `0` como "não sei".
 
 ### `def _ler_texto(caminho)`
 
-*linha 912*
+*linha 1091*
 
 Lê sempre em UTF-8, nunca na codificação do sistema.
 
@@ -3175,7 +3358,7 @@ voltaria diferente do que foi gravado — ou estouraria na leitura.
 
 ### `def escrever_atomico(caminho, texto)`
 
-*linha 931*
+*linha 1110*
 
 Grava o arquivo inteiro ou não grava nada.
 
@@ -3193,7 +3376,7 @@ arquivo vazio.
 
 ### `def temporario_ao_lado(destino)`
 
-*linha 960*
+*linha 1139*
 
 Cria um arquivo vazio, de nome único, na pasta do destino. Devolve o
 descritor aberto para escrita e o caminho.
@@ -3210,28 +3393,28 @@ quem decide é a permissão da pasta, e nada mudou por lá.
 Pública porque o `documento.py` grava o `.docx` atomicamente com o mesmo
 temporário — e duas formas de criá-lo é como uma delas fica com o defeito.
 
-*linha 978*
+*linha 1157*
 
 > `O_BINARY` só existe no Windows: sem ele a biblioteca C trocaria cada `\n`
 > por `\r\n` na escrita, por baixo do `newline="\n"`.
 
 ### `def _texto(documento, chave)`
 
-*linha 990*
+*linha 1169*
 
 ### `def _versoes(documento, caminho)`
 
-*linha 997*
+*linha 1176*
 
 Traduz a lista `dados:` para objetos, recusando o que não dá para interpretar.
 
 ### `def _inteiro(valor)`
 
-*linha 1032*
+*linha 1211*
 
 ### `def _data(valor)`
 
-*linha 1039*
+*linha 1218*
 
 O YAML já entrega `date` quando a data está sem aspas. Com aspas vem texto,
 e é isso que esta função resgata — o arquivo é editado à mão, e digitar
@@ -3239,7 +3422,7 @@ e é isso que esta função resgata — o arquivo é editado à mão, e digitar
 
 ### `def _diagnostico(texto, caminho, erro)`
 
-*linha 1057*
+*linha 1236*
 
 Traduz o estouro do parser, com um caso especial que vale ouro.
 
@@ -3566,6 +3749,125 @@ vem de fora, e o que vem de fora não monta caminho.
 ### `def _acao_do_historico(plano)`
 
 *linha 579*
+
+## `flatcap/painel.py`
+
+`SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
+
+*172 linhas.*
+
+O painel do `flatcap status`: os projetos que já têm pasta, com o status e o prazo.
+
+O `flatcap listar` responde "o que chegou?" a partir do REDCap, e procura a pasta de
+cada solicitação. Este módulo responde outra pergunta — "como está cada projeto, e qual
+passou do prazo?" — e faz o caminho inverso: parte do disco, ficha por ficha, e não
+fala com o REDCap. É o que deixa o painel de pé quando o servidor cai ou o token
+expira, e o que mantém no painel a pasta cuja matrícula foi corrigida no REDCap depois
+de ela existir.
+
+### O que entra
+
+Toda pasta `Projeto NNN` do `FLATCAP_ROOT` com um `projeto.yaml` que abre, menos as
+`finalizado`: essas saem do painel e entram só na contagem. A ficha que não abre e a
+pasta de cliente no formato anterior à 1.1.0 também ficam de fora, mas não em
+silêncio — o painel as lista, para o terminal dizer o que fazer com elas. A ordem é a
+do `flatcap listar`, pelo `record_id`.
+
+### O status e o prazo
+
+Os dois saem da ficha, como estão escritos. O status é um dos cinco do
+`projeto.STATUS`, reconhecido pelo `ficha.status_reconhecido` sem distinguir
+maiúscula, acento ou `_`. O que não é nenhum deles aparece como está escrito, marcado:
+escondê-lo seria esconder justamente o projeto que precisa de atenção.
+
+O prazo é a data final, escrita à mão depois da reunião e lida pelo
+`ficha.data_escrita`. Quando a data passa e o projeto não está `pronto`, ele está
+atrasado: o prazo é o do relatório, e o projeto pronto já o tem. O dia do prazo ainda
+não é atraso. A data de hoje vem de `agora=`, como em todo `preparar*`, porque um teste
+que lê o relógio quebra à meia-noite.
+
+### O que este módulo não faz
+
+Não escreve nada e não decide status nenhum: quem escreve o `status:` é você, o
+`flatcap novo` (`não iniciado`) e o `flatcap relatorio` (`pronto`). E monta dados, e não
+texto: o painel é uma lista de `LinhaDoPainel`, com o prazo como data e o atraso como
+um sim ou não. A CLI as desenha, e uma interface gráfica pode ordenar, filtrar e abrir
+a pasta de cada uma sem ler a tabela do terminal.
+
+### `class LinhaDoPainel`
+
+*linha 54*
+
+Um projeto no painel: o que vai para cada coluna, ainda como dado.
+
+- *linha 59* — `pasta: Path` — a pasta do projeto: `.../00742 - José Antônio de Sá/Projeto 006`
+
+*linha 62*
+
+> Um dos cinco do `projeto.STATUS`, na grafia de lá; ou, quando não é nenhum
+> deles, o que está escrito na ficha — e aí `status_reconhecido` é falso.
+
+*linha 67*
+
+> O `prazo:` como está escrito, quando ele não é uma data — `semana que vem`. Vazio
+> quando é uma data, e quando não há prazo nenhum.
+
+#### `def pasta_local(self)`
+
+*linha 73*
+
+`Projeto 006` — a coluna "Pasta local" do `flatcap listar`.
+
+#### `def sem_prazo(self)`
+
+*linha 80*
+
+### `class Painel`
+
+*linha 85*
+
+O painel inteiro, decidido. É daqui que sai a tabela do `flatcap status`.
+
+- *linha 93* — `ilegiveis: tuple[Path, ...] = ()` — as pastas de projeto cuja ficha não abre
+
+- *linha 94* — `antigas: tuple[Path, ...] = ()` — as pastas de cliente no formato anterior à 1.1.0
+
+#### `def atrasados(self)`
+
+*linha 97*
+
+#### `def sem_prazo(self)`
+
+*linha 101*
+
+#### `def status_fora_da_lista(self)`
+
+*linha 105*
+
+#### `def prazos_que_nao_sao_data(self)`
+
+*linha 109*
+
+### `def montar_painel(root, agora)`
+
+*linha 113*
+
+Lê todas as fichas do `FLATCAP_ROOT` e monta o painel. Não escreve nada.
+
+Args:
+
+    root: o `FLATCAP_ROOT`.
+    agora: relógio injetável — é ele que diz o que está atrasado.
+
+### `def _ordem(linha)`
+
+*linha 155*
+
+A ordem do `flatcap listar`: pelo `record_id`, como número — o `6` antes do `41`.
+
+O `record_id` que não é número (nenhum REDCap comum gera um, mas o campo é texto)
+vai para o fim, em ordem alfabética. A pasta desempata: dois projetos com o mesmo
+`record_id` são pasta duplicada, e saem um embaixo do outro.
 
 ## `flatcap/banco.py`
 
@@ -13315,7 +13617,7 @@ manifesto que não registra o que rodou, que vira aviso.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1497 linhas.*
+*1564 linhas.*
 
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -13381,6 +13683,12 @@ Cada uma vira um `Alerta`, e o `Alerta` viaja para dentro do `.docx`, logo abaix
 da identificação. Um aviso que fica só no terminal é um aviso que ninguém lê
 depois de anexar o documento ao e-mail.
 
+**Que o projeto fica pronto.** Escrito o documento, o `status:` da ficha passa para
+`pronto` — é o que o `flatcap status` mostra, e o que tira dele o ATRASADO. É a
+única linha da ficha que este módulo escreve, e a simulação diz que vai escrevê-la.
+O documento vem primeiro: um status que não se escreve vira aviso, e não desfaz o
+relatório.
+
 **Como cada tabela vira tabela.** Os `.csv` da Fase 5 já trazem os números
 formatados em português e um cabeçalho de comentário com o denominador. A leitura
 aqui é fiel: separa os comentários das linhas de dados e não converte nada — o
@@ -13426,7 +13734,7 @@ tabelas: as duas saíram na revisão de formatação, e o que elas diziam sobre 
 procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 `manifesto.json` da rodada.
 
-*No módulo, linha 153:*
+*No módulo, linha 169:*
 
 > `ARQUIVO_TEMPLATE` vem do `projeto.py`, e não mais escrito aqui uma segunda
 > vez. A duplicação existia porque importar o `documento.py` no topo traria o
@@ -13435,7 +13743,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 > `versao_vigente` e `PASTA_DESCRITIVA` já tinham feito. O `documento.py`
 > reexporta o nome, então quem o importava de lá não mudou.
 
-*No módulo, linha 161:*
+*No módulo, linha 177:*
 
 > ─────────────────────────────────────────────────────────────────────────────
 >  O TEXTO FIXO DA PRIMEIRA PÁGINA — é aqui que se escreve.
@@ -13457,7 +13765,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 
 ### `_NOTA_REDUNDANTE`
 
-*linha 181*
+*linha 197*
 
 > A nota de comentário que todo `.csv` da Fase 5 traz na segunda linha. Ela é
 > descartada na leitura porque o título da seção já diz de qual variável se trata,
@@ -13466,7 +13774,7 @@ procedência ficou nos metadados do arquivo (`documento._propriedades`) e no
 
 ### `class RelatorioError(RuntimeError)`
 
-*linha 190*
+*linha 206*
 
 Falha ao montar o relatório, já traduzida para o usuário.
 
@@ -13477,7 +13785,7 @@ outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class AnaliseAusenteError(RelatorioError)`
 
-*linha 201*
+*linha 217*
 
 O projeto não tem nenhuma rodada de análise para relatar.
 
@@ -13492,19 +13800,19 @@ um traceback na cara do usuário.
 
 ### `class TabelaIlegivelError(RelatorioError)`
 
-*linha 219*
+*linha 235*
 
 Um `.csv` da rodada existe e não dá para interpretar.
 
 ### `class ModeloAusenteError(RelatorioError)`
 
-*linha 225*
+*linha 241*
 
 O `template.docx` indicado em `--template` não existe.
 
 ### `class Alerta`
 
-*linha 232*
+*linha 248*
 
 Uma divergência entre a rodada e o que está na pasta hoje.
 
@@ -13514,7 +13822,7 @@ anexado a um e-mail e aberto por outra pessoa em outro dia.
 
 ### `class TabelaLida`
 
-*linha 247*
+*linha 263*
 
 Um `.csv` da descritiva, separado em cabeçalho de comentário e dados.
 
@@ -13524,21 +13832,21 @@ fluxo, exatamente o arredondamento que a Fase 5 já resolveu.
 
 #### `def largura(self)`
 
-*linha 264*
+*linha 280*
 
 #### `def total(self)`
 
-*linha 268*
+*linha 284*
 
 ### `class Figura`
 
-*linha 273*
+*linha 289*
 
 Um `.png` da descritiva, com o caminho já conferido.
 
 ### `class Secao`
 
-*linha 285*
+*linha 301*
 
 Uma variável no documento: o que ela mostra, na ordem em que mostra.
 
@@ -13548,11 +13856,11 @@ tocar em código — é a decisão da Fase 5 aparecendo aqui.
 
 #### `def preenchidos(self)`
 
-*linha 303*
+*linha 319*
 
 ### `class Rodada`
 
-*linha 308*
+*linha 324*
 
 Uma rodada de análise encontrada em `3. Análises/`, já lida.
 
@@ -13564,7 +13872,7 @@ manifesto antigo não declara a análise dele.
 
 ### `class ForaDoRelatorio`
 
-*linha 326*
+*linha 342*
 
 Uma variável do dicionário que não gerou nada, e por quê.
 
@@ -13574,24 +13882,24 @@ aparece no terminal pelo mesmo motivo da Fase 5: "não está no relatório" e
 
 ### `class Relatorio`
 
-*linha 341*
+*linha 357*
 
 O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
-*linha 347*
+*linha 363*
 
 > O manifesto que responde pelo documento quando a pergunta é uma só — a
 > data da rodada nas propriedades do `.docx`, o banco no cabeçalho do
 > terminal. É o da descritiva quando ela existe; ver `_manifesto_principal`.
 > As rodadas todas estão em `rodadas`.
 
-*linha 355*
+*linha 371*
 
 > A metodologia da primeira página: os parágrafos e o subtítulo acima deles. Fora
 > do `texto` porque o subtítulo é um título, e não texto corrido; vazios, a
 > página fecha nos objetivos, como antes da 1.16.0.
 
-*linha 363*
+*linha 379*
 
 > Sem `type: ignore`: o campo tem default e o default é `None`, então o tipo
 > é `datetime | None`. Declarar `datetime` e atribuir `None` era pedir ao
@@ -13599,17 +13907,17 @@ O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
 #### `def raiz(self)`
 
-*linha 370*
+*linha 386*
 
 #### `def analises(self)`
 
-*linha 374*
+*linha 390*
 
 As análises que entraram no documento, na ordem em que entraram.
 
 #### `def subtitulo(self)`
 
-*linha 381*
+*linha 397*
 
 `00742 - José Antônio de Sá`, embaixo do título.
 
@@ -13624,15 +13932,15 @@ sai só com a matrícula, em vez de sair com um separador solto no fim.
 
 #### `def tabelas(self)`
 
-*linha 398*
+*linha 414*
 
 #### `def figuras(self)`
 
-*linha 402*
+*linha 418*
 
 ### `class PlanoRelatorio`
 
-*linha 407*
+*linha 423*
 
 Tudo o que o `relatorio` faria, decidido e ainda não escrito.
 
@@ -13640,33 +13948,40 @@ Imutável como os planos das outras fases, e pela mesma razão: entre a
 simulação e a execução ninguém altera um caminho em trânsito. A árvore que
 aparece no terminal é lida deste objeto.
 
+*linha 436*
+
+> A ficha passa para `pronto` depois do documento? Falso quando ela já está: um
+> arquivo que não muda não é reescrito.
+
 #### `def raiz(self)`
 
-*linha 422*
+*linha 441*
 
 #### `def secoes(self)`
 
-*linha 426*
+*linha 445*
 
 #### `def total_tabelas(self)`
 
-*linha 430*
+*linha 449*
 
 #### `def total_figuras(self)`
 
-*linha 434*
+*linha 453*
 
 ### `class ResultadoRelatorio`
 
-*linha 439*
+*linha 458*
 
 O que a execução de fato escreveu.
+
+- *linha 466* — `status_trocado: bool = False` — a ficha passou para `pronto` nesta execução
 
 ### Casos de uso
 
 ### `def preparar_relatorio(raiz, template, conferir, agora, titulo)`
 
-*linha 452*
+*linha 472*
 
 Lê as rodadas de análise da pasta e monta o documento inteiro. Não escreve nada.
 
@@ -13689,26 +14004,26 @@ Raises:
     TabelaIlegivelError: um `.csv` da rodada não abre.
     ModeloAusenteError: o `--template` indicado não existe.
 
-*linha 510*
+*linha 530*
 
 > Análise combinada na reunião e ainda não rodada. Aviso de terminal, e não
 > `Alerta`: quem precisa saber é você, agora, antes de enviar — e o que está
 > escrito no documento continua verdadeiro sem ela. Pôr isto dentro do
 > `.docx` seria contar ao cliente uma combinação que é sua com ele.
 
-*linha 522*
+*linha 542*
 
 > Por último de propósito: os quatro alertas acima falam da validade dos
 > números, e este fala do acabamento do documento. Um alerta de dado errado
 > não deve ficar abaixo de um alerta de texto por preencher.
 
-*linha 529*
+*linha 549*
 
 > A metodologia sai das rodadas, e não da ficha: o que ela afirma é o que os
 > manifestos registraram. Análise com rodada e sem frase é aviso de terminal —
 > o parágrafo sai sem ela, e quem precisa saber disso antes de enviar é você.
 
-*linha 547*
+*linha 567*
 
 > O texto entra no `Relatorio` como dado, e o `documento.py` não lê
 > constante nenhuma. É o que mantém a divisão da fase — e é o que fez
@@ -13718,7 +14033,7 @@ Raises:
 
 ### `def executar_relatorio(plano)`
 
-*linha 569*
+*linha 590*
 
 Escreve o documento no disco. Não decide mais nada.
 
@@ -13731,22 +14046,44 @@ arquivado ao lugar. Sem isso, a versão anterior teria sumido em troca de nada.
 É o mesmo cuidado do `executar_adicao` da Fase 3 e do `executar_descritiva`
 da Fase 5.
 
+Depois do documento, e antes do histórico, a ficha passa para `pronto` — e a
+linha do histórico diz isso só quando a troca aconteceu. O que se desfaz inclui a
+ficha: ela volta ao texto que tinha, letra por letra.
+
 O `documento.py` entra aqui dentro, e não no topo do arquivo, pelo mesmo
 motivo que o `matplotlib` entra dentro do `executar_descritiva`: a simulação
 não desenha documento nenhum e não deve pagar pelo `python-docx`.
 
-*linha 610*
+*linha 643*
 
 > `Exception`, como no `executar_*` de cada análise, e não só `OSError` e
 > `RelatorioError`: até a 1.13.0 um `.png` ilegível estourava o `python-docx`
 > com uma exceção que não é nenhuma das duas, e o relatório anterior ficava em
 > `2. Versões antigas/` sem o novo no lugar dele. O erro sobe do mesmo jeito.
 
+### `def _marcar_pronto(raiz, avisos, desfazer)`
+
+*linha 666*
+
+Passa a ficha para `pronto`, depois de o documento estar no disco. Devolve se
+passou.
+
+O documento é o produto e o status é o recibo dele: um `projeto.yaml` que não se
+deixa escrever — aberto noutro programa, a ficha que deixou de abrir entre a
+simulação e a execução — vira aviso, com o que escrever à mão, e o relatório fica.
+É a regra do somente-leitura do `flatcap novo`: perder a marca é aceitável,
+perder o produto por causa dela não.
+
+*linha 679*
+
+> `newline=""` para o desfazer devolver o arquivo como estava, até o `\r\n` de
+> uma ficha editada no Windows.
+
 ### Nome e lugar do arquivo
 
 ### `def nome_do_relatorio(matricula, quando)`
 
-*linha 635*
+*linha 698*
 
 Monta `Relatorio_00742_2026-09-20.docx`, como o roteiro pede.
 
@@ -13756,7 +14093,7 @@ caminho.
 
 ### `def relatorios_na_pasta(raiz)`
 
-*linha 648*
+*linha 711*
 
 Os relatórios que já estão na raiz do projeto, em ordem.
 
@@ -13765,11 +14102,11 @@ um desvio deliberado do apêndice A do roteiro, já registrado no `projeto.py`:
 o relatório é o produto que se entrega, e ele fica onde a mão alcança
 primeiro ao abrir a pasta.
 
-- *linha 667* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
+- *linha 730* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
 
 ### `def _arquivamentos(raiz)`
 
-*linha 672*
+*linha 735*
 
 O que sai da raiz e vai para `2. Versões antigas/`.
 
@@ -13789,7 +14126,7 @@ dizer está na docstring, que é onde se diz.
 
 ### `def localizar_template(raiz, template)`
 
-*linha 705*
+*linha 768*
 
 Qual `.docx` empresta os estilos, e nesta ordem.
 
@@ -13818,7 +14155,7 @@ Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
 procura o modelo pelos mesmos degraus, e dois caminhos de busca é como um dos
 dois relatórios sai sem o logotipo.
 
-*linha 745*
+*linha 808*
 
 > O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
 > de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
@@ -13827,7 +14164,7 @@ dois relatórios sai sem o logotipo.
 
 ### `def _rodadas(raiz, ficha)`
 
-*linha 762*
+*linha 825*
 
 As rodadas de `3. Análises/`, na ordem do documento.
 
@@ -13847,7 +14184,7 @@ Raises:
 
 ### `def _ordenar(rodadas, analises_da_ficha)`
 
-*linha 810*
+*linha 873*
 
 A ordem das seções do documento: a ficha primeiro, o padrão depois.
 
@@ -13865,7 +14202,7 @@ escrito na ficha e sem rodada no disco não entra aqui — ele vira aviso, em
 
 ### `def _manifesto_principal(rodadas)`
 
-*linha 844*
+*linha 907*
 
 O manifesto que responde pelo documento quando a pergunta é uma só.
 
@@ -13878,7 +14215,7 @@ primeira rodada da ordem — que é a que o documento apresenta primeiro.
 
 ### `def _variaveis_de_fora(rodadas)`
 
-*linha 861*
+*linha 924*
 
 As variáveis do dicionário que **nenhuma** rodada descreveu.
 
@@ -13890,11 +14227,11 @@ aparece em rodada nenhuma.
 
 ### `def _mensagem_sem_rodada(raiz)`
 
-*linha 888*
+*linha 951*
 
 ### `def _analises_em_texto(analises)`
 
-*linha 899*
+*linha 962*
 
 `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
 
@@ -13904,7 +14241,7 @@ manifesto é escrito por quem escreveu a análise.
 
 ### `def _secoes(pasta, manifesto)`
 
-*linha 913*
+*linha 976*
 
 Uma seção por variável do manifesto, na ordem dele.
 
@@ -13915,7 +14252,7 @@ reversível em um comando que não roda.
 
 ### `def ler_tabela(caminho, especie, titulo)`
 
-*linha 961*
+*linha 1024*
 
 Lê um `.csv` de uma análise sem o `pandas` e sem converter valor nenhum.
 
@@ -13933,7 +14270,7 @@ que está no arquivo. Aqui o texto atravessa intacto.
 
 ### `def tabela_do_texto(texto, especie, titulo, caminho)`
 
-*linha 991*
+*linha 1054*
 
 O miolo do `ler_tabela`: o texto de um `.csv` de análise, já lido, virando tabela.
 
@@ -13946,14 +14283,14 @@ tabela não têm como dizer números diferentes.
 O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM que o
 `manifesto.Tabela.texto` escreve é tirado aqui, como o `utf-8-sig` o tira na leitura.
 
-*linha 1009*
+*linha 1072*
 
 > Os comentários são só os do começo, como no `dicionario.csv`: depois do
 > cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
 > que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
 > tabela do documento e virava nota, e o `Total` deixava de somar.
 
-*linha 1031*
+*linha 1094*
 
 > O primeiro comentário é o título do arquivo; o título do manifesto é o
 > mesmo texto e tem precedência, para que o documento e o índice não possam
@@ -13963,7 +14300,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `_MARCADOR`
 
-*linha 1055*
+*linha 1118*
 
 > O que ocupa o lugar de um campo que veio em branco.
 >
@@ -13979,7 +14316,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `def montar_abertura(ficha, texto_padrao)`
 
-*linha 1072*
+*linha 1135*
 
 Os parágrafos da primeira página: o texto fixo, a finalidade, os objetivos.
 
@@ -14000,7 +14337,7 @@ estiver escrito na constante hoje.
 
 ### `def _paragrafos(texto)`
 
-*linha 1104*
+*linha 1167*
 
 Cada quebra de linha do campo `notes` vira um parágrafo do documento.
 
@@ -14014,7 +14351,7 @@ linha aqui".
 
 ### `def conferir_texto(ficha)`
 
-*linha 1120*
+*linha 1183*
 
 Quais campos da primeira página vieram em branco.
 
@@ -14028,7 +14365,7 @@ abre com a mesma primeira página, e o campo em branco precisa do mesmo aviso l�
 
 ### `def _conferir_banco(raiz, ficha, rodadas, conferir)`
 
-*linha 1161*
+*linha 1224*
 
 As rodadas ainda descrevem a versão vigente do banco?
 
@@ -14051,11 +14388,11 @@ versões diferentes são dois — que é a informação que interessa, porque a�
 documento está misturando números de dois bancos e as análises que ele nomeia
 são as que precisam ser refeitas.
 
-- *linha 1227* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
+- *linha 1290* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
 
 ### `def _conferir_dicionario(raiz, rodadas)`
 
-*linha 1265*
+*linha 1328*
 
 O `dicionario.csv` de hoje é o que dirigiu as rodadas?
 
@@ -14089,13 +14426,13 @@ Perguntar a pergunta a todas as rodadas faria toda categórica do dicionário
 ser dada como «entrou depois» em um projeto que só rodou a normalidade —
 um alerta dentro do documento do cliente, sobre nada.
 
-- *linha 1303* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
+- *linha 1366* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
 
-*linha 1325*
+*linha 1388*
 
 > Quais colunas do banco cada rodada tocou, e qual rodada tocou primeiro.
 
-*linha 1331*
+*linha 1394*
 
 > Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
 > para eles: uma seção que fala de doze colunas não tem um tipo do
@@ -14103,7 +14440,7 @@ um alerta dentro do documento do cliente, sobre nada.
 
 ### `def _faixas_mudaram(faixas, detalhes)`
 
-*linha 1406*
+*linha 1469*
 
 Compara os cortes do dicionário com os que a rodada usou.
 
@@ -14111,17 +14448,17 @@ O manifesto guarda `origem` (`dicionario` ou `quartis`) e os `cortes` já
 arredondados. As três formas de divergir são: faixas preenchidas depois de a
 rodada ter usado quartis, faixas apagadas, e cortes diferentes.
 
-- *linha 1430* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+- *linha 1493* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
 
 ### Mensagens
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 1444*
+*linha 1507*
 
-### `def _acao_do_historico(plano)`
+### `def _acao_do_historico(plano, status_trocado)`
 
-*linha 1455*
+*linha 1518*
 
 ## `flatcap/documento.py`
 
@@ -15679,7 +16016,7 @@ o vigente.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*3995 linhas.*
+*4196 linhas.*
 
 Interface de linha de comando do FlatCap.
 
@@ -15687,28 +16024,28 @@ Esta camada não contém regras de negócio:
     ela lê argumentos, chama as camadas de baixo,
     formata a saída e escolhe o código de saída do processo.
 
-- *linha 78* — `if TYPE_CHECKING:` — só para as anotações: ver o comentário em `perfil`
+- *linha 81* — `if TYPE_CHECKING:` — só para as anotações: ver o comentário em `perfil`
 
 ### `_AVISO_DE_LICENCA`
 
-*linha 110*
+*linha 113*
 
 > O aviso que a GPL pede que um programa mostre, no formato dos programas GNU. O
 > titular dos direitos autorais é o mesmo do `NOTICE.md` e dos cabeçalhos SPDX.
 
 ### `def _versao(valor)`
 
-*linha 121*
+*linha 124*
 
 ### `def _plural(quantidade, singular, plural)`
 
-*linha 127*
+*linha 130*
 
 Devolve o substantivo já concordado com o número.
 
 ### `def _abortar(titulo, mensagem)`
 
-*linha 133*
+*linha 136*
 
 Imprime o erro em um painel e devolve a exceção que encerra o comando.
 
@@ -15718,19 +16055,19 @@ Imprime o erro em um painel e devolve a exceção que encerra o comando.
 
 ### `def _nada_a_fazer(mensagem)`
 
-*linha 144*
+*linha 147*
 
 Painel amarelo e saída com código 0: houve uma recusa, mas nada deu errado.
 
 ### `def _configuracao(env, criar_root)`
 
-*linha 150*
+*linha 153*
 
 Carrega a configuração ou encerra o comando com a mensagem do `config.py`.
 
 ### `def _rodada_escrita(frase, plano, resultado)`
 
-*linha 159*
+*linha 162*
 
 O que o comando de uma análise diz depois de escrevê-la.
 
@@ -15740,38 +16077,38 @@ a sétima cópia — e a primeira a divergir das outras.
 
 ### `def principal(_)`
 
-*linha 186*
+*linha 189*
 
 Ponto de entrada. Existe para hospedar as opções globais.
 
 ### `def doctor(criar_root, criar_env, env)`
 
-*linha 197*
+*linha 200*
 
 Testar as credenciais, a conexão com o REDCap e a pasta de dados.
 Responde se o problema está na configuração, na rede ou no token.
 
-*linha 216*
+*linha 219*
 
 > Como o `--criar-root`, não simula: criar é o pedido. E não sobrescreve
 > nunca — o arquivo guarda o token, e um token perdido se pede de novo.
 
-*linha 226*
+*linha 229*
 
 > 1. Configuração
 
-*linha 245*
+*linha 248*
 
 > 2. Conexão com o REDCap
 
-*linha 258*
+*linha 261*
 
 > A instalação incompleta é diagnosticada **depois** da tabela inteira, e não
 > no lugar dela: saber que a rede está de pé faz parte do diagnóstico mesmo
 > quando falta biblioteca. O `doctor` é o comando que responde "o que está
 > errado?" — ele não pode morrer no meio do próprio diagnóstico.
 
-*linha 263*
+*linha 266*
 
 > O `uv tool upgrade --reinstall` reinstala da origem guardada na instalação — o
 > repositório. O `uv tool install --reinstall flatcap` procura o nome no PyPI, onde
@@ -15780,13 +16117,13 @@ Responde se o problema está na configuração, na rede ou no token.
 
 ### `def _criar_env_da_conta()`
 
-*linha 279*
+*linha 282*
 
 O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_BIBLIOTECAS`
 
-*linha 310*
+*linha 313*
 
 > As bibliotecas que abrem o banco, calculam, desenham e escrevem o documento.
 > A ordem é a do fluxo: ler, calcular, desenhar, entregar.
@@ -15799,7 +16136,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `_NOME_NO_PIP`
 
-*linha 320*
+*linha 323*
 
 > `import docx` é o pacote `python-docx`, e o nome de instalação não é o nome de
 > import. Quem lê "falta `docx`" no terminal vai procurar por `docx` no pip e
@@ -15807,7 +16144,7 @@ O `doctor --criar-env`: o `.env` de quem instalou o FlatCap por um pacote.
 
 ### `def _bibliotecas()`
 
-*linha 326*
+*linha 329*
 
 Quais versões abrem o banco, desenham os gráficos e escrevem o documento hoje.
 
@@ -15823,13 +16160,13 @@ porque a máquina que os roda é a única em que ele nunca falha.
 
 ### `def listar(ultimos, env, conferir_anexos)`
 
-*linha 356*
+*linha 359*
 
 Lista as solicitações no REDCap, e o que já foi para o disco.
     É o que coordena o fluxo diário de trabalho.
     Mostra o que chegou de novo de um lado e o que já virou pasta.
 
-*linha 397*
+*linha 400*
 
 > A busca no disco é feita **uma vez** por cliente e o resultado é passado
 > adiante. A tabela e o resumo faziam a mesma varredura em separado, o que já
@@ -15837,13 +16174,13 @@ Lista as solicitações no REDCap, e o que já foi para o disco.
 
 ### `def _reconferir_anexos(cfg, clientes)`
 
-*linha 408*
+*linha 411*
 
 Confirma na API os anexos que o export de registros não declarou.
 
 ### `def _tabela_de_clientes(clientes, pastas)`
 
-*linha 440*
+*linha 443*
 
 Monta a tabela que sai do comando `listar`.
 Valores que vêm do REDCap entram como `Text`, nunca como string crua:
@@ -15856,7 +16193,7 @@ ter vários trabalhos essa pergunta faria a segunda solicitação dele aparecer
 como já atendida — e ela nunca viraria pasta, porque o `listar` é o comando
 que diz o que ainda falta fazer.
 
-*linha 469*
+*linha 472*
 
 > Só o nome do projeto: a matrícula e o nome do cliente já têm coluna
 > própria duas casas atrás, e repeti-los aqui espremeria a tabela inteira
@@ -15864,13 +16201,70 @@ que diz o que ainda falta fazer.
 
 ### `def _resumo(clientes, pastas, total)`
 
-*linha 477*
+*linha 480*
 
 Uma linha com o que exige atenção, para não ter que contar a tabela na mão.
 
+### flatcap status
+
+### `def status_dos_projetos(env)`
+
+*linha 522*
+
+*linha 518*
+
+> O nome da função não é o do comando, como no `dados_listar`: `status` é também o
+> campo da ficha, e uma função com esse nome no módulo inteiro da CLI é um engano
+> esperando para acontecer.
+
+Mostra os projetos que já têm pasta, com o status e o prazo de cada um.
+    Lê o projeto.yaml de cada projeto do FLATCAP_ROOT, sem falar com o REDCap e
+    sem escrever nada. O prazo que passou sem o projeto estar pronto sai como
+    ATRASADO, e os projetos finalizados não aparecem.
+
+### `def _tabela_do_status(painel)`
+
+*linha 550*
+
+As três colunas do `listar` que dizem de quem é a pasta, e as duas que dizem como
+o projeto está.
+
+O significado vai escrito, e não só na cor: um painel copiado para um e-mail, ou
+lido por um programa que recebe a saída sem as cores, continua dizendo ATRASADO.
+
+### `def _celula_do_status(linha)`
+
+*linha 577*
+
+Um dos cinco, como está no `projeto.STATUS`; o que não é nenhum deles, como está
+escrito na ficha, em amarelo.
+
+### `def _celula_do_prazo(linha)`
+
+*linha 587*
+
+A data final, ou ATRASADO quando ela passou sem o projeto estar pronto.
+
+### `def _resumo_do_status(painel)`
+
+*linha 600*
+
+Uma linha com o que exige atenção, como a do `listar`.
+
+### `def _avisos_do_status(painel)`
+
+*linha 629*
+
+O que está no painel sem poder ser lido, e o que ficou fora dele — cada um com o
+que fazer.
+
+Um status ou um prazo que não se lê não tira o projeto do painel: ele aparece em
+amarelo, como está escrito, e o aviso diz o que escrever no lugar. A ficha que não
+abre e a pasta no formato antigo não têm como aparecer na tabela, e aparecem aqui.
+
 ### `def novo(record_id, sim, env)`
 
-*linha 514*
+*linha 701*
 
 Cria a pasta do projeto a partir de uma solicitação do REDCap.
 POR PADRÃO APENAS SIMULA:
@@ -15879,14 +16273,14 @@ POR PADRÃO APENAS SIMULA:
 
 ### `def _cabecalho_do_plano(plano)`
 
-*linha 590*
+*linha 777*
 
 Uma linha identificando de quem é a solicitação, antes de desenhar a árvore.
 Confirma que o `record_id` digitado é mesmo o cliente que você tinha em mente.
 
 ### `def _arvore_do_plano(cfg, plano)`
 
-*linha 603*
+*linha 790*
 
 Desenha exatamente o que `executar` criaria, lendo o próprio `Plano`.
 
@@ -15899,7 +16293,7 @@ diferentes, e só uma delas pede conferência antes do `--sim`.
 
 ### `def amostragem(identificador, titulo, template, sim, env)`
 
-*linha 653*
+*linha 840*
 
 Calcula o tamanho da amostra e escreve o relatório da amostra.
 
@@ -15922,14 +16316,14 @@ e não fala com o REDCap.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 698*
+*linha 885*
 
 > O `python-docx` entra só na execução, dentro do `executar_amostragem`. O
 > `pandas` não entra nunca: a amostragem da v1 não abre banco.
 
 ### `def _cabecalho_da_amostragem(plano)`
 
-*linha 821*
+*linha 1008*
 
 Quem, e o que esta rodada faz: escrever o modelo, ou fazer a conta.
 
@@ -15939,7 +16333,7 @@ confeririam depois de executar.
 
 ### `def _modelo_do_desenho(plano)`
 
-*linha 863*
+*linha 1050*
 
 O `desenho.yaml` que a primeira rodada escreve, inteiro.
 
@@ -15948,7 +16342,7 @@ simulação existe para mostrar o que seria gravado.
 
 ### `def _tabela_da_amostragem(amostragem)`
 
-*linha 877*
+*linha 1064*
 
 A conta, linha por linha, como sai no `tamanho.csv` e no documento.
 
@@ -15957,7 +16351,7 @@ no fim.
 
 ### `def _arvore_da_amostragem(plano)`
 
-*linha 898*
+*linha 1085*
 
 Desenha o que `executar_amostragem` escreveria, lendo o próprio plano.
 
@@ -15965,7 +16359,7 @@ Desenha o que `executar_amostragem` escreveria, lendo o próprio plano.
 
 ### `def dados_adicionar(identificador, caminho, sim, env)`
 
-*linha 949*
+*linha 1136*
 
 Registra uma nova versão do banco na pasta do projeto.
 
@@ -15977,7 +16371,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para executar.
 
 ### `def dados_listar(identificador, rapido, env)`
 
-*linha 1027*
+*linha 1214*
 
 Mostra a linha do tempo das versões do banco de um projeto.
 
@@ -15987,27 +16381,27 @@ presente na pasta que a ficha desconhece.
 
 ### `def _cabecalho_dos_dados(plano)`
 
-*linha 1075*
+*linha 1262*
 
 ### `def _cabecalho_da_ficha(tempo)`
 
-*linha 1084*
+*linha 1271*
 
 ### `def _arvore_da_adicao(plano)`
 
-*linha 1094*
+*linha 1281*
 
 Desenha o que `executar_adicao` faria, lendo o próprio plano.
 
 ### `def _tabela_da_linha_do_tempo(tempo)`
 
-*linha 1143*
+*linha 1330*
 
 A cronologia. Nomes de arquivo entram como `Text` pelo mesmo motivo de sempre.
 
 ### `def _divergencias(tempo)`
 
-*linha 1187*
+*linha 1374*
 
 As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
@@ -16015,7 +16409,7 @@ As três formas de a ficha e o disco discordarem, cada uma com o que fazer.
 
 ### `def perfil(identificador, aba, rapido, sim, env)`
 
-*linha 1248*
+*linha 1435*
 
 Descreve o banco e prepara a reunião com o cliente.
 
@@ -16029,7 +16423,7 @@ ficam intactas, e só entram as variáveis novas.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1283*
+*linha 1470*
 
 > O `pandas` sai de dentro deste import e não do topo do arquivo: ele custa uns
 > 0,4 s para carregar, contra 0,08 s do typer com o rich. O `listar`, que roda
@@ -16037,35 +16431,35 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_perfil(perfil)`
 
-*linha 1342*
+*linha 1529*
 
 Quem, qual arquivo, e se dá para confiar nele. Nessa ordem.
 
-*linha 1367*
+*linha 1554*
 
 > As colunas que o leitor converteu: é uma decisão dele, e decisão do leitor
 > sai escrita, como o separador e a codificação. Ver o `banco.py`.
 
 ### `def _tabela_do_perfil(perfil)`
 
-*linha 1387*
+*linha 1574*
 
 Uma linha por variável. Valores do banco entram como `Text`, nunca como string
 crua, pelo mesmo motivo do `listar`.
 
 ### `def _achados_no_terminal(perfil)`
 
-*linha 1423*
+*linha 1610*
 
 Os achados agrupados pelo que fazer com eles, do mais urgente para o menos.
 
 ### `def _lista_de_achados(achados)`
 
-*linha 1460*
+*linha 1647*
 
 ### `def _arvore_do_perfil(plano)`
 
-*linha 1475*
+*linha 1662*
 
 Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
@@ -16073,7 +16467,7 @@ Desenha o que `executar_perfil` escreveria, lendo o próprio plano.
 
 ### `def descritiva(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1514*
+*linha 1701*
 
 Gera a análise descritiva obedecendo ao dicionario.csv.
 
@@ -16090,7 +16484,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1556*
+*linha 1743*
 
 > Mesmo motivo do `perfil`: o `pandas` custa perto de meio segundo para
 > carregar e o `matplotlib` outro tanto. O `listar`, que roda várias vezes por
@@ -16098,7 +16492,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_descritiva(plano)`
 
-*linha 1607*
+*linha 1794*
 
 O que a descritiva mostra antes de escrever — no comando dela e no `analisar`.
 
@@ -16109,13 +16503,13 @@ análises seguintes têm a sua `_mostrar_*` pelo mesmo motivo.
 
 ### `def _cabecalho_da_descritiva(plano)`
 
-*linha 1625*
+*linha 1812*
 
 Quem, qual banco, se dá para confiar nele, e quanto do dicionário entra.
 
 ### `def _tabela_da_descritiva(descritiva)`
 
-*linha 1669*
+*linha 1856*
 
 Uma linha por variável, com os arquivos que ela gera.
 
@@ -16124,7 +16518,7 @@ responde "de qual variável saiu este .csv?" antes de o .csv existir.
 
 ### `def _fora_da_descritiva(descritiva)`
 
-*linha 1706*
+*linha 1893*
 
 As variáveis que não geraram artefato, e por quê.
 
@@ -16133,7 +16527,7 @@ relatório" e "ninguém reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_da_descritiva(plano)`
 
-*linha 1732*
+*linha 1919*
 
 Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
@@ -16141,7 +16535,7 @@ Desenha o que `executar_descritiva` escreveria, lendo o próprio plano.
 
 ### `def normalidade(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 1787*
+*linha 1974*
 
 Testa a normalidade das variáveis numéricas do dicionario.csv.
 
@@ -16160,7 +16554,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 1831*
+*linha 2018*
 
 > Mesmo motivo do `perfil` e da `descritiva`: `pandas`, `scipy` e `matplotlib`
 > custam perto de um segundo somados, e o `listar`, que roda várias vezes por
@@ -16168,19 +16562,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_normalidade(plano)`
 
-*linha 1882*
+*linha 2069*
 
 O que a normalidade mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_normalidade(plano)`
 
-*linha 1896*
+*linha 2083*
 
 Quem, qual banco, se dá para confiar nele, e quantas variáveis entram.
 
 ### `def _tabela_da_normalidade(normalidade)`
 
-*linha 1942*
+*linha 2129*
 
 Uma linha por variável, na mesma ordem e com os mesmos números do `.csv`.
 
@@ -16189,7 +16583,7 @@ e uma tabela que o escondesse deixaria a coluna `p` parecer uma resposta. Pelo
 mesmo motivo a assimetria e a curtose vêm **antes** do W e do p, e não depois:
 elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
-*linha 1962*
+*linha 2149*
 
 > A tabela do terminal lê as mesmas células do `.csv` que vai para o disco, e
 > não reformata número nenhum: dois formatadores para a mesma grandeza é como
@@ -16197,7 +16591,7 @@ elas medem o tamanho do desvio e não mudam com o tamanho da amostra.
 
 ### `def _nota_da_normalidade(normalidade)`
 
-*linha 1991*
+*linha 2178*
 
 A frase que impede a tabela de ser lida como um veredito.
 
@@ -16208,7 +16602,7 @@ vira leitura de conferência.
 
 ### `def _fora_da_normalidade(normalidade)`
 
-*linha 2039*
+*linha 2226*
 
 As variáveis que não entraram, e por quê.
 
@@ -16218,7 +16612,7 @@ lista é o que impede a pergunta "por que `sexo` não está na tabela?".
 
 ### `def _arvore_da_normalidade(plano)`
 
-*linha 2066*
+*linha 2253*
 
 Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
@@ -16226,7 +16620,7 @@ Desenha o que `executar_normalidade` escreveria, lendo o próprio plano.
 
 ### `def cruzamento(identificador, aba, rapido, sim, env)`
 
-*linha 2127*
+*linha 2314*
 
 Cruza pares de variáveis categóricas: uma tabela por par.
 
@@ -16248,26 +16642,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2170*
+*linha 2357*
 
 > O `pandas` entra aqui dentro, como em todo comando que abre o banco: o
 > `listar`, que roda várias vezes por dia, não deve pagar por ele.
 
 ### `def _mostrar_cruzamento(plano)`
 
-*linha 2214*
+*linha 2401*
 
 O que o cruzamento mostra antes de escrever — no comando dele e no `analisar`.
 
 ### `def _cabecalho_do_cruzamento(plano)`
 
-*linha 2226*
+*linha 2413*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_do_cruzamento(par)`
 
-*linha 2268*
+*linha 2455*
 
 A tabela de um par, com as mesmas células do `.csv`.
 
@@ -16276,7 +16670,7 @@ deste comando, e a simulação existe para você ler o que vai para o documento
 antes de escrevê-lo. A linha do `Total` em negrito e a `(sem informação)`
 apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
-*linha 2279*
+*linha 2466*
 
 > `Text` no título e nos cabeçalhos, e não a string: são rótulos do
 > dicionário, e um `Idade [anos]` perderia o colchete como marcação do rich —
@@ -16284,7 +16678,7 @@ apagada são as mesmas marcas que o `.docx` vai dar a elas.
 
 ### `def _arvore_do_cruzamento(plano)`
 
-*linha 2302*
+*linha 2489*
 
 Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
@@ -16292,7 +16686,7 @@ Desenha o que `executar_cruzamento` escreveria, lendo o próprio plano.
 
 ### `def associacao(identificador, aba, rapido, sim, env)`
 
-*linha 2346*
+*linha 2533*
 
 Testa a associação entre pares de variáveis categóricas.
 
@@ -16317,26 +16711,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2392*
+*linha 2579*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_associacao(plano)`
 
-*linha 2436*
+*linha 2623*
 
 O que a associação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_associacao(plano)`
 
-*linha 2448*
+*linha 2635*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_associacao(associacao)`
 
-*linha 2490*
+*linha 2677*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -16345,11 +16739,11 @@ dois formatadores para o mesmo p é como o terminal diz `0.042` enquanto o
 arquivo diz `0,042`. O p abaixo de 0,05 sai em negrito: é o destaque de quem
 lê a simulação, e ele fica no terminal — o documento não marca nada.
 
-- *linha 2503* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
+- *linha 2690* — `if posicao in (2, 4, 5):` — n, p-valor e V: números, à direita
 
 ### `def _nota_da_associacao(associacao)`
 
-*linha 2526*
+*linha 2713*
 
 Por que cada par foi para o teste em que foi, e quantos testes são.
 
@@ -16359,7 +16753,7 @@ ir para o documento.
 
 ### `def _arvore_da_associacao(plano)`
 
-*linha 2563*
+*linha 2750*
 
 Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
@@ -16367,7 +16761,7 @@ Desenha o que `executar_associacao` escreveria, lendo o próprio plano.
 
 ### `def correlacao(identificador, aba, sem_graficos, rapido, sim, env)`
 
-*linha 2606*
+*linha 2793*
 
 Correlaciona pares de variáveis: Pearson, Spearman ou Kendall.
 
@@ -16395,7 +16789,7 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2659*
+*linha 2846*
 
 > O `pandas`, o `scipy` e o `matplotlib` entram aqui dentro, como em todo
 > comando que abre o banco: o `listar`, que roda várias vezes por dia, não deve
@@ -16403,19 +16797,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _mostrar_correlacao(plano)`
 
-*linha 2706*
+*linha 2893*
 
 O que a correlação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_correlacao(plano)`
 
-*linha 2718*
+*linha 2905*
 
 Quem, qual banco, se dá para confiar nele, e quantos pares entram.
 
 ### `def _tabela_da_correlacao(correlacao)`
 
-*linha 2760*
+*linha 2947*
 
 Uma linha por par, com as mesmas células do `.csv`.
 
@@ -16425,11 +16819,11 @@ o arquivo diz `0,31`. O p abaixo de 0,05 sai em negrito, e o método escrito na
 ficha contra a regra sai em amarelo: são destaques de quem lê a simulação, e
 ficam no terminal — o documento não marca nada.
 
-- *linha 2774* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
+- *linha 2961* — `if posicao in (2, 4, 5, 6):` — n, coeficiente, IC e p-valor: números, à direita
 
 ### `def _nota_da_correlacao(correlacao)`
 
-*linha 2799*
+*linha 2986*
 
 Por que cada par foi para o método em que foi, e quantos testes são.
 
@@ -16440,7 +16834,7 @@ a regra teria escolhido.
 
 ### `def _arvore_da_correlacao(plano)`
 
-*linha 2843*
+*linha 3030*
 
 Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
@@ -16448,7 +16842,7 @@ Desenha o que `executar_correlacao` escreveria, lendo o próprio plano.
 
 ### `def comparacao(identificador, aba, rapido, sim, env)`
 
-*linha 2901*
+*linha 3088*
 
 Compara: contra um valor de referência, entre grupos ou entre medidas.
 
@@ -16482,26 +16876,26 @@ Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 2956*
+*linha 3143*
 
 > O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
 > banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
 
 ### `def _mostrar_comparacao(plano)`
 
-*linha 3000*
+*linha 3187*
 
 O que a comparação mostra antes de escrever — no comando dela e no `analisar`.
 
 ### `def _cabecalho_da_comparacao(plano)`
 
-*linha 3013*
+*linha 3200*
 
 Quem, qual banco, se dá para confiar nele, e quantos itens entram.
 
 ### `def _tabelas_da_comparacao(comparacao)`
 
-*linha 3055*
+*linha 3242*
 
 Uma tabela por delineamento, com as mesmas células do `.csv`.
 
@@ -16515,14 +16909,14 @@ O p abaixo de 0,05 sai em negrito, e a linha sem teste ou com o método escrito
 contra a regra sai com a coluna `teste` em amarelo: são destaques de quem lê a
 simulação, e ficam no terminal — o documento não marca nada.
 
-*linha 3072*
+*linha 3259*
 
 > n, referência e p-valor: números, à direita. Pelo nome, e não pela posição —
 > cada delineamento tem as suas colunas.
 
 ### `def _nota_da_comparacao(comparacao)`
 
-*linha 3116*
+*linha 3303*
 
 Por que cada item foi para o teste em que foi, e quantos testes são.
 
@@ -16533,7 +16927,7 @@ escolheu um teste que ainda não existe, a frase sai em amarelo.
 
 ### `def _arvore_da_comparacao(plano)`
 
-*linha 3156*
+*linha 3343*
 
 Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
@@ -16541,42 +16935,42 @@ Desenha o que `executar_comparacao` escreveria, lendo o próprio plano.
 
 ### `class _Tela`
 
-*linha 3204*
+*linha 3391*
 
 O que o terminal sabe de uma análise: como mostrá-la antes de escrever, a frase
 de depois de escrita e a linha dela na tabela do lote.
 
 ### `def _sem_teste(quantos)`
 
-*linha 3215*
+*linha 3402*
 
 ### `def _resumo_da_descritiva(plano)`
 
-*linha 3219*
+*linha 3406*
 
 ### `def _resumo_da_normalidade(plano)`
 
-*linha 3226*
+*linha 3413*
 
 ### `def _resumo_do_cruzamento(plano)`
 
-*linha 3234*
+*linha 3421*
 
 ### `def _resumo_da_associacao(plano)`
 
-*linha 3239*
+*linha 3426*
 
 ### `def _resumo_da_correlacao(plano)`
 
-*linha 3247*
+*linha 3434*
 
 ### `def _resumo_da_comparacao(plano)`
 
-*linha 3255*
+*linha 3442*
 
 ### `_NA_TELA`
 
-*linha 3263*
+*linha 3450*
 
 > Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
 > iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
@@ -16585,7 +16979,7 @@ de depois de escrita e a linha dela na tabela do lote.
 
 ### `def analisar(identificador, aba, sem_graficos, rapido, resumo, sim, env)`
 
-*linha 3290*
+*linha 3477*
 
 Roda, de uma vez, as análises da lista `analises:` do projeto.yaml.
 
@@ -16610,21 +17004,21 @@ Para rodar uma análise só, o comando dela continua valendo.
 
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3345*
+*linha 3532*
 
 > O `analises.py` não traz o `pandas`; quem traz é cada análise, no `preparar_*`
 > dela. O import fica aqui dentro pelo mesmo motivo dos outros comandos.
 
-*linha 3372*
+*linha 3559*
 
 > Um painel por recusa, com o título da análise — o mesmo painel que o
 > comando dela abriria —, e o fecho do lote por último.
 
 #### `def ao_escrever(feita)`
 
-*linha 3411*
+*linha 3598*
 
-*linha 3423*
+*linha 3610*
 
 > Ctrl+C no meio do lote. O `click` diria só «Aborted!», e aqui a pergunta
 > que sobra é qual análise ficou escrita e qual ficou pela metade — a mesma
@@ -16632,19 +17026,19 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _notas(erro)`
 
-*linha 3448*
+*linha 3635*
 
 As notas que o `executar_analises` prende ao erro: onde o lote parou.
 
 ### `def _regua_da_etapa(posicao, total, etapa)`
 
-*linha 3455*
+*linha 3642*
 
 A linha que abre a saída de cada análise, com a posição dela no lote.
 
 ### `def _cabecalho_do_lote(plano)`
 
-*linha 3466*
+*linha 3653*
 
 Quem, qual banco, se dá para confiar nele, e quantas análises a lista pede.
 
@@ -16653,7 +17047,7 @@ versão vigente da ficha.
 
 ### `def _tabela_do_lote(plano)`
 
-*linha 3510*
+*linha 3697*
 
 Uma linha por análise, na ordem da lista: o que entra nela, quantos arquivos, e
 se a rodada é a primeira ou refaz uma anterior.
@@ -16664,7 +17058,7 @@ par que não tinha casos para o teste.
 
 ### `def _avisos_das_etapas(plano)`
 
-*linha 3538*
+*linha 3725*
 
 Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
 
@@ -16673,7 +17067,7 @@ seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
 
 ### `def _arvore_do_lote(plano)`
 
-*linha 3559*
+*linha 3746*
 
 Desenha o que `executar_analises` escreveria, lendo o próprio plano.
 
@@ -16685,7 +17079,7 @@ logo acima. Aqui é o lote inteiro de uma vez — o que vai para
 
 ### `def relatorio(identificador, template, titulo, rapido, sim, env)`
 
-*linha 3605*
+*linha 3792*
 
 Monta o relatório .docx a partir das análises já rodadas.
 
@@ -16710,9 +17104,11 @@ Quando uma rodada já não descreve o que está na pasta — banco novo, arquivo
 alterado, dicionário mexido — o documento é gerado assim mesmo, com o aviso
 escrito dentro dele.
 
+Escrito o documento, o `status:` do projeto.yaml passa para `pronto`.
+
 POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
-*linha 3658*
+*linha 3847*
 
 > Nem `pandas` nem `matplotlib` entram neste comando: o relatório lê os
 > manifestos e os `.csv` das rodadas, e é só isso. O `python-docx` entra só
@@ -16720,7 +17116,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def template(saida, sim, env)`
 
-*linha 3740*
+*linha 3933*
 
 Escreve o modelo .docx que o relatório usa, para você ajustar no Word.
 
@@ -16737,7 +17133,7 @@ POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
 
 ### `def _cabecalho_do_relatorio(plano)`
 
-*linha 3812*
+*linha 4005*
 
 Quem, de quais análises, sobre qual banco, com qual modelo e qual título.
 
@@ -16750,7 +17146,7 @@ de executar, que é exatamente o que a simulação existe para evitar.
 
 ### `def _tabela_do_relatorio(relatorio)`
 
-*linha 3853*
+*linha 4046*
 
 Uma linha por seção do documento, com os arquivos que entram nela.
 
@@ -16762,7 +17158,7 @@ pergunta deixou de ser «o que entrou?» e passou a ser «o que entrou, e de
 qual rodada?». O nome aparece uma vez por bloco, e não repetido em toda
 linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
-*linha 3874*
+*linha 4067*
 
 > `rodadas` vazio é o `Relatorio` montado à mão — em teste, ou por uma
 > camada de cima que não passou pela varredura. A tabela continua saindo,
@@ -16770,7 +17166,7 @@ linha — o que se lê na tela é onde uma análise acaba e a outra começa.
 
 ### `def _alertas_no_terminal(relatorio)`
 
-*linha 3911*
+*linha 4104*
 
 Os avisos que também vão para dentro do documento.
 
@@ -16779,7 +17175,7 @@ que sobra depois de o arquivo ser anexado a um e-mail.
 
 ### `def _fora_do_relatorio(relatorio)`
 
-*linha 3938*
+*linha 4131*
 
 As variáveis que **nenhuma** análise descreveu, e por quê.
 
@@ -16794,7 +17190,7 @@ reparou que ela existia" são coisas diferentes.
 
 ### `def _arvore_do_relatorio(plano)`
 
-*linha 3970*
+*linha 4163*
 
 Desenha o que `executar_relatorio` escreveria, lendo o próprio plano.
 

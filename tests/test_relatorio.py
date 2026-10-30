@@ -23,7 +23,7 @@ from datetime import date, datetime
 import pytest
 
 import bancos
-from conftest import escrever_ficha
+from conftest import escrever_ficha, linhas_do_historico
 from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO
 from flatcap.metodologia import TITULO as TITULO_DA_METODOLOGIA
@@ -662,6 +662,114 @@ class TestExecucao:
 
     def test_o_relatorio_nao_fala_com_o_redcap(self, projeto_com_rodada, env_valido):
         assert preparar_relatorio(projeto_com_rodada(), agora=QUANDO).secoes
+
+
+# ── O projeto fica pronto ───────────────────────────────────────────────────
+
+
+class TestStatusPronto:
+    """
+    Escrito o documento, a ficha passa para `pronto` — é o que o `flatcap status`
+    mostra, e o que tira dele o ATRASADO. O documento vem primeiro: o status que não
+    se escreve vira aviso, e não desfaz o relatório.
+    """
+
+    def test_o_relatorio_passa_o_projeto_para_pronto(self, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        resultado = executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+        assert ler_ficha(raiz).status == "pronto"
+        assert resultado.status_trocado
+        assert "Status de `em andamento` para `pronto`." in linhas_do_historico(raiz)[-1]
+
+    def test_a_simulacao_decide_e_nao_escreve(self, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        antes = (raiz / "projeto.yaml").read_bytes()
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        assert plano.muda_o_status
+        assert (raiz / "projeto.yaml").read_bytes() == antes
+
+    def test_a_ficha_ja_pronta_nao_e_reescrita(self, projeto_com_rodada):
+        """
+        `Pronto` é o `pronto` da lista: a ficha não muda, e o histórico não diz que
+        mudou.
+        """
+        raiz = projeto_com_rodada()
+        caminho = raiz / "projeto.yaml"
+        caminho.write_text(
+            caminho.read_text(encoding="utf-8").replace(
+                "status: em andamento", "status: Pronto"
+            ),
+            encoding="utf-8",
+            newline="\n",
+        )
+        antes = caminho.read_bytes()
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        assert not plano.muda_o_status
+        resultado = executar_relatorio(plano)
+        assert caminho.read_bytes() == antes
+        assert not resultado.status_trocado
+        assert "Status" not in linhas_do_historico(raiz)[-1]
+
+    def test_o_finalizado_volta_para_pronto(self, projeto_com_rodada):
+        """
+        Um relatório novo é uma entrega nova: o projeto volta ao painel, como
+        `pronto`, e o terminal e o histórico dizem que voltou.
+        """
+        raiz = projeto_com_rodada()
+        caminho = raiz / "projeto.yaml"
+        caminho.write_text(
+            caminho.read_text(encoding="utf-8").replace(
+                "status: em andamento", "status: finalizado"
+            ),
+            encoding="utf-8",
+            newline="\n",
+        )
+        executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+        assert ler_ficha(raiz).status == "pronto"
+
+    def test_o_status_que_nao_se_escreve_vira_aviso_e_o_relatorio_fica(
+        self, projeto_com_rodada, monkeypatch
+    ):
+        import flatcap.relatorio as relatorio
+
+
+        def falhar(*_a, **_k):
+            raise OSError("arquivo aberto noutro programa (simulado)")
+
+        raiz = projeto_com_rodada()
+        monkeypatch.setattr(relatorio, "definir_status", falhar)
+        resultado = executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+
+        assert resultado.caminho.is_file()
+        assert not resultado.status_trocado
+        assert ler_ficha(raiz).status == "em andamento"
+        (aviso,) = resultado.avisos
+        assert "Escreva `status: pronto` à mão" in aviso
+        assert "Status" not in linhas_do_historico(raiz)[-1]
+
+    def test_a_falha_depois_do_status_devolve_a_ficha_como_estava(
+        self, projeto_com_rodada, monkeypatch
+    ):
+        """
+        Uma falha no meio desfaz o que já foi feito, e a ficha é uma das coisas
+        feitas: ela volta ao texto que tinha, letra por letra — até o `\\r\\n` de uma
+        ficha editada no Windows.
+        """
+        import flatcap.relatorio as relatorio
+
+        raiz = projeto_com_rodada()
+        caminho = raiz / "projeto.yaml"
+        caminho.write_bytes(caminho.read_bytes().replace(b"\n", b"\r\n"))
+        antes = caminho.read_bytes()
+
+        def falhar(*_a, **_k):
+            raise ValueError("falha que ninguém previu (simulada)")
+
+        monkeypatch.setattr(relatorio, "anotar", falhar)
+        with pytest.raises(ValueError):
+            executar_relatorio(preparar_relatorio(raiz, agora=QUANDO))
+        assert caminho.read_bytes() == antes
+        assert not list(raiz.glob("Relatorio_*.docx"))
 
 
 def test_o_manifesto_e_o_unico_insumo_alem_dos_csv(projeto_com_rodada, pasta_da_rodada):

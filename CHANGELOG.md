@@ -7,6 +7,27 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.17.0] — o painel de status
+
+### Acrescentado
+- `flatcap status`: os projetos que já têm pasta, numa tabela como a do `listar` — id,
+  matrícula, pasta local, status e prazo —, na ordem do `record_id`. Lê as fichas do
+  `FLATCAP_ROOT`, não fala com o REDCap e não escreve nada.
+- Os cinco status do `projeto.yaml`: `não iniciado`, `aguardando banco de dados`,
+  `em andamento`, `pronto` e `finalizado`. O `finalizado` tira o projeto do painel.
+- O prazo no painel: a data final escrita no `prazo:` depois da reunião, como `2026-11-04` ou
+  `04/11/2026`, e ATRASADO, em vermelho, quando ela passou sem o projeto estar `pronto`.
+- Os avisos do painel: status fora da lista, prazo que não é data, ficha que não abre e pasta
+  no formato anterior à 1.1.0.
+
+### Mudado
+- O `flatcap novo` escreve `status: não iniciado`, no lugar de `status: novo`, e o cabeçalho
+  da ficha explica os cinco status e os dois formatos do prazo.
+- O `flatcap relatorio`, quando escreve o documento, passa o `status:` da ficha para `pronto`,
+  preservando o resto do arquivo; a simulação mostra a troca, e o histórico a registra.
+- O `novo` e o `em_analise` das fichas de antes são lidos como `não iniciado` e
+  `em andamento`; nenhuma ficha precisa ser editada.
+
 ## [1.16.0] — a metodologia na primeira página
 
 ### Acrescentado

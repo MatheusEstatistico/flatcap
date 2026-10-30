@@ -65,6 +65,7 @@ ORDEM = (
     "projeto",
     "ficha",
     "dados",
+    "painel",
     "banco",
     "dicionario",
     "perfil",
