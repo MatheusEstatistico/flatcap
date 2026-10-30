@@ -66,6 +66,9 @@ from .projeto import (
     PASTA_ANTIGAS_DA_AMOSTRAGEM,
     PASTA_DADOS,
     STATUS,
+    STATUS_AGUARDANDO_BANCO,
+    STATUS_EM_ANDAMENTO,
+    STATUS_NAO_INICIADO,
     STATUS_PRONTO,
     ClienteIncompletoError,
     LayoutAntigoError,
@@ -515,6 +518,26 @@ def _resumo(
 
 # flatcap status
 
+# A cor de cada status no `flatcap status`. O `finalizado` não tem cor porque não
+# aparece. A cor ajuda o olho a separar as linhas, e só: o nome do status vai sempre
+# escrito, porque quem recebe a saída sem cor — um e-mail, uma interface que a lê —
+# precisa dele.
+#
+# Contra o fundo preto, as quatro passam do mínimo de 4,5:1 de contraste: 21, 15,7, 6,4
+# e 9,5. O azul pedido primeiro, #4461d5, dava 3,9:1, e foi trocado pelo #5f87ff, que
+# além disso é uma das 256 cores do xterm — sai igual nos terminais que não têm 24 bits.
+CORES_DO_STATUS: dict[str, str] = {
+    STATUS_NAO_INICIADO: "#ffffff",
+    STATUS_AGUARDANDO_BANCO: "#dbe91c",
+    STATUS_EM_ANDAMENTO: "#5f87ff",
+    STATUS_PRONTO: "#1cca27",
+}
+
+# O status fora da lista. Era amarelo, a cor que a CLI usa para o que pede atenção,
+# até o amarelo passar a ser o do `aguardando banco de dados`: os dois se confundiriam
+# na mesma coluna.
+COR_DO_STATUS_FORA_DA_LISTA = "magenta"
+
 # O nome da função não é o do comando, como no `dados_listar`: `status` é também o
 # campo da ficha, e uma função com esse nome no módulo inteiro da CLI é um engano
 # esperando para acontecer.
@@ -549,16 +572,21 @@ def status_dos_projetos(
 
 def _tabela_do_status(painel: Painel) -> Table:
     """
-    As três colunas do `listar` que dizem de quem é a pasta, e as duas que dizem como
-    o projeto está.
+    As quatro colunas do `listar` que dizem de quem é a pasta, e as duas que dizem
+    como o projeto está.
 
     O significado vai escrito, e não só na cor: um painel copiado para um e-mail, ou
     lido por um programa que recebe a saída sem as cores, continua dizendo ATRASADO.
+
+    Com uns 95 caracteres de largura, cada projeto cabe numa linha. Num terminal mais
+    estreito, o nome e o status quebram entre palavras, e o resto não quebra; o
+    `min_width` do nome impede que ele vire uma coluna de uma letra por linha.
     """
     tabela = Table(show_header = True, header_style = "bold")
     tabela.add_column("id", justify = "right", no_wrap = True)
     tabela.add_column("Matrícula", no_wrap = True)
-    tabela.add_column("Pasta local", overflow = "fold")
+    tabela.add_column("Nome", overflow = "fold", min_width = 10)
+    tabela.add_column("Pasta local", no_wrap = True)
     tabela.add_column("Status", overflow = "fold")
     tabela.add_column("Prazo", no_wrap = True)
 
@@ -566,6 +594,7 @@ def _tabela_do_status(painel: Painel) -> Table:
         tabela.add_row(
             Text(linha.record_id or "?", style = "" if linha.record_id else "yellow"),
             Text(linha.matricula or "—", style = "" if linha.matricula else "yellow"),
+            Text(linha.nome or "(sem nome)", style = "" if linha.nome else "yellow"),
             Text(linha.pasta_local),
             _celula_do_status(linha),
             _celula_do_prazo(linha),
@@ -576,12 +605,12 @@ def _tabela_do_status(painel: Painel) -> Table:
 
 def _celula_do_status(linha: LinhaDoPainel) -> Text:
     """
-    Um dos cinco, como está no `projeto.STATUS`; o que não é nenhum deles, como está
-    escrito na ficha, em amarelo.
+    Um dos cinco, como está no `projeto.STATUS`, na cor dele; o que não é nenhum
+    deles, como está escrito na ficha, em magenta.
     """
     if linha.status_reconhecido:
-        return Text(linha.status)
-    return Text(linha.status or "(em branco)", style = "yellow")
+        return Text(linha.status, style = CORES_DO_STATUS.get(linha.status, ""))
+    return Text(linha.status or "(em branco)", style = COR_DO_STATUS_FORA_DA_LISTA)
 
 
 def _celula_do_prazo(linha: LinhaDoPainel) -> Text:
