@@ -59,6 +59,9 @@ class LinhaDoPainel:
     pasta: Path  # a pasta do projeto: `.../00742 - José Antônio de Sá/Projeto 006`
     record_id: str
     matricula: str
+    # O nome da ficha, e não o da pasta: o da pasta passou pela limpeza dos caracteres
+    # que o Windows recusa, e o da ficha é o que o REDCap trouxe, com a sua correção.
+    nome: str
     # Um dos cinco do `projeto.STATUS`, na grafia de lá; ou, quando não é nenhum
     # deles, o que está escrito na ficha — e aí `status_reconhecido` é falso.
     status: str
@@ -135,6 +138,7 @@ def montar_painel(root: Path, agora: datetime | None = None) -> Painel:
                 pasta=ficha.raiz,
                 record_id=ficha.record_id,
                 matricula=ficha.matricula,
+                nome=ficha.nome,
                 status=status or ficha.status,
                 status_reconhecido=status is not None,
                 prazo=prazo,

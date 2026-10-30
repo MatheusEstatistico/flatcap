@@ -625,7 +625,7 @@ motivo.
 ## 1.17.0 — o painel de status
 
 **`flatcap status`: os projetos que já têm pasta, com o status e o prazo de cada um.** Uma
-tabela como a do `listar` — id, matrícula, pasta local, status e prazo —, uma linha por
+tabela como a do `listar` — id, matrícula, nome, pasta local, status e prazo —, uma linha por
 `Projeto NNN`, na ordem do `record_id`. O `listar` parte do REDCap e procura a pasta de cada
 solicitação; o `status` faz o caminho inverso, ficha por ficha, e não fala com o REDCap: fica
 de pé quando o servidor cai, e mostra a pasta cuja matrícula foi corrigida no REDCap depois de
@@ -638,7 +638,10 @@ escritos à mão. O `finalizado` tira o projeto do painel. A leitura é tolerant
 estrita (`ficha.status_reconhecido`): `Em Andamento` e `nao iniciado` são os de sempre, e os
 dois do cabeçalho de antes — `novo` e `em_analise` — também, porque toda ficha criada até a
 1.16 diz `novo`. O terceiro de antes, `entregue`, pode ser o `pronto` ou o `finalizado`, e não
-é adivinhado: sai como está escrito, em amarelo, com o aviso do que escrever no lugar.
+é adivinhado: sai como está escrito, em magenta, com o aviso do que escrever no lugar. Cada um
+dos quatro que aparecem tem a sua cor (`cli.CORES_DO_STATUS`): branco, amarelo, azul e verde,
+do `não iniciado` ao `pronto`; o magenta do que não é nenhum deles não se confunde com o
+amarelo do `aguardando banco de dados`.
 
 **O prazo é a data final**, escrita à mão depois da reunião, como `2026-11-04` ou
 `04/11/2026` (`ficha.data_escrita`). O painel mostra a data, e ATRASADO, em vermelho, quando

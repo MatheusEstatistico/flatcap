@@ -70,12 +70,24 @@ class TestQuemEntra:
         painel = montar_painel(root, agora=AGORA)
         assert [linha.record_id for linha in painel.linhas] == ["6", "23", "41", "137"]
 
-    def test_a_linha_traz_a_matricula_e_a_pasta_local(self, root):
+    def test_a_linha_traz_a_matricula_o_nome_e_a_pasta_local(self, root):
         raiz = _projeto(root, "6")
         (linha,) = montar_painel(root, agora=AGORA).linhas
         assert linha.matricula == MATRICULA
+        assert linha.nome == NOME
         assert linha.pasta == raiz
         assert linha.pasta_local == "Projeto 006"
+
+    def test_o_nome_e_o_da_ficha_e_nao_o_da_pasta(self, root):
+        """
+        A pasta perde a barra e o dois-pontos, que o Windows recusa; a ficha guarda o
+        nome como o REDCap o trouxe — e como você o corrigiu.
+        """
+        raiz = root / "00742 - Thiago NunesNeto" / "Projeto 006"
+        raiz.mkdir(parents=True)
+        escrever_ficha(raiz, record_id="6", nome="Thiago Nunes/Neto")
+        (linha,) = montar_painel(root, agora=AGORA).linhas
+        assert linha.nome == "Thiago Nunes/Neto"
 
     def test_o_finalizado_sai_do_painel_e_entra_na_contagem(self, root):
         _projeto(root, "6", status="finalizado")

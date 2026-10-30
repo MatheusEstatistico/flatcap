@@ -308,14 +308,66 @@ class TestStatus:
         escrever_ficha(raiz, record_id=record_id, matricula=matricula, **ficha)
         return raiz
 
-    def test_a_tabela_traz_as_cinco_colunas(self, rodar, root):
+    def test_a_tabela_traz_as_seis_colunas_com_o_nome_depois_da_matricula(self, rodar, root):
+        from conftest import NOME
+
         self.projeto(root, "6")
         resultado = rodar("status")
         assert resultado.exit_code == 0
         saida = _saida(resultado)
-        for coluna in ("id", "Matrícula", "Pasta local", "Status", "Prazo"):
-            assert coluna in saida
-        assert "Projeto 006" in saida
+        colunas = ("id", "Matrícula", "Nome", "Pasta local", "Status", "Prazo")
+        posicoes = [saida.index(coluna) for coluna in colunas]
+        assert posicoes == sorted(posicoes), "as colunas saem nesta ordem"
+        assert NOME in saida and "Projeto 006" in saida
+
+    def test_cada_status_sai_na_cor_dele(self):
+        """
+        As quatro cores pedidas, e o status fora da lista numa quinta, que não se
+        confunde com o amarelo do `aguardando banco de dados`.
+        """
+        from pathlib import Path
+
+        from flatcap.cli import CORES_DO_STATUS, _celula_do_status
+        from flatcap.painel import LinhaDoPainel
+
+        assert CORES_DO_STATUS == {
+            "não iniciado": "#ffffff",
+            "aguardando banco de dados": "#dbe91c",
+            "em andamento": "#5f87ff",
+            "pronto": "#1cca27",
+        }
+
+        def celula(status: str, reconhecido: bool = True):
+            linha = LinhaDoPainel(
+                pasta=Path("Projeto 006"), record_id="6", matricula=MATRICULA, nome="Ana",
+                status=status, status_reconhecido=reconhecido, prazo=None,
+            )
+            return _celula_do_status(linha)
+
+        for status, cor in CORES_DO_STATUS.items():
+            texto = celula(status)
+            assert (texto.plain, str(texto.style)) == (status, cor)
+        fora = celula("entregue", reconhecido=False)
+        assert str(fora.style) == "magenta"
+        assert fora.style not in CORES_DO_STATUS.values()
+
+    def test_as_cores_chegam_ao_terminal(self, rodar, root, monkeypatch):
+        """
+        Num terminal de 24 bits, a cor é a escrita, sem aproximação.
+        """
+        from rich.console import Console
+
+        terminal = Console(force_terminal=True, color_system="truecolor", width=120)
+        monkeypatch.setattr("flatcap.cli.console", terminal)
+        self.projeto(root, "6", status="em andamento")
+        self.projeto(root, "41", status="pronto")
+        saida = rodar("status").output
+        assert "\x1b[38;2;95;135;255m" in saida  # #5f87ff
+        assert "\x1b[38;2;28;202;39m" in saida  # #1cca27
+
+    def test_sem_nome_na_ficha(self, rodar, root):
+        self.projeto(root, "6", nome="null")
+        assert "(sem nome)" in _saida(rodar("status"))
 
     def test_o_prazo_sai_como_data_e_o_que_passou_como_atrasado(self, rodar, root):
         self.projeto(root, "6", prazo="2026-09-15")
