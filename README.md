@@ -188,39 +188,39 @@ diário: mostra o que chegou de um lado e o que já virou pasta do outro.
 
 ### `flatcap status`
 
-O painel dos projetos que já têm pasta: uma linha por projeto, com o status e o prazo, na
-ordem do `record_id`. Lê o `projeto.yaml` de cada pasta — não fala com o REDCap e não escreve
-nada.
+O painel dos projetos que já têm pasta: uma linha por projeto, com o nome do cliente, o status
+e o prazo, na ordem do `record_id`. Lê o `projeto.yaml` de cada pasta — não fala com o REDCap
+e não escreve nada.
 
 ```
-┏━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
-┃  id ┃ Matrícula ┃ Pasta local ┃ Status                    ┃ Prazo      ┃
-┡━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
-│   6 │ 00742     │ Projeto 006 │ pronto                    │ 20/10/2026 │
-│  23 │ 12346     │ Projeto 023 │ não iniciado              │ —          │
-│  41 │ 00742     │ Projeto 041 │ em andamento              │ 04/11/2026 │
-│  58 │ 31207     │ Projeto 058 │ aguardando banco de dados │ —          │
-│ 137 │ 00742     │ Projeto 137 │ em andamento              │ ATRASADO   │
-└─────┴───────────┴─────────────┴───────────────────────────┴────────────┘
+┏━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┓
+┃  id ┃ Matrícula ┃ Nome               ┃ Pasta local ┃ Status                    ┃ Prazo      ┃
+┡━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━┩
+│   6 │ 00742     │ José Antônio de Sá │ Projeto 006 │ pronto                    │ 20/10/2026 │
+│  23 │ 12346     │ Ana Lima           │ Projeto 023 │ não iniciado              │ —          │
+│  41 │ 00742     │ José Antônio de Sá │ Projeto 041 │ em andamento              │ 04/11/2026 │
+│  58 │ 31207     │ Maria Souza        │ Projeto 058 │ aguardando banco de dados │ —          │
+│ 137 │ 00742     │ José Antônio de Sá │ Projeto 137 │ em andamento              │ ATRASADO   │
+└─────┴───────────┴────────────────────┴─────────────┴───────────────────────────┴────────────┘
 
 5 projetos · 1 atrasado · 2 sem prazo · 1 finalizado fora do painel.
 ```
 
 O `status:` da ficha é um destes cinco:
 
-| Status | Quem escreve |
-|---|---|
-| `não iniciado` | o `flatcap novo`, quando cria a pasta |
-| `aguardando banco de dados` | você, depois da reunião |
-| `em andamento` | você |
-| `pronto` | o `flatcap relatorio`, quando escreve o documento |
-| `finalizado` | você, quando o atendimento termina — e o projeto sai do painel |
+| Status | Quem escreve | No painel |
+|---|---|---|
+| `não iniciado` | o `flatcap novo`, quando cria a pasta | branco |
+| `aguardando banco de dados` | você, depois da reunião | amarelo |
+| `em andamento` | você | azul |
+| `pronto` | o `flatcap relatorio`, quando escreve o documento | verde |
+| `finalizado` | você, quando o atendimento termina | não aparece |
 
 O `prazo:` é a data final, escrita à mão depois da reunião, como `2026-11-04` ou
 `04/11/2026`. Quando ela passa sem o projeto estar `pronto`, o painel mostra **ATRASADO**, em
-vermelho. Maiúscula e acento não importam no status (`Em andamento` vale); o que não é nenhum
-dos cinco, e o prazo que não é data, aparecem como estão escritos, em amarelo, com o aviso do
-que escrever no lugar.
+vermelho. Maiúscula e acento não importam no status (`Em andamento` vale). O status que não é
+nenhum dos cinco aparece como está escrito, em magenta, e o prazo que não é data, em amarelo —
+os dois com o aviso do que escrever no lugar.
 
 ### `flatcap novo <record_id>`
 
