@@ -11,10 +11,11 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 
 ### Acrescentado
 - `flatcap status`: os projetos que já têm pasta, numa tabela como a do `listar` — id,
-  matrícula, pasta local, status e prazo —, na ordem do `record_id`. Lê as fichas do
+  matrícula, nome, pasta local, status e prazo —, na ordem do `record_id`. Lê as fichas do
   `FLATCAP_ROOT`, não fala com o REDCap e não escreve nada.
 - Os cinco status do `projeto.yaml`: `não iniciado`, `aguardando banco de dados`,
-  `em andamento`, `pronto` e `finalizado`. O `finalizado` tira o projeto do painel.
+  `em andamento`, `pronto` e `finalizado`. O `finalizado` tira o projeto do painel, e os
+  outros quatro saem cada um na sua cor — branco, amarelo, azul e verde.
 - O prazo no painel: a data final escrita no `prazo:` depois da reunião, como `2026-11-04` ou
   `04/11/2026`, e ATRASADO, em vermelho, quando ela passou sem o projeto estar `pronto`.
 - Os avisos do painel: status fora da lista, prazo que não é data, ficha que não abre e pasta
