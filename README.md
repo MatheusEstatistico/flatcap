@@ -32,7 +32,7 @@ para uma pasta própria dentro do projeto.
   `.csv` que a análise escreveu.
 
 A documentação completa — o projeto inteiro, módulo por módulo, com todos os comentários do
-código — está em [`docs/Doc.Flatcap.md`](docs/Doc.Flatcap.md).
+código — está em [`Doc.Flatcap`](https://github.com/MatheusEstatistico/flatcap/blob/main/docs/Doc.Flatcap.md).
 
 > O FlatCap não é afiliado à Vanderbilt University nem ao REDCap Consortium. Ele só conversa
 > com a API do servidor REDCap da sua instituição, com o token que ela concede.
