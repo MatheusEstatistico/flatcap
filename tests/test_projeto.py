@@ -328,9 +328,7 @@ class TestProjetoYaml:
         corpo = self._corpo(preparar(cfg, "42", agora=AGORA))
         assert corpo["status"] == STATUS_INICIAL == "não iniciado"
 
-    def test_o_cabecalho_lista_os_cinco_status_e_os_dois_formatos_do_prazo(
-        self, cfg, redcap
-    ):
+    def test_o_cabecalho_lista_os_status_e_os_dois_formatos_do_prazo(self, cfg, redcap):
         """
         O cabeçalho é a documentação que você tem na mão quando abre a ficha para
         escrever o status e o prazo depois da reunião.
@@ -346,9 +344,13 @@ class TestProjetoYaml:
         assert "2026-11-04" in cabecalho and "04/11/2026" in cabecalho
         assert "ATRASADO" in cabecalho
 
-    def test_os_cinco_status_na_ordem_do_atendimento(self):
+    def test_os_seis_status_na_ordem_do_atendimento(self):
+        """
+        O cálculo amostral vem antes da coleta, e por isso antes do banco.
+        """
         assert STATUS == (
             "não iniciado",
+            "cálculo amostral",
             "aguardando banco de dados",
             "em andamento",
             "pronto",

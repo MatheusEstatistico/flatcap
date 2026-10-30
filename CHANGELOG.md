@@ -7,6 +7,17 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.18.0] — o status do cálculo amostral
+
+### Acrescentado
+- O status `cálculo amostral`, entre o `não iniciado` e o `aguardando banco de dados`: o
+  projeto cujo tamanho da amostra está sendo calculado, antes da coleta. É escrito à mão,
+  como o `aguardando banco de dados` e o `em andamento`, e sai em ciano no `flatcap status`.
+
+### Mudado
+- O cabeçalho da ficha nova lista os seis status. As fichas criadas antes não precisam ser
+  editadas: o sexto é lido nelas do mesmo jeito.
+
 ## [1.17.0] — o painel de status
 
 ### Acrescentado

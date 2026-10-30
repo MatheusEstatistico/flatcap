@@ -661,6 +661,26 @@ com o prazo como data e o atraso como um sim ou não. A CLI os desenha; uma inte
 pode ordenar, filtrar e abrir a pasta sem ler a tabela do terminal. O painel parte do
 `ficha.varrer`, a mesma varredura de dois níveis do `localizar_projeto`, e lista a ficha que
 não abre e a pasta no formato de antes da 1.1.0, em vez de deixá-las sumir.
+
+## 1.18.0 — o status do cálculo amostral
+
+**Um sexto status, `cálculo amostral`, entre o `não iniciado` e o
+`aguardando banco de dados`.** É o projeto cujo tamanho da amostra está sendo calculado: o
+pedido que chega com a finalidade "Cálculo amostral", ou o projeto que começa pela amostra e
+só depois recebe o banco. A ordem do `projeto.STATUS` é a do atendimento, e o cálculo vem
+antes da coleta. É escrito à mão, como o `aguardando banco de dados` e o `em andamento`, e
+atrasa como eles: o prazo que passou sem o projeto estar `pronto` sai ATRASADO.
+
+**A cor é o ciano, `#00d7d7`**: 11,7:1 de contraste com o fundo preto, e a cor 44 das 256 do
+xterm, como o azul do `em andamento`. Num terminal de 16 cores, vira o ciano do tema, que
+nenhuma outra cor do painel usa, e numa simulação de daltonismo continua distinta das outras
+quatro. Das outras duas oferecidas, o laranja ficava perto do verde do `pronto` no
+daltonismo vermelho-verde mais comum, e o rosa salmão, em 16 cores, virava o vizinho do
+magenta do status fora da lista.
+
+**As fichas de antes continuam valendo**: o cabeçalho delas lista cinco status, e o sexto é
+lido nelas do mesmo jeito — `calculo amostral`, sem acento, também. E o próximo status que
+entrar na lista sem cor quebra um teste, em vez de sair sem cor no painel.
 """
 
-__version__ = "1.17.0"
+__version__ = "1.18.0"

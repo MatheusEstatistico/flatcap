@@ -67,6 +67,7 @@ from .projeto import (
     PASTA_DADOS,
     STATUS,
     STATUS_AGUARDANDO_BANCO,
+    STATUS_CALCULO_AMOSTRAL,
     STATUS_EM_ANDAMENTO,
     STATUS_NAO_INICIADO,
     STATUS_PRONTO,
@@ -523,11 +524,15 @@ def _resumo(
 # escrito, porque quem recebe a saída sem cor — um e-mail, uma interface que a lê —
 # precisa dele.
 #
-# Contra o fundo preto, as quatro passam do mínimo de 4,5:1 de contraste: 21, 15,7, 6,4
-# e 9,5. O azul pedido primeiro, #4461d5, dava 3,9:1, e foi trocado pelo #5f87ff, que
+# Contra o fundo preto, as cinco passam do mínimo de 4,5:1 de contraste: 21, 11,7, 15,7,
+# 6,4 e 9,5. O azul pedido primeiro, #4461d5, dava 3,9:1, e foi trocado pelo #5f87ff, que
 # além disso é uma das 256 cores do xterm — sai igual nos terminais que não têm 24 bits.
+# O ciano do `cálculo amostral`, #00d7d7, também é uma delas; num terminal de 16 cores,
+# vira o ciano do tema, que nenhuma outra cor do painel usa, e continua distinto das
+# outras quatro para quem tem daltonismo.
 CORES_DO_STATUS: dict[str, str] = {
     STATUS_NAO_INICIADO: "#ffffff",
+    STATUS_CALCULO_AMOSTRAL: "#00d7d7",
     STATUS_AGUARDANDO_BANCO: "#dbe91c",
     STATUS_EM_ANDAMENTO: "#5f87ff",
     STATUS_PRONTO: "#1cca27",
@@ -605,8 +610,8 @@ def _tabela_do_status(painel: Painel) -> Table:
 
 def _celula_do_status(linha: LinhaDoPainel) -> Text:
     """
-    Um dos cinco, como está no `projeto.STATUS`, na cor dele; o que não é nenhum
-    deles, como está escrito na ficha, em magenta.
+    Um dos status do `projeto.STATUS`, na grafia de lá e na cor dele; o que não é
+    nenhum deles, como está escrito na ficha, em magenta.
     """
     if linha.status_reconhecido:
         return Text(linha.status, style = CORES_DO_STATUS.get(linha.status, ""))
@@ -660,9 +665,10 @@ def _avisos_do_status(painel: Painel) -> list[Text]:
     O que está no painel sem poder ser lido, e o que ficou fora dele — cada um com o
     que fazer.
 
-    Um status ou um prazo que não se lê não tira o projeto do painel: ele aparece em
-    amarelo, como está escrito, e o aviso diz o que escrever no lugar. A ficha que não
-    abre e a pasta no formato antigo não têm como aparecer na tabela, e aparecem aqui.
+    Um status ou um prazo que não se lê não tira o projeto do painel: ele aparece como
+    está escrito — o status em magenta, o prazo em amarelo —, e o aviso diz o que
+    escrever no lugar. A ficha que não abre e a pasta no formato antigo não têm como
+    aparecer na tabela, e aparecem aqui.
     """
     avisos: list[Text] = []
 

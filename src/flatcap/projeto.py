@@ -215,17 +215,19 @@ def pasta_da_amostragem(raiz: Path) -> Path:
 
 PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronológica
 
-# O `status:` do `projeto.yaml`: os cinco valores, na ordem do atendimento.
+# O `status:` do `projeto.yaml`: os seis valores, na ordem do atendimento.
 #
 # Dois são escritos pelo FlatCap. O `não iniciado`, pelo `flatcap novo`, que cria a
 # ficha; e o `pronto`, pelo `flatcap relatorio`, quando escreve o documento. Os outros
-# três são seus, escritos à mão: o `aguardando banco de dados` e o `em andamento`,
-# depois da reunião, e o `finalizado`, quando o atendimento termina — e aí o projeto
+# quatro são seus, escritos à mão: o `cálculo amostral`, enquanto o tamanho da amostra
+# é calculado, antes da coleta; o `aguardando banco de dados` e o `em andamento`,
+# depois da reunião; e o `finalizado`, quando o atendimento termina — e aí o projeto
 # sai do `flatcap status`.
 #
 # Moram aqui pelo motivo das pastas: este módulo é o dono dos nomes que atravessam o
 # pacote. A ficha os lê, o relatório escreve um deles e o painel mostra os outros.
 STATUS_NAO_INICIADO = "não iniciado"
+STATUS_CALCULO_AMOSTRAL = "cálculo amostral"
 STATUS_AGUARDANDO_BANCO = "aguardando banco de dados"
 STATUS_EM_ANDAMENTO = "em andamento"
 STATUS_PRONTO = "pronto"
@@ -233,6 +235,7 @@ STATUS_FINALIZADO = "finalizado"
 
 STATUS: tuple[str, ...] = (
     STATUS_NAO_INICIADO,
+    STATUS_CALCULO_AMOSTRAL,
     STATUS_AGUARDANDO_BANCO,
     STATUS_EM_ANDAMENTO,
     STATUS_PRONTO,
@@ -738,11 +741,11 @@ _CABECALHO_YAML = """
 #             no calendário, e não no REDCap — preencha depois dela, como
 #             2026-11-04 ou 04/11/2026. O `flatcap status` mostra a data, e
 #             ATRASADO quando ela passa sem o projeto estar pronto.
-#   status    não iniciado | aguardando banco de dados | em andamento |
-#             pronto | finalizado. O `flatcap novo` escreve `não iniciado`, e
-#             o `flatcap relatorio`, quando escreve o documento, `pronto`; os
-#             outros três são seus. `finalizado` tira o projeto do
-#             `flatcap status`.
+#   status    não iniciado | cálculo amostral | aguardando banco de dados |
+#             em andamento | pronto | finalizado. O `flatcap novo` escreve
+#             `não iniciado`, e o `flatcap relatorio`, quando escreve o
+#             documento, `pronto`; os outros quatro são seus. `finalizado` tira
+#             o projeto do `flatcap status`.
 #
 #   finalidade  para que o cliente pediu a análise — o campo `fin` do
 #   objetivos   formulário, e o `obj1`, como ele escreveu. Os dois saem

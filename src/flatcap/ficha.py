@@ -831,8 +831,8 @@ _STATUS_POR_CHAVE = {
 
 def status_reconhecido(escrito: str) -> str | None:
     """
-    Qual dos cinco status do `projeto.STATUS` está escrito na ficha; `None` quando não
-    é nenhum deles.
+    Qual dos status do `projeto.STATUS` está escrito na ficha; `None` quando não é
+    nenhum deles.
 
     A leitura é tolerante e a escrita é estrita, como no `dicionario.csv`: o status se
     digita à mão, e `Em andamento`, `EM ANDAMENTO` e `nao iniciado` são os de sempre —
@@ -898,7 +898,7 @@ def definir_status(raiz: Path, status: str) -> None:
     É a exceção à promessa do cabeçalho — "o FlatCap não sobrescreve o que você
     escreveu" —, e o cabeçalho de toda ficha nova a diz: o `flatcap relatorio`,
     quando escreve o documento, passa o projeto para `pronto`. Por isso o valor é
-    sempre um dos cinco do `projeto.STATUS`, na grafia de lá: um texto qualquer aqui
+    sempre um dos do `projeto.STATUS`, na grafia de lá: um texto qualquer aqui
     seria o FlatCap escrevendo na ficha um status que o painel não reconhece.
 
     O comentário escrito ao lado do `status:` fica onde está. A ficha sem a chave a
@@ -907,11 +907,11 @@ def definir_status(raiz: Path, status: str) -> None:
 
     Raises:
         FichaAusenteError, FichaInvalidaError
-        ValueError: o status não é um dos cinco — defeito de quem chamou, e não do
-            arquivo.
+        ValueError: o status não é um do `projeto.STATUS` — defeito de quem chamou, e
+            não do arquivo.
     """
     if status not in STATUS:
-        raise ValueError(f"status desconhecido: {status!r}; os cinco são {STATUS}")
+        raise ValueError(f"status desconhecido: {status!r}; os válidos são {STATUS}")
 
     caminho = caminho_da_ficha(Path(raiz))
     if not caminho.exists():

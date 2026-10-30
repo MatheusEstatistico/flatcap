@@ -200,17 +200,19 @@ e não escreve nada.
 │  23 │ 12346     │ Ana Lima           │ Projeto 023 │ não iniciado              │ —          │
 │  41 │ 00742     │ José Antônio de Sá │ Projeto 041 │ em andamento              │ 04/11/2026 │
 │  58 │ 31207     │ Maria Souza        │ Projeto 058 │ aguardando banco de dados │ —          │
+│  64 │ 20511     │ Paula Reis         │ Projeto 064 │ cálculo amostral          │ 12/11/2026 │
 │ 137 │ 00742     │ José Antônio de Sá │ Projeto 137 │ em andamento              │ ATRASADO   │
 └─────┴───────────┴────────────────────┴─────────────┴───────────────────────────┴────────────┘
 
-5 projetos · 1 atrasado · 2 sem prazo · 1 finalizado fora do painel.
+6 projetos · 1 atrasado · 2 sem prazo · 1 finalizado fora do painel.
 ```
 
-O `status:` da ficha é um destes cinco:
+O `status:` da ficha é um destes seis:
 
 | Status | Quem escreve | No painel |
 |---|---|---|
 | `não iniciado` | o `flatcap novo`, quando cria a pasta | branco |
+| `cálculo amostral` | você, enquanto calcula o tamanho da amostra | ciano |
 | `aguardando banco de dados` | você, depois da reunião | amarelo |
 | `em andamento` | você | azul |
 | `pronto` | o `flatcap relatorio`, quando escreve o documento | verde |
@@ -218,9 +220,9 @@ O `status:` da ficha é um destes cinco:
 
 O `prazo:` é a data final, escrita à mão depois da reunião, como `2026-11-04` ou
 `04/11/2026`. Quando ela passa sem o projeto estar `pronto`, o painel mostra **ATRASADO**, em
-vermelho. Maiúscula e acento não importam no status (`Em andamento` vale). O status que não é
-nenhum dos cinco aparece como está escrito, em magenta, e o prazo que não é data, em amarelo —
-os dois com o aviso do que escrever no lugar.
+vermelho. Maiúscula e acento não importam no status (`Em andamento` e `calculo amostral`
+valem). O status que não é nenhum dos seis aparece como está escrito, em magenta, e o prazo
+que não é data, em amarelo — os dois com o aviso do que escrever no lugar.
 
 ### `flatcap novo <record_id>`
 
@@ -389,6 +391,7 @@ Um pedido de amostragem:
 
 ```bash
 flatcap novo 23 --sim                            # a pasta do projeto, como sempre
+#   depois da reunião: status: cálculo amostral, no projeto.yaml
 flatcap amostragem 23 --sim                      # 4. Amostragem/ e o desenho.yaml
 #   preencha o desenho.yaml — quase sempre, só a populacao
 flatcap amostragem 23 --sim                      # a conta e o relatório da amostra

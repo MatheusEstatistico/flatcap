@@ -608,12 +608,16 @@ class TestFluxoDaAmostragem:
 
 class TestFluxoDoStatus:
     """
-    O status acompanha o projeto: o `novo` o escreve `não iniciado`, o relatório o
-    passa para `pronto`, e o `finalizado` escrito à mão o tira do painel — tudo com o
-    servidor derrubado depois do `novo`, porque o painel lê o disco.
+    O status acompanha o projeto: o `novo` o escreve `não iniciado`, o que você escreve
+    à mão aparece no painel, o relatório o passa para `pronto`, e o `finalizado` o tira
+    do painel — tudo com o servidor derrubado depois do `novo`, porque o painel lê o
+    disco.
     """
 
-    def test_do_novo_ao_finalizado(self, tmp_path, anexo):
+    def test_do_novo_ao_finalizado(self, tmp_path, anexo, monkeypatch):
+        # Um terminal de 120 colunas. Sem terminal, a saída tem 80, e um status de duas
+        # palavras, como o `cálculo amostral`, quebra dentro da célula.
+        monkeypatch.setenv("COLUMNS", "120")
         with servidor_falso.subir(
             registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
         ) as api:
@@ -648,6 +652,16 @@ class TestFluxoDoStatus:
             texto.replace("prazo: null", "prazo: 10/01/2099"), encoding="utf-8", newline="\n"
         )
         assert "10/01/2099" in painel()
+
+        # o status que você escreve à mão: o projeto começa pelo tamanho da amostra
+        ficha.write_text(
+            ficha.read_text(encoding="utf-8").replace(
+                "status: não iniciado", "status: cálculo amostral"
+            ),
+            encoding="utf-8",
+            newline="\n",
+        )
+        assert "cálculo amostral" in painel()
 
         for comando in (("perfil", "40", "--sim"), ("descritiva", "40", "--sim")):
             assert flatcap(*comando, env=env).returncode == 0

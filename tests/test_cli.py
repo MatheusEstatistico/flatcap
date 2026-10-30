@@ -322,8 +322,8 @@ class TestStatus:
 
     def test_cada_status_sai_na_cor_dele(self):
         """
-        As quatro cores pedidas, e o status fora da lista numa quinta, que não se
-        confunde com o amarelo do `aguardando banco de dados`.
+        As cores escolhidas, uma por status que aparece, e o status fora da lista numa
+        outra, que não se confunde com o amarelo do `aguardando banco de dados`.
         """
         from pathlib import Path
 
@@ -332,6 +332,7 @@ class TestStatus:
 
         assert CORES_DO_STATUS == {
             "não iniciado": "#ffffff",
+            "cálculo amostral": "#00d7d7",
             "aguardando banco de dados": "#dbe91c",
             "em andamento": "#5f87ff",
             "pronto": "#1cca27",
@@ -351,6 +352,18 @@ class TestStatus:
         assert str(fora.style) == "magenta"
         assert fora.style not in CORES_DO_STATUS.values()
 
+    def test_todo_status_que_aparece_tem_a_sua_cor(self):
+        """
+        O status novo que entrar no `projeto.STATUS` sem cor sairia sem cor nenhuma,
+        e em silêncio. O `finalizado` não tem, porque não aparece.
+        """
+        from flatcap.cli import CORES_DO_STATUS
+        from flatcap.projeto import STATUS, STATUS_FINALIZADO
+
+        assert set(CORES_DO_STATUS) == set(STATUS) - {STATUS_FINALIZADO}
+        cores = [cor.casefold() for cor in CORES_DO_STATUS.values()]
+        assert len(set(cores)) == len(cores), "duas linhas da mesma cor não se separam"
+
     def test_as_cores_chegam_ao_terminal(self, rodar, root, monkeypatch):
         """
         Num terminal de 24 bits, a cor é a escrita, sem aproximação.
@@ -361,9 +374,11 @@ class TestStatus:
         monkeypatch.setattr("flatcap.cli.console", terminal)
         self.projeto(root, "6", status="em andamento")
         self.projeto(root, "41", status="pronto")
+        self.projeto(root, "58", status="cálculo amostral")
         saida = rodar("status").output
         assert "\x1b[38;2;95;135;255m" in saida  # #5f87ff
         assert "\x1b[38;2;28;202;39m" in saida  # #1cca27
+        assert "\x1b[38;2;0;215;215m" in saida  # #00d7d7
 
     def test_sem_nome_na_ficha(self, rodar, root):
         self.projeto(root, "6", nome="null")
@@ -405,6 +420,7 @@ class TestStatus:
         saida = _saida(resultado)
         assert "entregue" in saida and "semana que vem" in saida
         assert "Status fora da lista" in saida and "finalizado" in saida
+        assert "cálculo amostral" in saida, "o aviso lista todos os válidos"
         assert "Prazo que não é data" in saida and "04/11/2026" in saida
 
     def test_a_ficha_que_nao_abre_e_avisada(self, rodar, root):

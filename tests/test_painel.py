@@ -10,7 +10,7 @@ Três promessas, e cada uma tem a sua classe:
 sobrenome, e não em silêncio.
 
 **O status e o prazo são os que você escreveu.** O status é reconhecido sem
-maiúscula nem acento, e o que não é nenhum dos cinco aparece como está. O prazo é a
+maiúscula nem acento, e o que não é nenhum deles aparece como está. O prazo é a
 data final, nas duas formas que se digitam.
 
 **ATRASADO é o prazo que passou sem o projeto estar pronto.** O dia do prazo ainda
@@ -27,6 +27,7 @@ from conftest import MATRICULA, NOME, PASTA, escrever_ficha
 from flatcap.painel import LinhaDoPainel, montar_painel
 from flatcap.projeto import (
     STATUS_AGUARDANDO_BANCO,
+    STATUS_CALCULO_AMOSTRAL,
     STATUS_EM_ANDAMENTO,
     STATUS_NAO_INICIADO,
     STATUS_PRONTO,
@@ -160,11 +161,13 @@ class TestStatus:
         _projeto(root, "6", status="Em Andamento")
         _projeto(root, "41", status="nao iniciado")
         _projeto(root, "137", status="AGUARDANDO BANCO DE DADOS")
+        _projeto(root, "140", status="calculo amostral")
 
         painel = montar_painel(root, agora=AGORA)
         assert _linha(painel, "6").status == STATUS_EM_ANDAMENTO
         assert _linha(painel, "41").status == STATUS_NAO_INICIADO
         assert _linha(painel, "137").status == STATUS_AGUARDANDO_BANCO
+        assert _linha(painel, "140").status == STATUS_CALCULO_AMOSTRAL
         assert all(linha.status_reconhecido for linha in painel.linhas)
 
     def test_o_novo_das_fichas_de_antes_e_o_nao_iniciado(self, root):
@@ -252,10 +255,11 @@ class TestAtrasado:
             ("41", "aguardando banco de dados"),
             ("137", "em andamento"),
             ("140", "entregue"),
+            ("152", "cálculo amostral"),
         ):
             _projeto(root, record_id, prazo="2026-10-01", status=status)
         painel = montar_painel(root, agora=AGORA)
-        assert len(painel.atrasados) == 4
+        assert len(painel.atrasados) == 5
 
     def test_prazo_que_nao_e_data_nao_atrasa(self, root):
         _projeto(root, "6", prazo="ontem")

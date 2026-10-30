@@ -20,10 +20,10 @@ do `flatcap listar`, pelo `record_id`.
 
 ## O status e o prazo
 
-Os dois saem da ficha, como estão escritos. O status é um dos cinco do
-`projeto.STATUS`, reconhecido pelo `ficha.status_reconhecido` sem distinguir
-maiúscula, acento ou `_`. O que não é nenhum deles aparece como está escrito, marcado:
-escondê-lo seria esconder justamente o projeto que precisa de atenção.
+Os dois saem da ficha, como estão escritos. O status é um dos do `projeto.STATUS`,
+reconhecido pelo `ficha.status_reconhecido` sem distinguir maiúscula, acento ou `_`. O
+que não é nenhum deles aparece como está escrito, marcado: escondê-lo seria esconder
+justamente o projeto que precisa de atenção.
 
 O prazo é a data final, escrita à mão depois da reunião e lida pelo
 `ficha.data_escrita`. Quando a data passa e o projeto não está `pronto`, ele está
@@ -62,8 +62,8 @@ class LinhaDoPainel:
     # O nome da ficha, e não o da pasta: o da pasta passou pela limpeza dos caracteres
     # que o Windows recusa, e o da ficha é o que o REDCap trouxe, com a sua correção.
     nome: str
-    # Um dos cinco do `projeto.STATUS`, na grafia de lá; ou, quando não é nenhum
-    # deles, o que está escrito na ficha — e aí `status_reconhecido` é falso.
+    # Um dos do `projeto.STATUS`, na grafia de lá; ou, quando não é nenhum deles, o
+    # que está escrito na ficha — e aí `status_reconhecido` é falso.
     status: str
     status_reconhecido: bool
     prazo: date | None

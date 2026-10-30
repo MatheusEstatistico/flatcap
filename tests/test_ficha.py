@@ -506,7 +506,7 @@ class TestNumeroEscrito:
 
 class TestStatusReconhecido:
     @pytest.mark.parametrize("status", STATUS)
-    def test_os_cinco_como_estao_na_lista(self, status):
+    def test_cada_um_como_esta_na_lista(self, status):
         assert status_reconhecido(status) == status
 
     @pytest.mark.parametrize(
@@ -519,6 +519,9 @@ class TestStatusReconhecido:
             ("nao iniciado", "não iniciado"),
             ("Não Iniciado", "não iniciado"),
             ("aguardando-banco-de-dados", "aguardando banco de dados"),
+            ("calculo amostral", "cálculo amostral"),
+            ("Cálculo Amostral", "cálculo amostral"),
+            ("calculo_amostral", "cálculo amostral"),
             ("Finalizado", "finalizado"),
             ("PRONTO", "pronto"),
         ],
@@ -541,12 +544,22 @@ class TestStatusReconhecido:
         assert status_reconhecido(escrito) == esperado
 
     @pytest.mark.parametrize(
-        "escrito", ["entregue", "", "aguardando banco", "pronta", "em análise do cliente"]
+        "escrito",
+        [
+            "entregue",
+            "",
+            "aguardando banco",
+            "pronta",
+            "em análise do cliente",
+            "cálculo",
+            "amostragem",
+        ],
     )
-    def test_o_que_nao_e_nenhum_dos_cinco(self, escrito):
+    def test_o_que_nao_e_nenhum_deles(self, escrito):
         """
         `entregue`, o terceiro do cabeçalho de antes, pode ser o `pronto` ou o
-        `finalizado` — e adivinhar não é ler.
+        `finalizado` — e adivinhar não é ler. Pelo mesmo motivo, `amostragem`, o nome
+        do comando, não é o `cálculo amostral`.
         """
         assert status_reconhecido(escrito) is None
 
@@ -646,8 +659,8 @@ class TestDefinirStatus:
 
     def test_o_status_fora_da_lista_e_defeito_de_quem_chama(self, projeto_vazio):
         """
-        O FlatCap escreve na ficha só um dos cinco, na grafia da lista: um texto
-        qualquer seria um status que o painel não reconhece.
+        O FlatCap escreve na ficha só um dos status da lista, na grafia de lá: um
+        texto qualquer seria um status que o painel não reconhece.
         """
         antes = caminho_da_ficha(projeto_vazio).read_bytes()
         for errado in ("Pronto", "entregue", ""):
