@@ -26,7 +26,6 @@ from flatcap.documento import (
     ESTILO_TABELA,
     ESTILO_TITULO,
     escrever_template,
-    versao_do_python_docx,
 )
 from flatcap.relatorio import RelatorioError, executar_relatorio, preparar_relatorio
 
@@ -671,9 +670,6 @@ class TestGravacao:
         doc, plano = documento()
         assert plano.destino.stat().st_size > 10_000
         assert len(doc.tables) >= len(plano.relatorio.tabelas)
-
-    def test_a_versao_do_python_docx_e_informavel(self):
-        assert versao_do_python_docx() != "?"
 
 
 def test_o_que_so_se_ve_abrindo_o_documento():

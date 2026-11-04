@@ -102,10 +102,10 @@ import pandas as pd
 from . import __version__
 from .banco import Banco, abrir
 from .descritiva import arquivamento as arquivamento_da_rodada
-from .descritiva import conferir_dicionario, numero, recusar_incompativeis
+from .descritiva import conferir_dicionario, escrever_rodada, numero, recusar_incompativeis
 from .descritiva import slug as slug_do_nome
 from .dicionario import ARQUIVO_DICIONARIO, NUMERICA, Linha
-from .ficha import Ficha, bloco, escrever_atomico
+from .ficha import Ficha, bloco
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_NORMALIDADE,
@@ -124,7 +124,6 @@ from .projeto import (
     PASTA_ANALISES,
     PASTA_ANTIGAS,
     PASTA_NORMALIDADE,
-    anotar,
     pasta_da_analise,
 )
 
@@ -458,90 +457,20 @@ def preparar_normalidade(
 
 def executar_normalidade(plano: PlanoNormalidade) -> ResultadoNormalidade:
     """
-    Escreve o plano no disco. Não decide mais nada.
-
-    A ordem é a da Fase 5, e pelo mesmo motivo: o recibo vem depois do que ele
-    descreve. Arquiva a rodada anterior, cria a pasta, escreve a tabela, desenha os
-    Q-Q, e só então o `manifesto.json` — que é o índice, e um índice que aponta
-    para arquivo inexistente é pior do que índice nenhum.
-
-    Cada etapa registra como voltar atrás. Uma falha no meio desfaz o que já foi
-    feito, inclusive devolvendo a pasta arquivada ao lugar — senão a rodada
-    anterior teria sumido em troca de nada.
+    Escreve o plano no disco. Não decide mais nada: quem escreve, na ordem, e desfaz
+    o que escreveu se falhar no meio, é o `descritiva.escrever_rodada`.
     """
-    criados: list[Path] = []
-    avisos: list[str] = []
-    desfazer: list[Any] = []
-    arquivado: tuple[Path, Path] | None = None
-
-    try:
-        if plano.arquivamento is not None:
-            de, para = plano.arquivamento
-            para.parent.mkdir(parents=True, exist_ok=True)
-            de.rename(para)
-            arquivado = (de, para)
-            desfazer.append(lambda d=de, p=para: p.rename(d))
-
-        # `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi
-        # este comando que a criou. O `rmdir` é registrado **antes** dos
-        # arquivos e o desfazer roda ao contrário, então os arquivos saem
-        # primeiro e a pasta sai vazia, que é a única forma de ela sair.
-        existia = plano.pasta.is_dir()
-        plano.pasta.mkdir(parents=True, exist_ok=True)
-        criados.append(plano.pasta)
-        if not existia:
-            desfazer.append(lambda p=plano.pasta: p.rmdir())
-
-        caminho = plano.pasta / plano.tabela.nome
-        escrever_atomico(caminho, plano.tabela.texto())
-        criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        if plano.com_graficos and plano.graficos:
-            # O `matplotlib` entra aqui dentro, e não no topo do arquivo, pela
-            # mesma razão que na Fase 5: `--sem-graficos` não deve pagar por uma
-            # biblioteca que ele existe para não usar.
-            from .graficos import desenhar
-
-            for grafico in plano.graficos:
-                caminho = plano.pasta / grafico.nome
-                desenhar(grafico, caminho)
-                criados.append(caminho)
-                desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        caminho = plano.pasta / ARQUIVO_MANIFESTO
-        escrever_atomico(caminho, plano.texto_manifesto)
-        criados.append(caminho)
-
-        try:
-            anotar(plano.raiz, _acao_do_historico(plano), plano.normalidade.quando)
-        except OSError as erro:
-            avisos.append(
-                "A normalidade foi escrita, mas não consegui escrever no "
-                f"historico.md: {erro}"
-            )
-
-    except Exception:
-        # Qualquer falha, e não só `OSError` e `NormalidadeError`. O que roda
-        # aqui dentro inclui o `matplotlib`, que estoura com exceções próprias —
-        # e uma delas subindo sem passar por aqui deixava a rodada anterior
-        # arquivada em troca de nada, que é exatamente o que o desfazer existe
-        # para impedir. O erro continua subindo inteiro: o que muda é que o
-        # disco volta ao estado de antes antes de ele subir.
-        for passo in reversed(desfazer):
-            try:
-                passo()
-            except OSError:
-                avisos.append(
-                    "Falhei ao desfazer uma etapa. Confira "
-                    f"{PASTA_ANALISES}/{PASTA_NORMALIDADE} e {PASTA_ANTIGAS} antes "
-                    "de rodar de novo."
-                )
-        raise
-
-    return ResultadoNormalidade(
-        criados=tuple(criados), arquivado=arquivado, avisos=tuple(avisos)
+    criados, arquivado, avisos = escrever_rodada(
+        plano.raiz,
+        plano.pasta,
+        plano.arquivamento,
+        (plano.tabela,),
+        plano.graficos if plano.com_graficos else (),
+        plano.texto_manifesto,
+        _acao_do_historico(plano),
+        plano.normalidade.quando,
     )
+    return ResultadoNormalidade(criados=criados, arquivado=arquivado, avisos=avisos)
 
 
 def avaliar(

@@ -50,7 +50,7 @@ de ler um número escrito num deles. Desde a 1.17.0, o `status_reconhecido` e o
 `data_escrita` são as regras de ler o `status:` e o `prazo:` que você escreve. Desde a
 1.18.1, a matrícula e o `record_id` escritos sem aspas voltam com o zero da frente.
 
-Duas outras funções públicas, `escrever_atomico` e `temporario_ao_lado`, **não**
+Três outras funções públicas, `escrever_atomico`, `temporario_ao_lado` e `desfazer`, **não**
 fazem parte desse contrato: são o utilitário de gravação que a Fase 4 passou a
 compartilhar — o `dicionario.csv`, o `perfil.md`, as tabelas e os manifestos das
 análises, e o `.docx` do relatório. Moram aqui porque foi aqui que a garantia
@@ -61,6 +61,7 @@ esta implementação de YAML por outra precisa levá-las junto.
 
 from __future__ import annotations
 
+import io
 import math
 import os
 import re
@@ -75,6 +76,7 @@ from ruamel.yaml import YAML
 from ruamel.yaml.comments import CommentedMap, CommentedSeq
 from ruamel.yaml.error import YAMLError
 from ruamel.yaml.scalarint import ScalarInt
+from ruamel.yaml.scalarstring import LiteralScalarString
 
 from .nomes import (
     PREFIXO_PROJETO,
@@ -945,7 +947,7 @@ def definir_status(raiz: Path, status: str) -> None:
 # adotar o que o arquivo já usa. Impor era o que transformava um
 # `  - descritiva` escrito à mão em `- descritiva`: YAML idêntico, e um diff
 # gratuito num arquivo que o cabeçalho da ficha promete não mexer.
-RECUO_PADRAO = 0  # o `-` na coluna da chave — o que o PyYAML do `projeto.py` escreve
+RECUO_PADRAO = 0  # o `-` na coluna da chave — o que o `flatcap novo` escreve
 
 # Uma chave que termina em `|` ou `>` abre um bloco literal. O `[-+]?\d*` cobre
 # os indicadores (`|-`, `>+`, `|2`) e o `(#.*)?` o comentário na mesma linha.
@@ -1034,8 +1036,7 @@ def _representar_nulo(dumper, _dados):
 
     O ruamel, por padrão, grava `prazo:` — que o parser lê como nulo, mas que
     parece uma linha que alguém começou e não terminou. `prazo: null` diz que o
-    campo está deliberadamente vazio. É também o que o PyYAML do `projeto.py`
-    escreve quando cria a ficha, e os dois lados produzem o mesmo arquivo.
+    campo está deliberadamente vazio.
     """
     return dumper.represent_scalar("tag:yaml.org,2002:null", "null")
 
@@ -1048,9 +1049,35 @@ def _carregar_documento(caminho: Path):
         raise FichaInvalidaError(_diagnostico(texto, caminho, erro), caminho) from erro
 
 
-def _gravar_documento(caminho: Path, documento) -> None:
-    import io
+def texto_da_ficha_nova(corpo: dict[str, Any]) -> str:
+    """
+    O YAML da ficha que o `flatcap novo` cria, escrito pelo mesmo ruamel que a lê.
 
+    Até a 1.18.1 o `novo` escrevia com o PyYAML, que segue o YAML 1.1, e o resto do
+    FlatCap lia com o ruamel, que segue o 1.2 — e o que um põe entre aspas o outro não:
+    `0189`, `12e3` e `0o17` saíam sem aspas e voltavam como os números 189, 12000.0 e 15.
+    Com um escritor só, o que sai é o que volta.
+
+    O texto de várias linhas sai em bloco literal (`|`), e não como
+    `"Objetivo geral: avaliar o perfil.\\n\\nObjetivos específicos:\\n..."`, que é
+    YAML válido e ilegível num arquivo cujo cabeçalho convida a editá-lo; quem garante
+    que nenhuma linha termina em espaço é o `modelo._texto_longo`. E sem âncora:
+    `criado_em` e a `data` do banco são o mesmo `date`, e o ruamel escreveria
+    `&id001` num e `*id001` no outro — apagar à mão a linha da âncora deixaria o alias
+    órfão, quebrando o arquivo inteiro.
+    """
+    yaml = _construtor()
+    yaml.representer.ignore_aliases = lambda _dado: True
+    corpo = {
+        chave: LiteralScalarString(valor) if isinstance(valor, str) and "\n" in valor else valor
+        for chave, valor in corpo.items()
+    }
+    buffer = io.StringIO()
+    yaml.dump(corpo, buffer)
+    return buffer.getvalue()
+
+
+def _gravar_documento(caminho: Path, documento) -> None:
     # O recuo é lido do arquivo que está no disco, e não do documento carregado:
     # o ruamel prende os comentários aos dados, mas não a coluna em que as listas
     # foram escritas.
@@ -1108,6 +1135,25 @@ def _ler_texto(caminho: Path) -> str:
             f"Detalhe técnico: {erro}",
             caminho,
         ) from erro
+
+
+FALHA_NO_DESFAZER = "Falhei ao desfazer uma etapa"
+
+
+def desfazer(passos: list[Any], erro: BaseException, onde: str) -> None:
+    """
+    Roda os `passos` do desfazer, do último para o primeiro, antes de o `erro` subir.
+
+    A etapa que não volta não para as outras, e vai presa ao `erro` como nota
+    (`add_note`), que a CLI mostra no lugar de "foi desfeito". Até a 1.18.1 cada
+    `executar_*` a punha na sua lista de avisos — que se perdia com o erro, e o painel
+    dizia que tudo tinha sido desfeito com a rodada anterior ainda arquivada.
+    """
+    for passo in reversed(passos):
+        try:
+            passo()
+        except OSError as falha:
+            erro.add_note(f"{FALHA_NO_DESFAZER} ({falha}). Confira {onde} antes de rodar de novo.")
 
 
 def escrever_atomico(caminho: Path, texto: str) -> None:

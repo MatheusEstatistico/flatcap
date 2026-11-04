@@ -826,9 +826,15 @@ class TestEntryPoint:
         assert resultado.stdout.strip().startswith("flatcap ")
 
     def test_o_executavel_declarado_no_pyproject_existe(self, tmp_path):
+        """
+        Procurado ao lado do Python que roda a suíte, e não no `PATH`: o
+        `.venv/bin/python -m pytest` sem o `activate` não põe o `.venv/bin` no
+        `PATH`, e o teste falhava com o executável instalado.
+        """
         import shutil
 
-        assert shutil.which("flatcap"), "o entry point `flatcap` não foi instalado"
+        pasta = str(Path(sys.executable).parent)
+        assert shutil.which("flatcap", path=pasta), "o entry point `flatcap` não foi instalado"
 
     def test_o_relatorio_parte_rapido(self, tmp_path, anexo):
         """

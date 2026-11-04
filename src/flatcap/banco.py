@@ -74,7 +74,6 @@ from __future__ import annotations
 import csv
 import math
 import re
-import warnings
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -537,26 +536,37 @@ def _ler_csv(caminho: Path) -> tuple[pd.DataFrame, Leitura]:
     separador = _separador(amostra)
 
     avisos: list[str] = []
+    cortadas: list[list[str]] = []
     try:
-        # O `pandas` avisa por `warnings` que perdeu campo, e um `warning` impresso
-        # no meio da saída de um comando é um recado que o usuário aprende a
-        # ignorar. Capturado aqui, ele vira um aviso do FlatCap e viaja até o
-        # `perfil.md` e o manifesto da descritiva, junto do resto.
-        with warnings.catch_warnings(record=True) as capturados:
-            warnings.simplefilter("always", pd.errors.ParserWarning)
-            quadro = pd.read_csv(
-                caminho,
-                sep=separador,
-                encoding=codificacao,
-                engine="python",  # tolera linha com número de campos diferente do cabeçalho
-                skip_blank_lines=True,
-                # Sem isto, uma linha com mais campos do que o cabeçalho faz o
-                # `pandas` promover a primeira coluna a índice — e a tabela inteira
-                # anda uma casa para a esquerda sem que nada avise. Melhor perder o
-                # campo sobrando, que fica avisado, do que deslocar tudo em silêncio.
-                index_col=False,
-            )
-        if any(issubclass(c.category, pd.errors.ParserWarning) for c in capturados):
+        largura = len(
+            pd.read_csv(
+                caminho, sep=separador, encoding=codificacao, engine="python", nrows=0
+            ).columns
+        )
+
+        def cortar(campos: list[str]) -> list[str]:
+            cortadas.append(campos)
+            return campos[:largura]
+
+        quadro = pd.read_csv(
+            caminho,
+            sep=separador,
+            encoding=codificacao,
+            engine="python",  # o único que aceita uma função no `on_bad_lines`
+            skip_blank_lines=True,
+            # Sem isto, uma linha com mais campos do que o cabeçalho faz o
+            # `pandas` promover a primeira coluna a índice — e a tabela inteira
+            # anda uma casa para a esquerda sem que nada avise. Melhor perder o
+            # campo sobrando, que fica avisado, do que deslocar tudo em silêncio.
+            index_col=False,
+            # A linha com campo a mais é cortada na largura do cabeçalho, e não
+            # recusada. Até o pandas 3.0 o `index_col=False` cortava sozinho, com um
+            # `ParserWarning`; desde o 3.1 ele recusa o arquivo inteiro, e um `;`
+            # digitado num campo de texto travava o banco do cliente com a mensagem
+            # de arquivo corrompido. Cortar aqui não depende da versão.
+            on_bad_lines=cortar,
+        )
+        if cortadas:
             avisos.append(
                 f"O arquivo `{caminho.name}` tem linha com mais campos do que o "
                 f"cabeçalho, e o que sobrou foi descartado. Quase sempre é um "

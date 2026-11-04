@@ -85,7 +85,7 @@ uma instituição expõe, com o token que a própria instituição concede.
 ## Bibliotecas usadas
 
 O FlatCap não inclui código de outras bibliotecas: ele as usa, instaladas pelo `pip`, cada uma
-sob a sua licença — typer, rich, python-dotenv e PyYAML (MIT ou BSD), requests (Apache-2.0),
+sob a sua licença — typer, rich e python-dotenv (MIT ou BSD), requests (Apache-2.0),
 pandas e SciPy (BSD-3-Clause), openpyxl, ruamel.yaml e python-docx (MIT) e matplotlib (licença
 do Matplotlib, de estilo BSD). Todas são compatíveis com a GPL-3.0. Quem distribuir o FlatCap
 num pacote que as inclua — um executável do PyInstaller, por exemplo — precisa levar junto os

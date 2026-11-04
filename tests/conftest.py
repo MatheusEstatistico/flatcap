@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -180,6 +181,23 @@ def _texto_yaml(valor: str | None) -> str:
     if valor is None:
         return "null"
     return "'" + valor.replace("'", "''") + "'"
+
+
+def sem_aspas(raiz: Path, chave: str, escrita: str) -> None:
+    """
+    Troca o `chave: '...'` da ficha por `chave: <escrita>`, sem aspas — como o `flatcap
+    novo` escrevia até a 1.18.0 a matrícula com zero na frente e um 8 ou um 9.
+    """
+    caminho = raiz / ARQUIVO_PROJETO
+    texto, trocas = re.subn(
+        rf"^{chave}: '[^']*'",
+        f"{chave}: {escrita}",
+        caminho.read_text(encoding="utf-8"),
+        count=1,
+        flags=re.MULTILINE,
+    )
+    assert trocas == 1, f"a ficha não tem `{chave}:` entre aspas"
+    caminho.write_text(texto, encoding="utf-8", newline="\n")
 
 
 def sha_e_tamanho(caminho: Path) -> tuple[str, int]:

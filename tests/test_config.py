@@ -94,6 +94,25 @@ class TestUrlDaApi:
         )
         assert carregar(env_file=caminho).api_url.endswith("/")
 
+    def test_http_para_outra_maquina_e_barrado(self, tmp_path, root):
+        """
+        O token iria pela rede sem criptografia já no primeiro POST.
+        """
+        caminho = _env(
+            tmp_path, REDCAP_API_URL="http://servidor.org/redcap/api/",
+            REDCAP_TOKEN="0" * 32, FLATCAP_ROOT=str(root),
+        )
+        with pytest.raises(ConfigError) as erro:
+            carregar(env_file=caminho)
+        assert "https://" in str(erro.value)
+
+    def test_http_nesta_maquina_vale(self, tmp_path, root):
+        caminho = _env(
+            tmp_path, REDCAP_API_URL="http://127.0.0.1:8080/redcap/api/",
+            REDCAP_TOKEN="0" * 32, FLATCAP_ROOT=str(root),
+        )
+        assert carregar(env_file=caminho).api_url == "http://127.0.0.1:8080/redcap/api/"
+
 
 class TestRoot:
     def test_caminho_relativo_e_barrado(self, tmp_path):

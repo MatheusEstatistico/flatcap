@@ -167,10 +167,10 @@ import pandas as pd
 from . import __version__
 from .banco import Banco, abrir
 from .descritiva import arquivamento as arquivamento_da_rodada
-from .descritiva import conferir_dicionario, numero, recusar_incompativeis
+from .descritiva import conferir_dicionario, escrever_rodada, numero, recusar_incompativeis
 from .descritiva import slug as slug_do_nome
 from .dicionario import ARQUIVO_DICIONARIO, CATEGORICA, IGNORAR, NUMERICA, Linha
-from .ficha import Ficha, bloco, escrever_atomico
+from .ficha import Ficha, bloco
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_CORRELACAO,
@@ -190,7 +190,6 @@ from .projeto import (
     PASTA_ANALISES,
     PASTA_ANTIGAS,
     PASTA_CORRELACAO,
-    anotar,
     pasta_da_analise,
 )
 
@@ -725,81 +724,20 @@ def preparar_correlacao(
 
 def executar_correlacao(plano: PlanoCorrelacao) -> ResultadoCorrelacao:
     """
-    Escreve o plano no disco. Não decide mais nada.
-
-    A ordem é a da Fase 5: arquiva a rodada anterior, cria a pasta, escreve a
-    tabela, desenha as dispersões, e só então o `manifesto.json` — o recibo vem
-    depois do que ele descreve. Uma falha no meio desfaz o que já foi feito,
-    inclusive devolvendo a pasta arquivada ao lugar, e a exceção continua subindo
-    inteira — o `matplotlib` incluído, que estoura com exceções próprias.
+    Escreve o plano no disco. Não decide mais nada: quem escreve, na ordem, e desfaz
+    o que escreveu se falhar no meio, é o `descritiva.escrever_rodada`.
     """
-    criados: list[Path] = []
-    avisos: list[str] = []
-    desfazer: list[Any] = []
-    arquivado: tuple[Path, Path] | None = None
-
-    try:
-        if plano.arquivamento is not None:
-            de, para = plano.arquivamento
-            para.parent.mkdir(parents=True, exist_ok=True)
-            de.rename(para)
-            arquivado = (de, para)
-            desfazer.append(lambda d=de, p=para: p.rename(d))
-
-        # `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi este
-        # comando que a criou, e o `rmdir` é registrado antes dos arquivos — o
-        # desfazer roda ao contrário e a pasta sai vazia, a única forma de sair.
-        existia = plano.pasta.is_dir()
-        plano.pasta.mkdir(parents=True, exist_ok=True)
-        criados.append(plano.pasta)
-        if not existia:
-            desfazer.append(lambda p=plano.pasta: p.rmdir())
-
-        caminho = plano.pasta / plano.tabela.nome
-        escrever_atomico(caminho, plano.tabela.texto())
-        criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        if plano.com_graficos and plano.graficos:
-            # O `matplotlib` entra aqui dentro, e não no topo do arquivo, pela
-            # mesma razão que na Fase 5: `--sem-graficos` não deve pagar por uma
-            # biblioteca que ele existe para não usar.
-            from .graficos import desenhar
-
-            for grafico in plano.graficos:
-                caminho = plano.pasta / grafico.nome
-                desenhar(grafico, caminho)
-                criados.append(caminho)
-                desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        caminho = plano.pasta / ARQUIVO_MANIFESTO
-        escrever_atomico(caminho, plano.texto_manifesto)
-        criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        try:
-            anotar(plano.raiz, _acao_do_historico(plano), plano.correlacao.quando)
-        except OSError as erro:
-            avisos.append(
-                "A correlação foi escrita, mas não consegui escrever no "
-                f"historico.md: {erro}"
-            )
-
-    except Exception:
-        for passo in reversed(desfazer):
-            try:
-                passo()
-            except OSError:
-                avisos.append(
-                    "Falhei ao desfazer uma etapa. Confira "
-                    f"{PASTA_ANALISES}/{PASTA_CORRELACAO} e {PASTA_ANTIGAS} antes "
-                    "de rodar de novo."
-                )
-        raise
-
-    return ResultadoCorrelacao(
-        criados=tuple(criados), arquivado=arquivado, avisos=tuple(avisos)
+    criados, arquivado, avisos = escrever_rodada(
+        plano.raiz,
+        plano.pasta,
+        plano.arquivamento,
+        (plano.tabela,),
+        plano.graficos if plano.com_graficos else (),
+        plano.texto_manifesto,
+        _acao_do_historico(plano),
+        plano.correlacao.quando,
     )
+    return ResultadoCorrelacao(criados=criados, arquivado=arquivado, avisos=avisos)
 
 
 def correlacionar(

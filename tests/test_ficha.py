@@ -23,7 +23,7 @@ from datetime import date
 
 import pytest
 
-from conftest import MATRICULA, PASTA, PROJETO, RECORD_ID, escrever_ficha
+from conftest import MATRICULA, PASTA, PROJETO, RECORD_ID, escrever_ficha, sem_aspas
 from flatcap.ficha import (
     CAMPOS_VERSAO,
     IMPLEMENTACAO,
@@ -56,21 +56,6 @@ UMA_VERSAO = Versao(
 # ── Leitura ─────────────────────────────────────────────────────────────────
 
 
-def _matricula_sem_aspas(raiz, escrita: str) -> None:
-    """
-    Troca a matrícula da ficha por `escrita`, sem aspas — como o `flatcap novo` a
-    escrevia até a 1.18.0 quando ela tinha zero na frente e um 8 ou um 9.
-    """
-    caminho = caminho_da_ficha(raiz)
-    texto = caminho.read_text(encoding="utf-8")
-    assert f"matricula: '{MATRICULA}'" in texto
-    caminho.write_text(
-        texto.replace(f"matricula: '{MATRICULA}'", f"matricula: {escrita}"),
-        encoding="utf-8",
-        newline="\n",
-    )
-
-
 class TestLeitura:
     def test_le_os_campos_de_identificacao(self, projeto_vazio):
         ficha = ler(projeto_vazio)
@@ -92,18 +77,11 @@ class TestLeitura:
         aspas, e o ruamel, que segue o YAML 1.2, a lia como o número 189. A ficha
         escrita assim continua valendo, sem edição.
         """
-        _matricula_sem_aspas(projeto_vazio, escrita)
+        sem_aspas(projeto_vazio, "matricula", escrita)
         assert ler(projeto_vazio).matricula == escrita
 
     def test_o_record_id_sem_aspas_tambem(self, projeto_vazio):
-        caminho = caminho_da_ficha(projeto_vazio)
-        texto = caminho.read_text(encoding="utf-8")
-        assert f"record_id: '{RECORD_ID}'" in texto
-        caminho.write_text(
-            texto.replace(f"record_id: '{RECORD_ID}'", "record_id: 0089"),
-            encoding="utf-8",
-            newline="\n",
-        )
+        sem_aspas(projeto_vazio, "record_id", "0089")
         assert ler(projeto_vazio).record_id == "0089"
 
     def test_le_a_lista_de_versoes(self, projeto_com_banco):
@@ -406,7 +384,7 @@ class TestLocalizarProjeto:
         `flatcap relatorio 01928` não achava o projeto, e `flatcap relatorio 1928`
         achava.
         """
-        _matricula_sem_aspas(projeto_vazio, "01928")
+        sem_aspas(projeto_vazio, "matricula", "01928")
         assert localizar_projeto(root, "01928") == projeto_vazio
         with pytest.raises(ProjetoNaoEncontradoError):
             localizar_projeto(root, "1928")

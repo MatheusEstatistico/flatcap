@@ -2913,7 +2913,7 @@ class TestEscrita:
         O manifesto é o último arquivo: uma falha nele desfaz a tabela nova e devolve a
         rodada arquivada ao lugar, e a exceção continua subindo inteira.
         """
-        import flatcap.comparacao as modulo
+        import flatcap.descritiva as modulo  # quem escreve a rodada
 
         raiz = projeto_para_comparar()
         executar_comparacao(preparar_comparacao(raiz, agora=AGORA))

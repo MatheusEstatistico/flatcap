@@ -107,6 +107,7 @@ from .descritiva import (
     ROTULO_FALTANTE,
     ROTULO_TOTAL,
     conferir_dicionario,
+    escrever_rodada,
     percentual,
     recusar_incompativeis,
     serie_de_texto,
@@ -114,7 +115,7 @@ from .descritiva import (
 from .descritiva import arquivamento as arquivamento_da_rodada
 from .descritiva import slug as slug_do_nome
 from .dicionario import ARQUIVO_DICIONARIO, CATEGORICA, IGNORAR, NUMERICA, Linha
-from .ficha import Ficha, bloco, escrever_atomico
+from .ficha import Ficha, bloco
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_CRUZAMENTO,
@@ -132,7 +133,6 @@ from .projeto import (
     PASTA_ANALISES,
     PASTA_ANTIGAS,
     PASTA_CRUZAMENTO,
-    anotar,
     pasta_da_analise,
 )
 
@@ -412,76 +412,20 @@ def preparar_cruzamento(
 
 def executar_cruzamento(plano: PlanoCruzamento) -> ResultadoCruzamento:
     """
-    Escreve o plano no disco. Não decide mais nada.
-
-    A ordem é a da Fase 5, e pelo mesmo motivo: o recibo vem depois do que ele
-    descreve. Arquiva a rodada anterior, cria a pasta, escreve as tabelas, e só
-    então o `manifesto.json` — que é o índice, e um índice que aponta para arquivo
-    inexistente é pior do que índice nenhum.
-
-    Cada etapa registra como voltar atrás. Uma falha no meio desfaz o que já foi
-    feito, inclusive devolvendo a pasta arquivada ao lugar — senão a rodada
-    anterior teria sumido em troca de nada. O desfazer roda para **qualquer**
-    exceção, como na descritiva e na normalidade desde a revisão 1.3.1, e a exceção
-    continua subindo inteira.
+    Escreve o plano no disco. Não decide mais nada: quem escreve, na ordem, e desfaz
+    o que escreveu se falhar no meio, é o `descritiva.escrever_rodada`.
     """
-    criados: list[Path] = []
-    avisos: list[str] = []
-    desfazer: list[Any] = []
-    arquivado: tuple[Path, Path] | None = None
-
-    try:
-        if plano.arquivamento is not None:
-            de, para = plano.arquivamento
-            para.parent.mkdir(parents=True, exist_ok=True)
-            de.rename(para)
-            arquivado = (de, para)
-            desfazer.append(lambda d=de, p=para: p.rename(d))
-
-        # `existia` antes do `mkdir`: a pasta só entra no desfazer quando foi este
-        # comando que a criou. O `rmdir` é registrado **antes** dos arquivos e o
-        # desfazer roda ao contrário, então os arquivos saem primeiro e a pasta
-        # sai vazia, que é a única forma de ela sair.
-        existia = plano.pasta.is_dir()
-        plano.pasta.mkdir(parents=True, exist_ok=True)
-        criados.append(plano.pasta)
-        if not existia:
-            desfazer.append(lambda p=plano.pasta: p.rmdir())
-
-        for tabela in plano.tabelas:
-            caminho = plano.pasta / tabela.nome
-            escrever_atomico(caminho, tabela.texto())
-            criados.append(caminho)
-            desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        caminho = plano.pasta / ARQUIVO_MANIFESTO
-        escrever_atomico(caminho, plano.texto_manifesto)
-        criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
-
-        try:
-            anotar(plano.raiz, _acao_do_historico(plano), plano.cruzamento.quando)
-        except OSError as erro:
-            avisos.append(
-                "O cruzamento foi escrito, mas não consegui escrever no "
-                f"historico.md: {erro}"
-            )
-
-    except Exception:
-        for passo in reversed(desfazer):
-            try:
-                passo()
-            except OSError:
-                avisos.append(
-                    "Falhei ao desfazer uma etapa. Confira "
-                    f"{PASTA_ANALISES}/{PASTA_CRUZAMENTO} e {PASTA_ANTIGAS} antes "
-                    "de rodar de novo."
-                )
-        raise
-
-    return ResultadoCruzamento(
-        criados=tuple(criados), arquivado=arquivado, avisos=tuple(avisos)
+    criados, arquivado, avisos = escrever_rodada(
+        plano.raiz,
+        plano.pasta,
+        plano.arquivamento,
+        plano.tabelas,
+        (),
+        plano.texto_manifesto,
+        _acao_do_historico(plano),
+        plano.cruzamento.quando,
     )
+    return ResultadoCruzamento(criados=criados, arquivado=arquivado, avisos=avisos)
 
 
 def cruzar(

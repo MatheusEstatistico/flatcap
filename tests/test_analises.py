@@ -660,7 +660,7 @@ class TestParada:
     LISTA = "analises: [descritiva, cruzamento, comparacao]"
 
     def test_a_falha_de_escrita_desfaz_so_a_que_falhou(self, projeto_para_o_lote, monkeypatch):
-        import flatcap.cruzamento as modulo
+        import flatcap.descritiva as modulo  # quem escreve a rodada, de todas as análises
 
         raiz = projeto_para_o_lote(self.LISTA)
         executar_analises(preparar_analises(raiz, com_graficos=False, agora=AGORA))
@@ -671,7 +671,7 @@ class TestParada:
         original = modulo.escrever_atomico
 
         def falha_no_manifesto(caminho, texto):
-            if caminho.name == ARQUIVO_MANIFESTO:
+            if caminho.name == ARQUIVO_MANIFESTO and caminho.parent == cruzamento:
                 raise OSError("disco cheio")
             original(caminho, texto)
 

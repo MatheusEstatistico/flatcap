@@ -23,7 +23,7 @@ from datetime import date, datetime
 import pytest
 
 import bancos
-from conftest import escrever_ficha, linhas_do_historico
+from conftest import escrever_ficha, linhas_do_historico, sem_aspas
 from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO
 from flatcap.metodologia import TITULO as TITULO_DA_METODOLOGIA
@@ -510,14 +510,7 @@ class TestNomeELugar:
         arquivamento procura o prefixo, e não a matrícula.
         """
         raiz = projeto_com_rodada()
-        ficha = raiz / "projeto.yaml"
-        texto = ficha.read_text(encoding="utf-8")
-        assert "matricula: '00742'" in texto
-        ficha.write_text(
-            texto.replace("matricula: '00742'", "matricula: 01928"),
-            encoding="utf-8",
-            newline="\n",
-        )
+        sem_aspas(raiz, "matricula", "01928")
         (raiz / "Relatorio_1928_2026-09-01.docx").write_bytes(b"sem o zero")
 
         plano = preparar_relatorio(raiz, agora=QUANDO)

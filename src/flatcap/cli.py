@@ -148,6 +148,27 @@ def _abortar(titulo: str, mensagem: str) -> typer.Exit:
     erro_console.print(Panel(Text(mensagem), title=titulo, border_style="red"))
     return typer.Exit(code=1)
 
+def _falha_na_escrita(onde: Path, erro: OSError) -> typer.Exit:
+    """
+    O painel da escrita que falhou no meio, depois do desfazer do `executar_*`.
+
+    Diz que tudo foi desfeito só quando foi. A etapa que o desfazer não conseguiu
+    voltar vem presa ao erro, como nota (`ficha.desfazer`), e é ela que sai no lugar
+    da promessa: até a 1.18.1 o painel dizia "foi desfeito" mesmo com a rodada
+    anterior ainda em `2. Versões antigas/`.
+    """
+    desfeito = _notas(erro) or (
+        "O que já tinha sido feito foi desfeito, e o que tinha sido arquivado voltou ao "
+        "lugar."
+    )
+    return _abortar(
+        "Escrita em disco",
+        f"Falhei ao escrever em {onde}.\n"
+        f"Detalhe técnico: {erro}\n"
+        f"{desfeito}\n"
+        "Confira a pasta antes de rodar de novo.",
+    )
+
 def _nada_a_fazer(mensagem: str) -> None:
     """
     Painel amarelo e saída com código 0: houve uma recusa, mas nada deu errado.
@@ -984,13 +1005,7 @@ def amostragem(
     except RelatorioError as erro:
         raise _abortar("Relatório", str(erro)) from erro
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     for aviso in resultado.avisos:
         erro_console.print(Text(aviso, style = "yellow"))
@@ -1226,13 +1241,7 @@ def dados_adicionar(
     except (DadosError, FichaError) as erro:
         raise _abortar("Versionamento", str(erro)) from erro
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.raiz}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito — confira a pasta antes de rodar "
-            "de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.raiz, erro) from erro
 
     for aviso in resultado.avisos:
         erro_console.print(Text(aviso, style = "yellow"))
@@ -1815,13 +1824,7 @@ def descritiva(
     try:
         resultado = executar_descritiva(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Descritiva escrita.", plano, resultado)
 
@@ -2090,13 +2093,7 @@ def normalidade(
     try:
         resultado = executar_normalidade(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Normalidade escrita.", plano, resultado)
 
@@ -2422,13 +2419,7 @@ def cruzamento(
     try:
         resultado = executar_cruzamento(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Cruzamento escrito.", plano, resultado)
 
@@ -2644,13 +2635,7 @@ def associacao(
     try:
         resultado = executar_associacao(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Associação escrita.", plano, resultado)
 
@@ -2914,13 +2899,7 @@ def correlacao(
     try:
         resultado = executar_correlacao(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Correlação escrita.", plano, resultado)
 
@@ -3208,13 +3187,7 @@ def comparacao(
     try:
         resultado = executar_comparacao(plano)
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.pasta}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento da rodada "
-            "anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.pasta, erro) from erro
 
     _rodada_escrita("Comparação escrita.", plano, resultado)
 
@@ -3933,13 +3906,7 @@ def relatorio(
     except RelatorioError as erro:
         raise _abortar("Relatório", str(erro)) from erro
     except OSError as erro:
-        raise _abortar(
-            "Escrita em disco",
-            f"Falhei ao escrever em {plano.raiz}.\n"
-            f"Detalhe técnico: {erro}\n"
-            "O que já tinha sido feito foi desfeito, inclusive o arquivamento do "
-            "relatório anterior — confira a pasta antes de rodar de novo."
-        ) from erro
+        raise _falha_na_escrita(plano.raiz, erro) from erro
 
     for aviso in resultado.avisos:
         erro_console.print(Text(aviso, style = "yellow"))
