@@ -25,7 +25,7 @@ from datetime import date, datetime
 
 import pytest
 
-from conftest import MATRICULA, NOME, PASTA, escrever_ficha
+from conftest import MATRICULA, NOME, PASTA, escrever_ficha, sem_aspas
 from flatcap.painel import LinhaDoPainel, montar_painel
 from flatcap.projeto import (
     STATUS_AGUARDANDO_BANCO,
@@ -88,15 +88,7 @@ class TestQuemEntra:
         `matricula: 0189`, sem aspas, e o painel mostrava 189 — o `listar`, que lê o
         REDCap, mostrava 0189.
         """
-        raiz = _projeto(root, "6", matricula=matricula)
-        ficha = raiz / "projeto.yaml"
-        texto = ficha.read_text(encoding="utf-8")
-        ficha.write_text(
-            texto.replace(f"matricula: '{matricula}'", f"matricula: {matricula}"),
-            encoding="utf-8",
-            newline="\n",
-        )
-        assert f"matricula: {matricula}\n" in ficha.read_text(encoding="utf-8")
+        sem_aspas(_projeto(root, "6", matricula=matricula), "matricula", matricula)
 
         (linha,) = montar_painel(root, agora=AGORA).linhas
         assert linha.matricula == matricula
