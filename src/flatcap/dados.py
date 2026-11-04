@@ -50,6 +50,7 @@ from .ficha import (
     FichaError,
     Versao,
     acrescentar_versao,
+    desfazer,
     ler,
     localizar_projeto,
     sequencia_do_nome,
@@ -268,20 +269,20 @@ def executar_adicao(plano: PlanoDados) -> ResultadoDados:
     criados: list[Path] = []
     movidos: list[tuple[Path, Path]] = []
     avisos: list[str] = []
-    desfazer: list[Callable[[], None]] = []
+    passos: list[Callable[[], None]] = []
 
     try:
         pasta_antigas = plano.raiz / PASTA_ANTIGAS
         if not pasta_antigas.exists():
             pasta_antigas.mkdir(parents=True)
             criados.append(pasta_antigas)
-            desfazer.append(lambda p=pasta_antigas: p.rmdir())
+            passos.append(lambda p=pasta_antigas: p.rmdir())
 
         # 1. A versão nova, copiada (nunca movida: o arquivo do cliente continua
         #    onde ele estava, na sua pasta de downloads ou no anexo do e-mail).
         shutil.copy2(plano.origem, plano.destino)
         criados.append(plano.destino)
-        desfazer.append(lambda p=plano.destino: p.unlink(missing_ok=True))
+        passos.append(lambda p=plano.destino: p.unlink(missing_ok=True))
 
         # 2. Conferência do que foi escrito. Um `sha256` gravado na ficha sobre
         #    uma cópia truncada seria um recibo falso — pior do que recibo nenhum.
@@ -301,7 +302,7 @@ def executar_adicao(plano: PlanoDados) -> ResultadoDados:
         for de, para in plano.rotacoes:
             de.rename(para)
             movidos.append((de, para))
-            desfazer.append(lambda d=de, p=para: p.rename(d))
+            passos.append(lambda d=de, p=para: p.rename(d))
 
         # 4. A ficha. Escrita atômica, dentro de `ficha.py`.
         acrescentar_versao(plano.raiz, plano.versao)
@@ -317,15 +318,8 @@ def executar_adicao(plano: PlanoDados) -> ResultadoDados:
                 f"historico.md: {erro}"
             )
 
-    except (OSError, DadosError, FichaError):
-        for passo in reversed(desfazer):
-            try:
-                passo()
-            except OSError:
-                avisos.append(
-                    "Falhei ao desfazer uma etapa. Confira a pasta do projeto "
-                    "antes de rodar de novo."
-                )
+    except (OSError, DadosError, FichaError) as erro:
+        desfazer(passos, erro, str(plano.raiz))
         raise
 
     return ResultadoDados(

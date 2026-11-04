@@ -825,7 +825,7 @@ class TestEscrita:
     def test_a_falha_no_meio_devolve_a_rodada_anterior(
         self, projeto_para_associar, monkeypatch
     ):
-        import flatcap.associacao as modulo
+        import flatcap.descritiva as modulo  # quem escreve a rodada
 
         raiz = projeto_para_associar()
         executar_associacao(preparar_associacao(raiz, agora=AGORA))

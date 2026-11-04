@@ -569,6 +569,41 @@ class TestEscrita:
         assert sorted(p.name for p in pasta_da_rodada(raiz).iterdir()) == antes
         assert not [p for p in (raiz / PASTA_ANTIGAS).iterdir() if p.is_dir()]
 
+    def test_o_desfazer_que_falha_vai_preso_ao_erro(self, projeto_com_rodada, monkeypatch):
+        """
+        REGRESSÃO da 1.18.1: a etapa que o desfazer não voltava ia para a lista de
+        avisos, que se perdia com o erro — e o painel dizia "foi desfeito" com a rodada
+        anterior ainda em `2. Versões antigas/`. Agora ela sobe presa ao erro, como nota.
+        """
+        from datetime import datetime
+        from pathlib import Path
+
+        import flatcap.descritiva as modulo
+
+        raiz = projeto_com_rodada()
+        original = modulo.escrever_atomico
+        renomear = Path.rename
+
+        def falha_no_manifesto(caminho, texto):
+            if caminho.name == ARQUIVO_MANIFESTO:
+                raise OSError("disco cheio (simulado)")
+            return original(caminho, texto)
+
+        def volta_travada(self, alvo):
+            # A ida para `2. Versões antigas/` passa; a volta, que sai de lá, não.
+            if PASTA_ANTIGAS in self.parts:
+                raise PermissionError("pasta aberta (simulado)")
+            return renomear(self, alvo)
+
+        monkeypatch.setattr(modulo, "escrever_atomico", falha_no_manifesto)
+        monkeypatch.setattr(Path, "rename", volta_travada)
+        with pytest.raises(OSError, match="disco cheio") as erro:
+            executar_descritiva(preparar_descritiva(raiz, agora=datetime(2026, 9, 10, 9, 0)))
+
+        (nota,) = erro.value.__notes__
+        assert nota.startswith("Falhei ao desfazer uma etapa (pasta aberta (simulado))")
+        assert PASTA_ANTIGAS in nota
+
     def test_os_csv_saem_com_bom_e_ponto_e_virgula(self, projeto_com_rodada, pasta_da_rodada):
         raiz = projeto_com_rodada()
         bruto = (pasta_da_rodada(raiz) / "freq_sexo.csv").read_bytes()

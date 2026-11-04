@@ -1411,6 +1411,24 @@ class TestAnalisar:
         assert "analises: [descritiva, normalidade, correlacao, comparacao]" in saida
         assert "--resumo" in saida
 
+    def test_o_painel_nao_promete_o_desfazer_que_falhou(self, rodar, projeto_do_lote, monkeypatch):
+        """
+        REGRESSÃO da 1.18.1: o painel dizia "foi desfeito" mesmo quando uma etapa do
+        desfazer falhava, com a rodada anterior ainda em `2. Versões antigas/`.
+        """
+        def desfazer_pela_metade(_plano):
+            erro = OSError(28, "No space left on device")
+            erro.add_note("Falhei ao desfazer uma etapa (pasta aberta). Confira a pasta.")
+            raise erro
+
+        projeto_do_lote()
+        monkeypatch.setattr("flatcap.cruzamento.executar_cruzamento", desfazer_pela_metade)
+        resultado = rodar("cruzamento", RECORD_ID, "--sim")
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Falhei ao desfazer uma etapa (pasta aberta)" in saida
+        assert "foi desfeito" not in saida
+
     def test_a_falha_de_escrita_vira_painel_e_diz_onde_parou(
         self, rodar, projeto_do_lote, monkeypatch
     ):

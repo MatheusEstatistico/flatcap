@@ -32,6 +32,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from dotenv import find_dotenv, load_dotenv
 
@@ -212,9 +213,12 @@ def _localizar_env(env_file: str | Path | None) -> str:
         )
     return str(caminho)
 
+_MAQUINA_LOCAL = {"localhost", "127.0.0.1", "::1"}
+
+
 def _validar_api_url(valor: str) -> str:
     """
-    Normaliza a URL da API e barra os dois enganos mais comuns.
+    Normaliza a URL da API e barra os enganos mais comuns.
     """
     if "redcap.link" in valor:
         raise ConfigError(
@@ -223,7 +227,16 @@ def _validar_api_url(valor: str) -> str:
         )
     if not valor.startswith(("http://", "https://")):
         raise ConfigError(
-            "REDCAP_API_URL precisa começar com https:// ou http://"
+            "REDCAP_API_URL precisa começar com https://"
+        )
+    # O token vai em toda chamada, e ele abre o banco da pesquisa. Num `http://` ele
+    # cruza a rede sem criptografia já no primeiro POST, antes de qualquer
+    # redirecionamento para o `https://`. O `http://` fica só para um servidor nesta
+    # máquina — o REDCap falso da suíte ponta a ponta.
+    if valor.startswith("http://") and urlsplit(valor).hostname not in _MAQUINA_LOCAL:
+        raise ConfigError(
+            "REDCAP_API_URL começa com http://, e o token iria pela rede sem criptografia.\n"
+            "Use https:// — o http:// só vale para um servidor nesta máquina (localhost)."
         )
     # A barra final serve para o servidor não responder "301".
     return valor if valor.endswith("/") else valor + "/"

@@ -700,6 +700,22 @@ sem as aspas, continua valendo sem edição, e o `0189` que você digitar sem as
 relatório já gerado com o nome sem o zero vai para as versões antigas no próximo
 `flatcap relatorio`, como qualquer anterior: o arquivamento procura o prefixo, e não a
 matrícula.
+
+## 1.18.2 — o desfazer que conta o que não desfez
+
+**O painel dizia "foi desfeito" mesmo quando não foi.** A etapa que o desfazer não
+conseguia voltar ia para a lista de avisos do `executar_*`, que se perdia junto com o erro.
+Agora ela vai presa ao erro (`ficha.desfazer`), e a CLI a mostra no lugar da promessa. As
+seis análises escreviam a rodada com seis cópias do mesmo bloco, e o defeito estava nas
+seis: agora é uma função só, o `descritiva.escrever_rodada`.
+
+**Um só YAML.** O `flatcap novo` escreve a ficha com o ruamel que a lê
+(`ficha.texto_da_ficha_nova`), e o PyYAML saiu das dependências. O conserto da 1.18.1 cobria
+só o texto de algarismos; `12e3` e `0o17` ainda saíam sem aspas e voltavam como números.
+
+**O `.csv` com campo a mais volta a abrir.** O pandas 3.1 passou a recusar a linha que o
+`index_col=False` cortava; o corte agora é do `banco._ler_csv`, pelo `on_bad_lines`. E o
+`REDCAP_API_URL` com `http://` só vale para um servidor nesta máquina.
 """
 
-__version__ = "1.18.1"
+__version__ = "1.18.2"

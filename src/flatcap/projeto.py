@@ -50,8 +50,6 @@ from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 
-import yaml
-
 from .config import Config
 from .modelo import (
     CAMPO_ANEXO,
@@ -690,60 +688,6 @@ def _montar_plano(
 
 # Conteúdo de arquivos de texto
 
-class _SemAncoras(yaml.SafeDumper):
-    """
-    Dumper que nunca cria âncora nem alias.
-
-    O PyYAML deduplica valores repetidos: como `criado_em` e a `data` do banco são a mesma data, o
-    arquivo saía com `criado_em: &id001 2026-08-29` e `data: *id001`.
-    Subclasse de `SafeDumper`, então a garantia de não instanciar objeto arbitrário na leitura
-    continua valendo.
-    """
-    def ignore_aliases(self, data: object) -> bool:  # noqa: ARG002
-        return True
-
-
-def _representar_texto(dumper: yaml.SafeDumper, dado: str) -> yaml.ScalarNode:
-    """
-    Como cada texto sai na ficha: o de várias linhas, em bloco literal; o só de
-    algarismos, entre aspas; o resto, como o PyYAML decidir.
-
-    **Várias linhas, em bloco.** Sem isso os `objetivos` do cliente saem assim:
-
-        objetivos: "Objetivo geral: avaliar o perfil.\\n\\nObjetivos específicos:\\n..."
-
-    que é YAML perfeitamente válido e ilegível num arquivo cujo cabeçalho convida
-    a editá-lo. Com isso saem assim:
-
-        objetivos: |
-          Objetivo geral: avaliar o perfil.
-
-          Objetivos específicos:
-          ...
-
-    O PyYAML só aceita o bloco literal se nenhuma linha terminar em espaço e não
-    houver `\\r` no meio — quem garante isso é o `modelo._texto_longo`, na
-    fronteira onde o texto entra.
-
-    **Só de algarismos, entre aspas.** A matrícula é um código, e não um número:
-    `0189` é uma, e 189 é outra. O PyYAML segue o YAML 1.1, em que um número com zero na
-    frente é octal: ele põe aspas em `00742`, que o 1.1 leria como o octal 482, mas não
-    em `0189`, que tem 8 e 9 e não é octal. O ruamel, que lê a ficha, segue o 1.2, em
-    que `0189` é o inteiro 189 — e a matrícula perdia o zero. Entre aspas, os dois leem
-    o mesmo texto. Vale para o `record_id` e para qualquer outro texto só de algarismos;
-    a ficha escrita antes, sem as aspas, é lida com o zero pelo `ficha._texto`.
-    """
-    if "\n" in dado:
-        estilo = "|"
-    elif dado.isascii() and dado.isdigit():
-        estilo = "'"
-    else:
-        estilo = None
-    return dumper.represent_scalar("tag:yaml.org,2002:str", dado, style=estilo)
-
-
-_SemAncoras.add_representer(str, _representar_texto)
-
 _CABECALHO_YAML = """
 # projeto.yaml — a ficha deste atendimento, escrita pelo `flatcap novo`.
 #
@@ -809,14 +753,10 @@ def _texto_projeto_yaml(cliente: Cliente, banco: ArquivoPlanejado | None, hoje:d
         "dados": dados,
     }
 
-    corpo_yaml = yaml.dump(
-        corpo,
-        Dumper=_SemAncoras,
-        sort_keys=False,
-        allow_unicode=True,
-        default_flow_style=False,
-    )
-    return f"{_CABECALHO_YAML}\n{corpo_yaml}"
+    # Aqui dentro, e não no topo: o `ficha.py` importa deste módulo.
+    from .ficha import texto_da_ficha_nova
+
+    return f"{_CABECALHO_YAML}\n{texto_da_ficha_nova(corpo)}"
 
 def _texto_historico(cliente: Cliente, banco: ArquivoPlanejado | None, quando: datetime) -> str:
     """

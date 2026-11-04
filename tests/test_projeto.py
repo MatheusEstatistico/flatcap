@@ -17,7 +17,7 @@ import stat
 from datetime import date, datetime
 
 import pytest
-import yaml
+from ruamel.yaml import YAML
 
 from conftest import AGORA, linhas_do_historico
 from flatcap.config import Config
@@ -278,7 +278,10 @@ class TestExecutar:
 
 class TestProjetoYaml:
     def _corpo(self, plano) -> dict:
-        return yaml.safe_load(plano.projeto_yaml)
+        """
+        Lido com o YAML 1.2 do ruamel, como o resto do FlatCap lê a ficha.
+        """
+        return YAML(typ="safe").load(plano.projeto_yaml)
 
     def test_os_campos_do_apendice_c(self, cfg, redcap):
         redcap([REGISTRO])
@@ -308,6 +311,20 @@ class TestProjetoYaml:
         executar(plano)
         assert ler_ficha(plano.raiz).matricula == matricula
 
+    @pytest.mark.parametrize("matricula", ["12e3", "0o17"])
+    def test_a_matricula_que_o_yaml_leria_como_numero_volta_como_texto(
+        self, cfg, redcap, matricula
+    ):
+        """
+        REGRESSÃO da 1.18.1: o `novo` escrevia com o PyYAML (YAML 1.1), que não põe aspas
+        em `12e3` nem em `0o17`, e o ruamel (1.2) os lia como 12000.0 e 15. Com o mesmo
+        escritor dos dois lados, o que sai é o que volta.
+        """
+        redcap([{**REGISTRO, "matricula1": matricula}])
+        plano = preparar(cfg, "42", agora=AGORA)
+        executar(plano)
+        assert ler_ficha(plano.raiz).matricula == matricula
+
     def test_o_prazo_nasce_nulo(self, cfg, redcap):
         """
         São 10 dias úteis contados da reunião, e a data da reunião está no
@@ -318,7 +335,7 @@ class TestProjetoYaml:
 
     def test_nao_ha_ancora_nem_alias(self, cfg, redcap):
         """
-        `criado_em` e a `data` do banco são o mesmo objeto `date`, e o PyYAML
+        `criado_em` e a `data` do banco são o mesmo objeto `date`, e o YAML
         deduplica. É YAML válido e volta certo na leitura — mas este arquivo
         existe para ser editado à mão, e apagar a linha que carrega a âncora
         deixaria o alias órfão, quebrando o arquivo **inteiro**.

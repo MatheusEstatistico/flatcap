@@ -85,7 +85,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import docx
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -199,13 +198,6 @@ _TEXTO_NATURAL = 40         # caracteres: acima disto, a coluna de texto aceita 
 # `Spearma` e `n`. A folga vale só para o piso, que é a promessa de "palavra curta
 # não quebra"; o resto da repartição continua na média.
 _FOLGA_DA_PALAVRA = 1
-
-
-def versao_do_python_docx() -> str:
-    """
-    A versão que escreveu o documento. Vai para o `doctor` e para o histórico.
-    """
-    return getattr(docx, "__version__", "?")
 
 
 @dataclass(frozen=True)
@@ -1469,5 +1461,4 @@ __all__ = [
     "Estilos",
     "escrever",
     "escrever_template",
-    "versao_do_python_docx",
 ]

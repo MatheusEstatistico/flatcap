@@ -137,6 +137,7 @@ from .ficha import (
     Versao,
     caminho_da_ficha,
     definir_status,
+    desfazer,
     escrever_atomico,
     status_reconhecido,
     versao_vigente,
@@ -612,7 +613,7 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
 
     arquivados: list[tuple[Path, Path]] = []
     avisos: list[str] = []
-    desfazer: list[Any] = []
+    passos: list[Any] = []
     status_trocado = False
 
     try:
@@ -620,13 +621,13 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
             para.parent.mkdir(parents=True, exist_ok=True)
             de.rename(para)
             arquivados.append((de, para))
-            desfazer.append(lambda d=de, p=para: p.rename(d))
+            passos.append(lambda d=de, p=para: p.rename(d))
 
         escrever(plano.relatorio, plano.destino, plano.template)
-        desfazer.append(lambda p=plano.destino: p.unlink(missing_ok=True))
+        passos.append(lambda p=plano.destino: p.unlink(missing_ok=True))
 
         if plano.muda_o_status:
-            status_trocado = _marcar_pronto(plano.raiz, avisos, desfazer)
+            status_trocado = _marcar_pronto(plano.raiz, avisos, passos)
 
         try:
             anotar(
@@ -644,15 +645,8 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
     # `RelatorioError`: até a 1.13.0 um `.png` ilegível estourava o `python-docx`
     # com uma exceção que não é nenhuma das duas, e o relatório anterior ficava em
     # `2. Versões antigas/` sem o novo no lugar dele. O erro sobe do mesmo jeito.
-    except Exception:
-        for passo in reversed(desfazer):
-            try:
-                passo()
-            except OSError:
-                avisos.append(
-                    "Falhei ao desfazer uma etapa. Confira a pasta do projeto e "
-                    f"{PASTA_ANTIGAS} antes de rodar de novo."
-                )
+    except Exception as erro:
+        desfazer(passos, erro, f"{plano.raiz} e {plano.raiz / PASTA_ANTIGAS}")
         raise
 
     return ResultadoRelatorio(
@@ -663,7 +657,7 @@ def executar_relatorio(plano: PlanoRelatorio) -> ResultadoRelatorio:
     )
 
 
-def _marcar_pronto(raiz: Path, avisos: list[str], desfazer: list[Any]) -> bool:
+def _marcar_pronto(raiz: Path, avisos: list[str], passos: list[Any]) -> bool:
     """
     Passa a ficha para `pronto`, depois de o documento estar no disco. Devolve se
     passou.
@@ -688,7 +682,7 @@ def _marcar_pronto(raiz: Path, avisos: list[str], desfazer: list[Any]) -> bool:
             f"Escreva `status: {STATUS_PRONTO}` à mão."
         )
         return False
-    desfazer.append(lambda: escrever_atomico(caminho, antes))
+    passos.append(lambda: escrever_atomico(caminho, antes))
     return True
 
 

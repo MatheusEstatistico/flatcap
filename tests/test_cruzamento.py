@@ -578,7 +578,7 @@ class TestEscrita:
         Uma falha na escrita do manifesto — o último arquivo — desfaz tudo, e a
         rodada anterior volta inteira para o lugar, byte a byte.
         """
-        import flatcap.cruzamento as modulo
+        import flatcap.descritiva as modulo  # quem escreve a rodada
 
         raiz = projeto_para_cruzar()
         executar_cruzamento(preparar_cruzamento(raiz, agora=AGORA))

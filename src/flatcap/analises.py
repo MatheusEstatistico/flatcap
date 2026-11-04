@@ -78,7 +78,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from .ficha import ARQUIVO_PROJETO, Ficha, bloco
+from .ficha import ARQUIVO_PROJETO, FALHA_NO_DESFAZER, Ficha, bloco
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_ASSOCIACAO,
@@ -907,10 +907,10 @@ def situacao_da_parada(
     A mesma frase vai para o `historico.md` e presa ao erro, e é por isso que ela é
     pública: a CLI a imprime no painel sem precisar recontar as etapas.
 
-    "Foi desfeita" só vale para exceção comum. Um Ctrl+C (`KeyboardInterrupt`) não
-    passa pelo desfazer do `executar_*` da análise, que pega `Exception`, e a pasta
-    dela pode ter ficado pela metade — e a frase diz isso em vez de prometer o que
-    não aconteceu.
+    "Foi desfeita" só vale para exceção comum, e só quando o desfazer voltou tudo. Um
+    Ctrl+C (`KeyboardInterrupt`) não passa pelo desfazer do `executar_*` da análise, que
+    pega `Exception`, e a pasta dela pode ter ficado pela metade — e a frase diz isso em
+    vez de prometer o que não aconteceu.
     """
     escritas = [feita.nome for feita in feitas]
     posicao = len(escritas) + (1 if em_curso is not None else 0)
@@ -932,12 +932,15 @@ def situacao_da_parada(
             if isinstance(erro, OSError)
             else f"falhou com um erro inesperado ({type(erro).__name__})"
         )
-        volta = (
-            ", com a rodada anterior de volta ao lugar"
-            if em_curso.arquivamento is not None
-            else ""
-        )
-        partes = [f"Parou na análise `{em_curso.nome}`, que {como} e foi desfeita{volta}."]
+        notas = getattr(erro, "__notes__", ())
+        if any(nota.startswith(FALHA_NO_DESFAZER) for nota in notas):
+            # O desfazer não voltou tudo, e as notas dele dizem o quê.
+            desfeita = "e o desfazer não voltou tudo"
+        elif em_curso.arquivamento is not None:
+            desfeita = "e foi desfeita, com a rodada anterior de volta ao lugar"
+        else:
+            desfeita = "e foi desfeita"
+        partes = [f"Parou na análise `{em_curso.nome}`, que {como} {desfeita}."]
     else:
         partes = [
             f"Interrompido durante a análise `{em_curso.nome}`, que pode ter ficado pela "

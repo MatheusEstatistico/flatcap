@@ -91,7 +91,14 @@ from .amostral import (
     tamanho_decidido,
     variancia_da_proporcao,
 )
-from .ficha import Ficha, FichaInvalidaError, escrever_atomico, ler_yaml, numero_escrito
+from .ficha import (
+    Ficha,
+    FichaInvalidaError,
+    desfazer,
+    escrever_atomico,
+    ler_yaml,
+    numero_escrito,
+)
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_AMOSTRAGEM,
@@ -509,28 +516,28 @@ def executar_amostragem(plano: PlanoAmostragem) -> ResultadoAmostragem:
 
     criados: list[Path] = []
     avisos: list[str] = []
-    desfazer: list[Callable[[], Any]] = []
+    passos: list[Callable[[], Any]] = []
     arquivado: Path | None = None
 
     try:
         if plano.arquivamento is not None:
-            arquivado = _arquivar(plano.arquivamento, desfazer)
+            arquivado = _arquivar(plano.arquivamento, passos)
 
         tabela = plano.amostragem.tabela
         caminho = plano.pasta / tabela.nome
         escrever_atomico(caminho, tabela.texto())
         criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
+        passos.append(lambda p=caminho: p.unlink(missing_ok=True))
 
         if plano.relatorio is not None and plano.destino is not None:
             escrever(plano.relatorio, plano.destino, plano.template)
             criados.append(plano.destino)
-            desfazer.append(lambda p=plano.destino: p.unlink(missing_ok=True))
+            passos.append(lambda p=plano.destino: p.unlink(missing_ok=True))
 
         caminho = plano.pasta / ARQUIVO_MANIFESTO
         escrever_atomico(caminho, plano.texto_manifesto)
         criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
+        passos.append(lambda p=caminho: p.unlink(missing_ok=True))
 
         try:
             anotar(plano.raiz, _acao_do_historico(plano), plano.quando)
@@ -540,8 +547,10 @@ def executar_amostragem(plano: PlanoAmostragem) -> ResultadoAmostragem:
                 f"{erro}"
             )
 
-    except Exception:
-        _desfazer(desfazer, avisos)
+    except Exception as erro:
+        desfazer(
+            passos, erro, f"{PASTA_AMOSTRAGEM}/ e {PASTA_AMOSTRAGEM}/{PASTA_ANTIGAS_DA_AMOSTRAGEM}/"
+        )
         raise
 
     return ResultadoAmostragem(
@@ -558,13 +567,13 @@ def _executar_modelo(plano: PlanoAmostragem) -> ResultadoAmostragem:
     """
     criados: list[Path] = []
     avisos: list[str] = []
-    desfazer: list[Callable[[], Any]] = []
+    passos: list[Callable[[], Any]] = []
 
     try:
         if not plano.pasta.is_dir():
             plano.pasta.mkdir()
             criados.append(plano.pasta)
-            desfazer.append(lambda p=plano.pasta: p.rmdir())
+            passos.append(lambda p=plano.pasta: p.rmdir())
 
         caminho = plano.desenho_yaml
         if caminho.exists():
@@ -575,7 +584,7 @@ def _executar_modelo(plano: PlanoAmostragem) -> ResultadoAmostragem:
             )
         escrever_atomico(caminho, plano.modelo)
         criados.append(caminho)
-        desfazer.append(lambda p=caminho: p.unlink(missing_ok=True))
+        passos.append(lambda p=caminho: p.unlink(missing_ok=True))
 
         try:
             anotar(plano.raiz, _acao_do_historico(plano), plano.quando)
@@ -585,14 +594,16 @@ def _executar_modelo(plano: PlanoAmostragem) -> ResultadoAmostragem:
                 f"historico.md: {erro}"
             )
 
-    except Exception:
-        _desfazer(desfazer, avisos)
+    except Exception as erro:
+        desfazer(
+            passos, erro, f"{PASTA_AMOSTRAGEM}/ e {PASTA_AMOSTRAGEM}/{PASTA_ANTIGAS_DA_AMOSTRAGEM}/"
+        )
         raise
 
     return ResultadoAmostragem(criados=tuple(criados), avisos=tuple(avisos))
 
 
-def _arquivar(arquivamento: Arquivamento, desfazer: list[Callable[[], Any]]) -> Path:
+def _arquivar(arquivamento: Arquivamento, passos: list[Callable[[], Any]]) -> Path:
     """
     Move a rodada anterior para `Versões antigas/`, com o `desenho.yaml` de então.
 
@@ -605,31 +616,20 @@ def _arquivar(arquivamento: Arquivamento, desfazer: list[Callable[[], Any]]) -> 
     antigas = destino.parent
     if not antigas.is_dir():
         antigas.mkdir()
-        desfazer.append(lambda p=antigas: p.rmdir())
+        passos.append(lambda p=antigas: p.rmdir())
     destino.mkdir()
-    desfazer.append(lambda p=destino: p.rmdir())
+    passos.append(lambda p=destino: p.rmdir())
 
     for arquivo in arquivamento.arquivos:
         para = destino / arquivo.name
         arquivo.rename(para)
-        desfazer.append(lambda de=arquivo, para=para: para.rename(de))
+        passos.append(lambda de=arquivo, para=para: para.rename(de))
 
     if arquivamento.desenho is not None:
         copia = destino / ARQUIVO_DESENHO
         escrever_atomico(copia, arquivamento.desenho)
-        desfazer.append(lambda p=copia: p.unlink(missing_ok=True))
+        passos.append(lambda p=copia: p.unlink(missing_ok=True))
     return destino
-
-
-def _desfazer(desfazer: Sequence[Callable[[], Any]], avisos: list[str]) -> None:
-    for passo in reversed(desfazer):
-        try:
-            passo()
-        except OSError:
-            avisos.append(
-                f"Falhei ao desfazer uma etapa. Confira {PASTA_AMOSTRAGEM}/ e "
-                f"{PASTA_AMOSTRAGEM}/{PASTA_ANTIGAS_DA_AMOSTRAGEM}/ antes de rodar de novo."
-            )
 
 
 # O desenho.yaml

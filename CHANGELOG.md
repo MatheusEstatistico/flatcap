@@ -7,6 +7,23 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.18.2] — o desfazer que conta o que não desfez
+
+### Corrigido
+- Um `.csv` com um campo a mais numa linha — um `;` digitado num campo de texto — não abria
+  mais: desde o pandas 3.1 o arquivo inteiro era recusado, com a mensagem de arquivo
+  corrompido. A linha volta a ser cortada na largura do cabeçalho, com o aviso de sempre.
+- Quando uma etapa do desfazer falhava — a pasta arquivada presa pela sincronização da
+  nuvem, por exemplo —, o painel dizia que tudo tinha sido desfeito, com a rodada anterior
+  ainda em `2. Versões antigas/`. Agora ele diz qual etapa não voltou, e o `analisar` também.
+- O `flatcap novo` escreve a ficha com o mesmo ruamel que a lê: `12e3` e `0o17`, que o
+  PyYAML deixava sem aspas, não voltam mais como os números 12000.0 e 15.
+- O `REDCAP_API_URL` com `http://` é recusado fora desta máquina: o token iria pela rede sem
+  criptografia.
+
+### Removido
+- A dependência do PyYAML.
+
 ## [1.18.1] — a matrícula com zero na frente
 
 ### Corrigido
