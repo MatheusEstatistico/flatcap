@@ -160,6 +160,7 @@ from .projeto import (
     PASTA_ANTIGAS,
     STATUS_PRONTO,
     anotar,
+    frase_do_status,
     pastas_das_analises,
 )
 
@@ -1526,9 +1527,8 @@ def _acao_do_historico(plano: PlanoRelatorio, status_trocado: bool = False) -> s
         quais = ", ".join(alerta.codigo for alerta in relatorio.alertas)
         partes.append(f"Com aviso no documento: {quais}.")
     if status_trocado:
-        anterior = relatorio.ficha.status
-        de = f"de `{anterior}` " if anterior else ""
-        partes.append(f"Status {de}para `{STATUS_PRONTO}`.")
+        # A mesma frase do `flatcap status <id> --pronto`: quem lê o histórico procura uma.
+        partes.append(frase_do_status(relatorio.ficha.status, STATUS_PRONTO))
     return " ".join(partes)
 
 

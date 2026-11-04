@@ -11,7 +11,9 @@ recentes" é o `test_modelo.py`, porque a regra mora lá.
 Três invariantes atravessam o arquivo:
 
 **Todo comando que escreve simula por padrão.** Sem `--sim`, nada no
-disco muda. É a rede de proteção, e ela é conferida comando a comando.
+disco muda. É a rede de proteção, e ela é conferida comando a comando. A
+exceção é a troca de status, `flatcap status <id> --<status>`: uma palavra da
+ficha, que o histórico guarda e o mesmo comando desfaz — e a saída diz como.
 
 **Erro previsto vira painel, não traceback.** Toda exceção declarada pelos
 módulos é capturada; qualquer outra é bug e deve subir inteira.
@@ -455,6 +457,193 @@ class TestStatus:
     def test_o_status_com_colchete_nao_vira_marcacao_do_rich(self, rodar, root):
         self.projeto(root, "6", status="'[bold]entregue'")
         assert "[bold]entregue" in _saida(rodar("status"))
+
+    # ── a troca: flatcap status <id> --<status> ──
+
+    def test_a_opcao_troca_o_status_e_o_historico_registra(self, rodar, root):
+        from conftest import linhas_do_historico
+        from flatcap.ficha import ler
+
+        raiz = self.projeto(root, "41")
+        resultado = rodar("status", "41", "--finalizado")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Status trocado: em andamento → finalizado. O projeto sai do painel." in saida
+        assert ler(raiz).status == "finalizado"
+        assert linhas_do_historico(raiz)[-1].endswith(
+            "— `flatcap status 41` — Status de `em andamento` para `finalizado`."
+        )
+
+    def test_escreve_sem_sim_e_diz_como_voltar(self, rodar, root):
+        """
+        A exceção à regra do `--sim`: a troca é escrita na hora, e o que a torna segura
+        está na tela — o status de antes e o comando que o devolve, pronto para copiar.
+        """
+        from flatcap.ficha import ler
+
+        raiz = self.projeto(root, "41", status="aguardando banco de dados")
+        saida = _saida(rodar("status", "41", "--em-andamento"))
+        assert "Para voltar: flatcap status 41 --aguardando-banco-de-dados" in saida
+
+        assert rodar("status", "41", "--aguardando-banco-de-dados").exit_code == 0
+        assert ler(raiz).status == "aguardando banco de dados"
+
+    @pytest.mark.parametrize(
+        "status",
+        [
+            "não iniciado",
+            "cálculo amostral",
+            "aguardando banco de dados",
+            "em andamento",
+            "pronto",
+            "finalizado",
+        ],
+    )
+    def test_cada_status_tem_a_sua_opcao(self, rodar, root, status):
+        from flatcap.cli import OPCOES_DO_STATUS
+        from flatcap.ficha import ler
+
+        raiz = self.projeto(root, "41", status="entregue")
+        assert rodar("status", "41", OPCOES_DO_STATUS[status]).exit_code == 0
+        assert ler(raiz).status == status
+
+    def test_a_opcao_e_o_nome_do_status_sem_acento(self):
+        """
+        Uma regra só, para não decorar seis: o status sem acento, com hífen no lugar do
+        espaço. E o próximo status que entrar no `projeto.STATUS` sem opção quebra aqui,
+        em vez de ficar sem jeito de ser escrito pelo terminal.
+        """
+        import unicodedata
+
+        from flatcap.cli import OPCOES_DO_STATUS
+        from flatcap.projeto import STATUS
+
+        assert list(OPCOES_DO_STATUS) == list(STATUS)
+        for status, opcao in OPCOES_DO_STATUS.items():
+            sem_acento = "".join(
+                letra
+                for letra in unicodedata.normalize("NFKD", status)
+                if not unicodedata.combining(letra)
+            )
+            assert opcao == "--" + sem_acento.replace(" ", "-")
+
+        ajuda = _saida(runner.invoke(app, ["status", "--help"]))
+        for opcao in OPCOES_DO_STATUS.values():
+            assert opcao in ajuda
+        assert "--sim" not in ajuda.replace("sem --sim", "")
+
+    def test_o_atalho_do_aguardando(self, rodar, root):
+        from flatcap.ficha import ler
+
+        raiz = self.projeto(root, "41")
+        assert rodar("status", "41", "--aguardando").exit_code == 0
+        assert ler(raiz).status == "aguardando banco de dados"
+
+    def test_pela_matricula(self, rodar, root):
+        from flatcap.ficha import ler
+
+        raiz = self.projeto(root, "41")
+        assert rodar("status", MATRICULA, "--pronto").exit_code == 0
+        assert ler(raiz).status == "pronto"
+
+    def test_o_status_em_que_ja_esta_nao_escreve_e_sai_com_zero(self, rodar, root):
+        """
+        "Nada para fazer" sai com 0, como em todo comando: não quebra script.
+        """
+        raiz = self.projeto(root, "41", status="Em Andamento")
+        antes = (raiz / ARQUIVO_PROJETO).read_bytes()
+        resultado = rodar("status", "41", "--em-andamento")
+        assert resultado.exit_code == 0
+        assert "já está `em andamento`" in _sem_moldura(resultado)
+        assert (raiz / ARQUIVO_PROJETO).read_bytes() == antes
+        assert sorted(p.name for p in raiz.iterdir()) == [ARQUIVO_PROJETO]
+
+    def test_o_status_fora_da_lista_troca_sem_dica_de_volta(self, rodar, root):
+        """
+        `entregue` não tem opção que o devolva. Ele vai para o histórico como estava.
+        """
+        self.projeto(root, "41", status="entregue")
+        saida = _saida(rodar("status", "41", "--pronto"))
+        assert "Status trocado: entregue → pronto." in saida
+        assert "Para voltar" not in saida
+
+    def test_dois_status_de_uma_vez_sao_recusados(self, rodar, root):
+        raiz = self.projeto(root, "41")
+        antes = (raiz / ARQUIVO_PROJETO).read_bytes()
+        resultado = rodar("status", "41", "--pronto", "--finalizado")
+        assert resultado.exit_code == 1
+        assert "Um status por vez: --pronto e --finalizado" in _sem_moldura(resultado)
+        assert (raiz / ARQUIVO_PROJETO).read_bytes() == antes
+
+    def test_a_opcao_sem_o_id_e_recusada_antes_da_configuracao(self):
+        """
+        A linha de comando errada é dita primeiro: sem `.env` nenhum — o `ambiente_limpo`
+        do `conftest` esconde o da máquina —, a recusa é a do `<id>` que falta, e não a
+        da configuração.
+        """
+        resultado = runner.invoke(app, ["status", "--finalizado"])
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Falta dizer de qual projeto" in saida
+        assert "flatcap status <id> --finalizado" in saida
+
+    def test_o_id_sem_opcao_mostra_a_linha_mesmo_finalizado(self, rodar, root):
+        """
+        O finalizado sai do painel de todos, e não do de um projeto só. E sem ATRASADO:
+        o projeto finalizado já teve o seu relatório.
+        """
+        raiz = self.projeto(root, "41", status="finalizado", prazo="2026-09-01")
+        antes = (raiz / ARQUIVO_PROJETO).read_bytes()
+        resultado = rodar("status", "41")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Projeto 041" in saida and "finalizado" in saida
+        assert "01/09/2026" in saida and "ATRASADO" not in saida
+        assert "Para trocar o status: flatcap status 41" in saida
+        assert "--em-andamento" in saida
+        assert (raiz / ARQUIVO_PROJETO).read_bytes() == antes
+
+    def test_o_projeto_que_nao_existe_sai_com_um(self, rodar, root):
+        self.projeto(root, "41")
+        resultado = rodar("status", "999", "--finalizado")
+        assert resultado.exit_code == 1
+        assert "Nenhum projeto" in _saida(resultado)
+
+    def test_a_ficha_que_nao_se_grava_vira_painel(self, rodar, root, monkeypatch):
+        from flatcap.ficha import ler
+
+        def falhar(*_a, **_k):
+            raise PermissionError("arquivo aberto noutro programa (simulado)")
+
+        raiz = self.projeto(root, "41")
+        monkeypatch.setattr("flatcap.ficha.escrever_atomico", falhar)
+        resultado = rodar("status", "41", "--finalizado")
+        assert resultado.exit_code == 1
+        saida = _sem_moldura(resultado)
+        assert "Escrita em disco" in saida and "A ficha ficou como estava" in saida
+        assert ler(raiz).status == "em andamento"
+
+    def test_o_historico_que_nao_se_escreve_vira_aviso(self, rodar, root, monkeypatch):
+        from flatcap.ficha import ler
+
+        def falhar(*_a, **_k):
+            raise OSError("disco cheio (simulado)")
+
+        raiz = self.projeto(root, "41")
+        monkeypatch.setattr("flatcap.painel.anotar", falhar)
+        resultado = rodar("status", "41", "--finalizado")
+        assert resultado.exit_code == 0
+        assert "não consegui escrever no historico.md" in _saida(resultado)
+        assert ler(raiz).status == "finalizado"
+
+    def test_a_troca_nao_toca_a_rede(self, rodar, root, monkeypatch):
+        def bomba(*_a, **_k):
+            raise AssertionError("a troca de status tentou falar com a rede")
+
+        monkeypatch.setattr("flatcap.redcap.requests.post", bomba)
+        self.projeto(root, "41")
+        assert rodar("status", "41").exit_code == 0
+        assert rodar("status", "41", "--finalizado").exit_code == 0
 
 
 # ── novo ────────────────────────────────────────────────────────────────────
@@ -1629,6 +1818,8 @@ class TestInvariantes:
         TestAmostragem.desenhar(raiz)
         for comando in (
             ("status",),
+            ("status", RECORD_ID),
+            ("status", RECORD_ID, "--aguardando"),
             ("amostragem", RECORD_ID),
             ("dados", "listar", RECORD_ID),
             ("perfil", RECORD_ID),
@@ -1666,7 +1857,8 @@ class TestInvariantes:
         rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim")
         rodar("comparacao", RECORD_ID, "--sim")
         rodar("relatorio", RECORD_ID, "--sim")
-        assert len(linhas_do_historico(raiz)) == antes + 10
+        rodar("status", RECORD_ID, "--finalizado")  # sem `--sim`: a troca é escrita na hora
+        assert len(linhas_do_historico(raiz)) == antes + 11
 
     def test_a_cli_nao_tem_regra_de_negocio(self):
         """

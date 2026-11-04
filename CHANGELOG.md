@@ -7,6 +7,21 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.19.0] — a troca de status pelo terminal
+
+### Acrescentado
+- `flatcap status <id> --<status>` troca o status do projeto: `--nao-iniciado`,
+  `--calculo-amostral`, `--aguardando-banco-de-dados` (ou só `--aguardando`),
+  `--em-andamento`, `--pronto` ou `--finalizado`. Escreve na hora, sem `--sim`, muda só o
+  `status:` da ficha — os comentários ficam — e deixa no `historico.md` a linha
+  "Status de `em andamento` para `finalizado`.", com a data. O terminal mostra o comando que
+  desfaz a troca.
+- `flatcap status <id>`, sem opção, mostra a linha do projeto — mesmo finalizado — e as opções
+  para trocar o status.
+
+### Mudado
+- O cabeçalho da ficha nova diz que o status também se troca pelo terminal.
+
 ## [1.18.2] — o desfazer que conta o que não desfez
 
 ### Corrigido

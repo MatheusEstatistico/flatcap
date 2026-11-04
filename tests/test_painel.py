@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2026 Matheus Fernandes
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
-O painel do `flatcap status` — os projetos que já têm pasta, com o status e o prazo.
+O `flatcap status` — o painel dos projetos que já têm pasta, com o status e o prazo, e a
+troca do status de um deles.
 
-Três promessas, e cada uma tem a sua classe:
+Quatro promessas, e cada uma tem a sua classe:
 
 **O painel é o disco.** Uma linha por pasta `Projeto NNN` com ficha, na ordem do
 `record_id`; os `finalizado` saem, e o que não se lê fica de fora com nome e
@@ -15,6 +16,9 @@ data final, nas duas formas que se digitam.
 
 **ATRASADO é o prazo que passou sem o projeto estar pronto.** O dia do prazo ainda
 não é atraso, e o relógio é o de `agora=`, nunca o da máquina.
+
+**A troca escreve a palavra da ficha e a linha do histórico — e só quando muda.** O
+resto da ficha fica como você o deixou, e a linha diz de onde para onde, com a data.
 """
 
 from __future__ import annotations
@@ -25,12 +29,23 @@ from datetime import date, datetime
 
 import pytest
 
-from conftest import MATRICULA, NOME, PASTA, escrever_ficha, sem_aspas
-from flatcap.painel import LinhaDoPainel, montar_painel
+from conftest import MATRICULA, NOME, PASTA, escrever_ficha, linhas_do_historico, sem_aspas
+from flatcap.ficha import ProjetoNaoEncontradoError
+from flatcap.ficha import ler as ler_ficha
+from flatcap.painel import (
+    LinhaDoPainel,
+    executar_troca,
+    montar_painel,
+    painel_do_projeto,
+    preparar_troca,
+)
 from flatcap.projeto import (
+    ARQUIVO_HISTORICO,
+    STATUS,
     STATUS_AGUARDANDO_BANCO,
     STATUS_CALCULO_AMOSTRAL,
     STATUS_EM_ANDAMENTO,
+    STATUS_FINALIZADO,
     STATUS_NAO_INICIADO,
     STATUS_PRONTO,
 )
@@ -284,3 +299,228 @@ class TestAtrasado:
         assert not _linha(montar_painel(root, agora=datetime(2026, 10, 28, 23, 59)), "6").atrasado
         assert _linha(montar_painel(root, agora=datetime(2026, 10, 29, 0, 1)), "6").atrasado
         assert montar_painel(root, agora=AGORA).hoje == AGORA.date()
+
+
+# ── O painel de um projeto só ───────────────────────────────────────────────
+
+
+class TestPainelDoProjeto:
+    """
+    O do `flatcap status <id>`: a linha do painel, e o finalizado também.
+    """
+
+    def test_a_linha_e_a_do_painel_de_todos(self, root):
+        raiz = _projeto(root, "6", prazo="2026-10-01")
+        _projeto(root, "41", prazo="2026-11-04")
+        um = painel_do_projeto(raiz, agora=AGORA)
+        assert um.linhas == (_linha(montar_painel(root, agora=AGORA), "6"),)
+        assert um.hoje == AGORA.date()
+
+    def test_o_finalizado_aparece_e_nao_atrasa(self, root):
+        """
+        "Como está o 6?" tem resposta depois de ele sair do painel. O prazo é o do
+        relatório, e o projeto finalizado já o tem.
+        """
+        raiz = _projeto(root, "6", status="Finalizado", prazo="2026-10-01")
+        (linha,) = painel_do_projeto(raiz, agora=AGORA).linhas
+        assert linha.status == STATUS_FINALIZADO
+        assert linha.status_reconhecido
+        assert not linha.atrasado
+        assert montar_painel(root, agora=AGORA).linhas == ()
+
+    def test_o_status_fora_da_lista_e_o_prazo_que_nao_e_data_tambem_aparecem(self, root):
+        raiz = _projeto(root, "6", status="entregue", prazo="semana que vem")
+        painel = painel_do_projeto(raiz, agora=AGORA)
+        assert len(painel.status_fora_da_lista) == 1
+        assert len(painel.prazos_que_nao_sao_data) == 1
+
+    def test_nao_escreve_nada(self, root):
+        raiz = _projeto(root, "6")
+        antes = (raiz / "projeto.yaml").read_bytes()
+        painel_do_projeto(raiz, agora=AGORA)
+        assert (raiz / "projeto.yaml").read_bytes() == antes
+        assert sorted(p.name for p in raiz.iterdir()) == ["projeto.yaml"]
+
+
+# ── A troca de status ───────────────────────────────────────────────────────
+
+
+class TestTroca:
+    """
+    `flatcap status <id> --<status>`, sem a CLI: o `preparar_troca` decide, e o
+    `executar_troca` escreve a ficha e o histórico.
+    """
+
+    def test_escreve_o_status_e_a_linha_do_historico(self, root):
+        raiz = _projeto(root, "41")
+        troca = preparar_troca(root, "41", STATUS_FINALIZADO, agora=AGORA)
+        assert troca.muda
+
+        resultado = executar_troca(troca)
+        assert resultado.trocado and resultado.avisos == ()
+        assert ler_ficha(raiz).status == STATUS_FINALIZADO
+        assert linhas_do_historico(raiz) == [
+            "- **2026-10-29 14:30** — `flatcap status 41` — "
+            "Status de `em andamento` para `finalizado`."
+        ]
+
+    def test_o_resto_da_ficha_fica_como_estava(self, root):
+        """
+        O comentário ao lado do `status:`, as aspas da matrícula e o prazo à moda
+        brasileira: tudo como você deixou — é o `definir_status` do relatório.
+        """
+        raiz = _projeto(root, "41", prazo="04/11/2026", status="em andamento  # combinado")
+        caminho = raiz / "projeto.yaml"
+        antes = caminho.read_text(encoding="utf-8").splitlines()
+
+        executar_troca(preparar_troca(root, "41", STATUS_AGUARDANDO_BANCO, agora=AGORA))
+
+        depois = caminho.read_text(encoding="utf-8").splitlines()
+        assert len(depois) == len(antes)
+        (linha_do_status,) = [linha for linha in depois if linha.startswith("status:")]
+        assert linha_do_status.startswith("status: aguardando banco de dados")
+        assert linha_do_status.endswith("# combinado")
+        assert [linha for linha in depois if not linha.startswith("status:")] == [
+            linha for linha in antes if not linha.startswith("status:")
+        ]
+
+    def test_pela_matricula_do_cliente_de_um_projeto_so(self, root):
+        raiz = _projeto(root, "41")
+        executar_troca(preparar_troca(root, MATRICULA, STATUS_PRONTO, agora=AGORA))
+        assert ler_ficha(raiz).status == STATUS_PRONTO
+
+    @pytest.mark.parametrize(
+        ("escrito", "pedido"),
+        [
+            ("Em Andamento", STATUS_EM_ANDAMENTO),
+            ("novo", STATUS_NAO_INICIADO),
+            ("calculo_amostral", STATUS_CALCULO_AMOSTRAL),
+        ],
+    )
+    def test_o_status_em_que_o_projeto_ja_esta_nao_escreve_nada(self, root, escrito, pedido):
+        """
+        A grafia não importa: `Em Andamento` já é o `em andamento`, e o `novo` das fichas
+        de antes já é o `não iniciado`. A ficha não é reescrita, e o histórico não diz que
+        algo mudou.
+        """
+        raiz = _projeto(root, "41", status=escrito)
+        antes = (raiz / "projeto.yaml").read_bytes()
+
+        troca = preparar_troca(root, "41", pedido, agora=AGORA)
+        assert not troca.muda
+        resultado = executar_troca(troca)
+
+        assert not resultado.trocado
+        assert (raiz / "projeto.yaml").read_bytes() == antes
+        assert not (raiz / ARQUIVO_HISTORICO).exists()
+
+    def test_o_status_fora_da_lista_vai_ao_historico_como_estava_escrito(self, root):
+        """
+        `entregue` não é um dos seis, e não há opção que o devolva; o histórico guarda o
+        que estava lá.
+        """
+        raiz = _projeto(root, "41", status="entregue")
+        troca = preparar_troca(root, "41", STATUS_FINALIZADO, agora=AGORA)
+        assert troca.anterior == "entregue"
+        assert troca.anterior_reconhecido is None
+
+        executar_troca(troca)
+        assert linhas_do_historico(raiz)[-1].endswith(
+            "Status de `entregue` para `finalizado`."
+        )
+
+    def test_a_ficha_sem_status_ganha_a_chave(self, root):
+        raiz = _projeto(root, "41", status="null")
+        executar_troca(preparar_troca(root, "41", STATUS_EM_ANDAMENTO, agora=AGORA))
+        assert ler_ficha(raiz).status == STATUS_EM_ANDAMENTO
+        assert linhas_do_historico(raiz)[-1].endswith("Status para `em andamento`.")
+
+    def test_o_finalizado_sai_do_painel_e_a_volta_o_traz(self, root):
+        _projeto(root, "41")
+        executar_troca(preparar_troca(root, "41", STATUS_FINALIZADO, agora=AGORA))
+        painel = montar_painel(root, agora=AGORA)
+        assert (painel.linhas, painel.finalizados) == ((), 1)
+
+        executar_troca(preparar_troca(root, "41", STATUS_EM_ANDAMENTO, agora=AGORA))
+        painel = montar_painel(root, agora=AGORA)
+        assert [linha.status for linha in painel.linhas] == [STATUS_EM_ANDAMENTO]
+        assert painel.finalizados == 0
+
+    def test_cada_troca_e_uma_linha_do_historico(self, root):
+        """
+        É a linha que a troca à mão não deixa: a data de cada passagem, e de onde para
+        onde.
+        """
+        raiz = _projeto(root, "41", status="não iniciado")
+        for status, quando in (
+            (STATUS_CALCULO_AMOSTRAL, datetime(2026, 10, 1, 9, 0)),
+            (STATUS_EM_ANDAMENTO, datetime(2026, 10, 8, 10, 15)),
+            (STATUS_FINALIZADO, datetime(2026, 10, 30, 17, 45)),
+        ):
+            executar_troca(preparar_troca(root, "41", status, agora=quando))
+        assert linhas_do_historico(raiz) == [
+            "- **2026-10-01 09:00** — `flatcap status 41` — "
+            "Status de `não iniciado` para `cálculo amostral`.",
+            "- **2026-10-08 10:15** — `flatcap status 41` — "
+            "Status de `cálculo amostral` para `em andamento`.",
+            "- **2026-10-30 17:45** — `flatcap status 41` — "
+            "Status de `em andamento` para `finalizado`.",
+        ]
+
+    def test_status_que_nao_e_da_lista_e_defeito_de_quem_chamou(self, root):
+        """
+        A CLI só passa os seis, um por opção; um texto qualquer aqui seria o FlatCap
+        escrevendo na ficha um status que o painel não reconhece.
+        """
+        raiz = _projeto(root, "41")
+        antes = (raiz / "projeto.yaml").read_bytes()
+        with pytest.raises(ValueError, match="status desconhecido"):
+            preparar_troca(root, "41", "concluido", agora=AGORA)
+        assert (raiz / "projeto.yaml").read_bytes() == antes
+
+    def test_o_projeto_que_nao_existe(self, root):
+        _projeto(root, "41")
+        with pytest.raises(ProjetoNaoEncontradoError):
+            preparar_troca(root, "999", STATUS_FINALIZADO, agora=AGORA)
+
+    def test_a_ficha_que_nao_se_grava_fica_como_estava(self, root, monkeypatch):
+        """
+        Aberta noutro programa, sem permissão de escrita: o erro sobe, a ficha é a de
+        antes, letra por letra, e o histórico não diz que nada mudou.
+        """
+        raiz = _projeto(root, "41")
+        antes = (raiz / "projeto.yaml").read_bytes()
+
+        def falhar(*_a, **_k):
+            raise PermissionError("arquivo aberto noutro programa (simulado)")
+
+        monkeypatch.setattr("flatcap.ficha.escrever_atomico", falhar)
+        with pytest.raises(PermissionError):
+            executar_troca(preparar_troca(root, "41", STATUS_FINALIZADO, agora=AGORA))
+        assert (raiz / "projeto.yaml").read_bytes() == antes
+        assert not (raiz / ARQUIVO_HISTORICO).exists()
+
+    def test_o_historico_que_nao_se_escreve_vira_aviso_e_a_troca_fica(
+        self, root, monkeypatch
+    ):
+        """
+        Como em todo comando que escreve: o recibo que falta não desfaz o que foi pedido.
+        """
+        raiz = _projeto(root, "41")
+
+        def falhar(*_a, **_k):
+            raise OSError("disco cheio (simulado)")
+
+        monkeypatch.setattr("flatcap.painel.anotar", falhar)
+        resultado = executar_troca(preparar_troca(root, "41", STATUS_FINALIZADO, agora=AGORA))
+        assert resultado.trocado
+        assert ler_ficha(raiz).status == STATUS_FINALIZADO
+        (aviso,) = resultado.avisos
+        assert "historico.md" in aviso and "disco cheio" in aviso
+
+    def test_os_seis_status_se_escrevem(self, root):
+        raiz = _projeto(root, "41", status="entregue")
+        for status in STATUS:
+            executar_troca(preparar_troca(root, "41", status, agora=AGORA))
+            assert ler_ficha(raiz).status == status
+        assert len(linhas_do_historico(raiz)) == len(STATUS)

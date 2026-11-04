@@ -22,7 +22,8 @@ meses depois e compreendido sem depender da memória. Nada é apagado: as versõ
 para uma pasta própria dentro do projeto.
 
 - **Simula por padrão.** Todo comando que escreve em disco primeiro mostra o que faria;
-  `--sim` executa.
+  `--sim` executa. A exceção é a troca de status, que muda uma palavra da ficha e diz como
+  desfazê-la.
 - **O que se analisa está escrito.** As decisões da reunião com o cliente moram no
   `dicionario.csv` e no `projeto.yaml` do projeto, e as análises obedecem a eles; o plano da
   amostra, no `desenho.yaml`.
@@ -136,6 +137,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap doctor` | Testa a configuração, a conexão com o REDCap, o `FLATCAP_ROOT` e as bibliotecas. |
 | `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
 | `flatcap status` | Mostra os projetos que já têm pasta, com o status e o prazo de cada um. |
+| `flatcap status <id> --<status>` | Troca o status do projeto — `flatcap status 41 --finalizado`. |
 | `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
 | `flatcap amostragem <id>` | Calcula o tamanho da amostra a partir do `desenho.yaml` e escreve o relatório da amostra, em `4. Amostragem/`. |
 | `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco. |
@@ -152,7 +154,8 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap template` | Escreve o modelo `.docx` que o relatório usa, para ajustar no Word. |
 
 > Os comandos que escrevem em disco **simulam por padrão**: mostram o que seria feito e não
-> tocam em nada. Use `--sim` para executar de fato.
+> tocam em nada. Use `--sim` para executar de fato. A exceção é a troca de status, que
+> escreve na hora: muda uma palavra da ficha, e o terminal mostra o comando que a desfaz.
 
 Opções que valem para vários comandos:
 
@@ -223,6 +226,36 @@ O `prazo:` é a data final, escrita à mão depois da reunião, como `2026-11-04
 vermelho. Maiúscula e acento não importam no status (`Em andamento` e `calculo amostral`
 valem). O status que não é nenhum dos seis aparece como está escrito, em magenta, e o prazo
 que não é data, em amarelo — os dois com o aviso do que escrever no lugar.
+
+**Para trocar o status pelo terminal**, o `<id>` e uma opção — o nome do status sem acento,
+com hífen no lugar do espaço:
+
+```bash
+flatcap status 41 --finalizado     # a entrega terminou: o projeto sai do painel
+flatcap status 58 --aguardando     # o mesmo que --aguardando-banco-de-dados
+flatcap status 41                  # só a linha do 41, mesmo finalizado, e as opções
+```
+
+| Opção | Status |
+|---|---|
+| `--nao-iniciado` | `não iniciado` |
+| `--calculo-amostral` | `cálculo amostral` |
+| `--aguardando-banco-de-dados`, `--aguardando` | `aguardando banco de dados` |
+| `--em-andamento` | `em andamento` |
+| `--pronto` | `pronto` |
+| `--finalizado` | `finalizado` |
+
+```
+00742 - José Antônio de Sá · Projeto 041  ·  registro 41
+
+Status trocado: em andamento → finalizado. O projeto sai do painel.
+Para voltar: flatcap status 41 --em-andamento
+```
+
+A troca é escrita na hora, sem `--sim`: muda só o `status:` da ficha — o comentário que você
+escreveu ao lado dele fica —, e o `historico.md` ganha a linha
+"Status de `em andamento` para `finalizado`.", com a data. Escrever o status à mão na ficha
+continua valendo; só não deixa a data.
 
 ### `flatcap novo <record_id>`
 
@@ -384,14 +417,15 @@ flatcap perfil 42 --sim                          # perfil.md + dicionario.csv
 #   reunião com o cliente: revise o dicionario.csv e escreva as listas no projeto.yaml
 flatcap dados adicionar 42 banco_revisado.xlsx --sim   # se veio versão nova
 flatcap analisar 42 --sim                        # as análises da lista `analises:`
-flatcap relatorio 42 --sim                       # o .docx
+flatcap relatorio 42 --sim                       # o .docx — e o projeto fica pronto
+flatcap status 42 --finalizado                   # o atendimento terminou
 ```
 
 Um pedido de amostragem:
 
 ```bash
 flatcap novo 23 --sim                            # a pasta do projeto, como sempre
-#   depois da reunião: status: cálculo amostral, no projeto.yaml
+flatcap status 23 --calculo-amostral             # depois da reunião
 flatcap amostragem 23 --sim                      # 4. Amostragem/ e o desenho.yaml
 #   preencha o desenho.yaml — quase sempre, só a populacao
 flatcap amostragem 23 --sim                      # a conta e o relatório da amostra

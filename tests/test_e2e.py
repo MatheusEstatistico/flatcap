@@ -679,6 +679,59 @@ class TestFluxoDoStatus:
         assert "Projeto 040" not in saida
         assert "1 finalizado" in saida
 
+    def test_a_troca_pelo_terminal(self, tmp_path, anexo, monkeypatch):
+        """
+        O mesmo caminho, pela linha de comando: `flatcap status 40 --calculo-amostral`
+        escreve a ficha que o `novo` criou, e cada troca deixa a sua linha no histórico —
+        a data que a troca à mão não deixa. Com o servidor derrubado depois do `novo`.
+        """
+        monkeypatch.setenv("COLUMNS", "120")
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+        env.write_text(
+            "REDCAP_API_URL=https://servidor.derrubado.invalido/redcap/api/\n"
+            "REDCAP_TOKEN=token_invalido\n"
+            f"FLATCAP_ROOT={tmp_path / 'FlatCapRoot'}\n",
+            encoding="utf-8",
+            newline="\n",
+        )
+        raiz = tmp_path / "FlatCapRoot" / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+        ficha = raiz / "projeto.yaml"
+
+        def status(*argumentos: str) -> str:
+            resultado = flatcap("status", *argumentos, env=env)
+            assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+            return " ".join(resultado.stdout.split())
+
+        saida = status("40", "--calculo-amostral")
+        assert "não iniciado → cálculo amostral" in saida
+        assert "Para voltar: flatcap status 40 --nao-iniciado" in saida
+        assert "status: cálculo amostral" in ficha.read_text(encoding="utf-8")
+        assert "cálculo amostral" in status()
+
+        status("40", "--em-andamento")
+        assert "O projeto sai do painel" in status("40", "--finalizado")
+        painel = status()
+        assert "Projeto 040" not in painel and "1 finalizado" in painel
+        assert "finalizado" in status("40"), "o finalizado ainda aparece sozinho"
+
+        status("40", "--aguardando")
+        assert "aguardando banco de dados" in status()
+
+        historico = (raiz / "historico.md").read_text(encoding="utf-8")
+        assert historico.count("`flatcap status 40` — Status de ") == 4
+        assert "Status de `em andamento` para `finalizado`." in historico
+
+        # a linha de comando errada: código 1, painel, e nada escrito
+        antes = ficha.read_bytes()
+        errado = flatcap("status", "40", "--pronto", "--finalizado", env=env)
+        assert errado.returncode == 1
+        assert "Traceback" not in errado.stderr
+        assert ficha.read_bytes() == antes
+
     def test_a_matricula_com_zero_na_frente_chega_inteira(self, tmp_path, monkeypatch):
         """
         REGRESSÃO da 1.18.0, pelo caminho de verdade: o `novo` escreve a ficha com o
@@ -745,6 +798,7 @@ class TestSemRede:
         "comando",
         [
             ("status",),
+            ("status", "40", "--finalizado"),
             ("dados", "listar", "40"),
             ("amostragem", "40", "--sim"),
             ("perfil", "40", "--sim"),

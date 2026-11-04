@@ -50,7 +50,9 @@ só na sua máquina — o repositório não tem integração contínua —, e s�
 - **Nada toca a rede nos testes**, e o relógio é injetado (`agora=`), nunca lido.
 - **Decidir e escrever são funções separadas**: `preparar_*` devolve um plano imutável,
   `executar_*` só escreve, e desfaz o que escreveu se falhar no meio.
-- **Os comandos que escrevem simulam por padrão**; `--sim` executa.
+- **Os comandos que escrevem simulam por padrão**; `--sim` executa. A exceção é a troca de
+  status (`flatcap status <id> --<status>`): uma palavra da ficha, que o histórico guarda e
+  o mesmo comando desfaz.
 - **Erro previsto vira painel, não traceback**: cada módulo tem a sua classe de erro, e a
   CLI a captura. Qualquer outra exceção é bug, e deve subir inteira.
 - **Os comentários explicam o porquê**, e o docstring de cada módulo conta as decisões que o
