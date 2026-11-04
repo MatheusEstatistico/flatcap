@@ -901,9 +901,11 @@ def definir_status(raiz: Path, status: str) -> None:
 
     É a exceção à promessa do cabeçalho — "o FlatCap não sobrescreve o que você
     escreveu" —, e o cabeçalho de toda ficha nova a diz: o `flatcap relatorio`,
-    quando escreve o documento, passa o projeto para `pronto`. Por isso o valor é
-    sempre um dos do `projeto.STATUS`, na grafia de lá: um texto qualquer aqui
-    seria o FlatCap escrevendo na ficha um status que o painel não reconhece.
+    quando escreve o documento, passa o projeto para `pronto`. Desde a 1.19.0 há um
+    segundo chamador, o `flatcap status <id> --<status>`, que escreve o status que
+    você pediu. Por isso o valor é sempre um dos do `projeto.STATUS`, na grafia de
+    lá: um texto qualquer aqui seria o FlatCap escrevendo na ficha um status que o
+    painel não reconhece.
 
     O comentário escrito ao lado do `status:` fica onde está. A ficha sem a chave a
     ganha logo depois do `prazo`, que é onde o `flatcap novo` a escreve; sem `prazo`,

@@ -215,12 +215,13 @@ PREFIXO_REDCAP = "00_redcap_" # feito dessa forma para manter uma ordem cronoló
 
 # O `status:` do `projeto.yaml`: os seis valores, na ordem do atendimento.
 #
-# Dois são escritos pelo FlatCap. O `não iniciado`, pelo `flatcap novo`, que cria a
-# ficha; e o `pronto`, pelo `flatcap relatorio`, quando escreve o documento. Os outros
-# quatro são seus, escritos à mão: o `cálculo amostral`, enquanto o tamanho da amostra
-# é calculado, antes da coleta; o `aguardando banco de dados` e o `em andamento`,
-# depois da reunião; e o `finalizado`, quando o atendimento termina — e aí o projeto
-# sai do `flatcap status`.
+# Dois são escritos pelo FlatCap sozinho. O `não iniciado`, pelo `flatcap novo`, que cria
+# a ficha; e o `pronto`, pelo `flatcap relatorio`, quando escreve o documento. Os outros
+# quatro são seus: o `cálculo amostral`, enquanto o tamanho da amostra é calculado, antes
+# da coleta; o `aguardando banco de dados` e o `em andamento`, depois da reunião; e o
+# `finalizado`, quando o atendimento termina — e aí o projeto sai do `flatcap status`.
+# Você os escreve à mão, ou com `flatcap status <id> --finalizado` (uma opção por
+# status), que deixa a troca no `historico.md`.
 #
 # Moram aqui pelo motivo das pastas: este módulo é o dono dos nomes que atravessam o
 # pacote. A ficha os lê, o relatório escreve um deles e o painel mostra os outros.
@@ -448,6 +449,20 @@ def anotar(raiz: Path, acao: str, agora: datetime | None = None) -> None:
     """
     with (raiz / ARQUIVO_HISTORICO).open("a", encoding="utf-8", newline="\n") as arquivo:
         arquivo.write(_linha_historico(acao, agora or datetime.now()))
+
+def frase_do_status(anterior: str, novo: str) -> str:
+    """
+    A frase do `historico.md` que diz que o status mudou:
+    "Status de `em andamento` para `pronto`."
+
+    Dois comandos trocam o status — o `flatcap relatorio`, que passa o projeto para
+    `pronto`, e o `flatcap status <id> --<status>` —, e a frase sai daqui para os dois.
+    Quem ler o histórico depois, você ou um programa que conte as trocas do mês, procura
+    uma frase só. O de antes vai como estava escrito na ficha (`Em Andamento`, `novo`,
+    `entregue`); em branco, a frase diz só para onde foi.
+    """
+    de = f"de `{anterior}` " if anterior else ""
+    return f"Status {de}para `{novo}`."
 
 def marcar_somente_leitura(caminho: Path) -> bool:
     """
@@ -702,8 +717,9 @@ _CABECALHO_YAML = """
 #   status    não iniciado | cálculo amostral | aguardando banco de dados |
 #             em andamento | pronto | finalizado. O `flatcap novo` escreve
 #             `não iniciado`, e o `flatcap relatorio`, quando escreve o
-#             documento, `pronto`; os outros quatro são seus. `finalizado` tira
-#             o projeto do `flatcap status`.
+#             documento, `pronto`; os outros quatro são seus — aqui, ou com
+#             `flatcap status <id> --finalizado`, que anota a troca no
+#             historico.md. `finalizado` tira o projeto do `flatcap status`.
 #
 #   finalidade  para que o cliente pediu a análise — o campo `fin` do
 #   objetivos   formulário, e o `obj1`, como ele escreveu. Os dois saem

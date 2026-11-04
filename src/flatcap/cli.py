@@ -55,7 +55,15 @@ from .modelo import (
     normalizar_varios,
 )
 from .nomes import caminho_do_projeto, projetos_do_cliente, rotulo_do_projeto
-from .painel import LinhaDoPainel, Painel, montar_painel
+from .painel import (
+    LinhaDoPainel,
+    Painel,
+    TrocaDeStatus,
+    executar_troca,
+    montar_painel,
+    painel_do_projeto,
+    preparar_troca,
+)
 from .projeto import (
     ARQUIVO_DESENHO,
     ARQUIVO_HISTORICO,
@@ -69,6 +77,7 @@ from .projeto import (
     STATUS_AGUARDANDO_BANCO,
     STATUS_CALCULO_AMOSTRAL,
     STATUS_EM_ANDAMENTO,
+    STATUS_FINALIZADO,
     STATUS_NAO_INICIADO,
     STATUS_PRONTO,
     ClienteIncompletoError,
@@ -541,9 +550,9 @@ def _resumo(
 # flatcap status
 
 # A cor de cada status no `flatcap status`. O `finalizado` não tem cor porque não
-# aparece. A cor ajuda o olho a separar as linhas, e só: o nome do status vai sempre
-# escrito, porque quem recebe a saída sem cor — um e-mail, uma interface que a lê —
-# precisa dele.
+# aparece no painel; no de um projeto só (`flatcap status <id>`), sai na cor do texto. A
+# cor ajuda o olho a separar as linhas, e só: o nome do status vai sempre escrito,
+# porque quem recebe a saída sem cor — um e-mail, uma interface que a lê — precisa dele.
 #
 # Contra o fundo preto, as cinco passam do mínimo de 4,5:1 de contraste: 21, 11,7, 15,7,
 # 6,4 e 9,5. O azul pedido primeiro, #4461d5, dava 3,9:1, e foi trocado pelo #5f87ff, que
@@ -564,24 +573,128 @@ CORES_DO_STATUS: dict[str, str] = {
 # na mesma coluna.
 COR_DO_STATUS_FORA_DA_LISTA = "magenta"
 
+# A opção que troca para cada status: o nome dele sem acento, com hífen no lugar do
+# espaço. Mora num dicionário, e não só nos parâmetros do comando, porque as dicas do
+# terminal — "para voltar" e "para trocar" — a escrevem, e porque um status novo que
+# entrar no `projeto.STATUS` sem a sua opção quebra um teste, em vez de ficar sem jeito
+# de ser escrito pelo terminal.
+OPCOES_DO_STATUS: dict[str, str] = {
+    STATUS_NAO_INICIADO: "--nao-iniciado",
+    STATUS_CALCULO_AMOSTRAL: "--calculo-amostral",
+    STATUS_AGUARDANDO_BANCO: "--aguardando-banco-de-dados",
+    STATUS_EM_ANDAMENTO: "--em-andamento",
+    STATUS_PRONTO: "--pronto",
+    STATUS_FINALIZADO: "--finalizado",
+}
+
+# O `aguardando banco de dados` também se escreve só `--aguardando`: são 27 letras a
+# menos para digitar, e nenhum outro status começa assim.
+ATALHO_DO_AGUARDANDO = "--aguardando"
+
+_TROCAR_O_STATUS = "Trocar o status"  # o título das seis opções na ajuda
+
 # O nome da função não é o do comando, como no `dados_listar`: `status` é também o
 # campo da ficha, e uma função com esse nome no módulo inteiro da CLI é um engano
 # esperando para acontecer.
 @app.command("status")
 def status_dos_projetos(
+    identificador: str | None = typer.Argument(
+        None,
+        help = "record_id ou matrícula do projeto, como aparece no painel. Sem ele, o painel "
+               "de todos.",
+        show_default = False,
+    ),
+    nao_iniciado: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_NAO_INICIADO],
+        help = "Passa o projeto para `não iniciado`.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
+    calculo_amostral: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_CALCULO_AMOSTRAL],
+        help = "Passa para `cálculo amostral`.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
+    aguardando_banco: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_AGUARDANDO_BANCO], ATALHO_DO_AGUARDANDO,
+        help = "Passa para `aguardando banco de dados`.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
+    em_andamento: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_EM_ANDAMENTO],
+        help = "Passa para `em andamento`.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
+    pronto: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_PRONTO],
+        help = "Passa para `pronto` — o que o `flatcap relatorio` já faz quando escreve o "
+               "documento.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
+    finalizado: bool = typer.Option(
+        False, OPCOES_DO_STATUS[STATUS_FINALIZADO],
+        help = "Passa para `finalizado`, e o projeto sai do painel.",
+        rich_help_panel = _TROCAR_O_STATUS,
+    ),
     env: str | None = typer.Option(
         None, "--env",
         help = "Caminho de um .env alternativo."
     ),
 ) -> None:
     """
-    Mostra os projetos que já têm pasta, com o status e o prazo de cada um.
-        Lê o projeto.yaml de cada projeto do FLATCAP_ROOT, sem falar com o REDCap e
-        sem escrever nada. O prazo que passou sem o projeto estar pronto sai como
-        ATRASADO, e os projetos finalizados não aparecem.
+    Mostra os projetos que já têm pasta, com o status e o prazo; ou troca o status de um.
+
+    Sem <id>, o painel: lê o projeto.yaml de cada projeto do FLATCAP_ROOT, sem falar com o
+    REDCap e sem escrever nada. O prazo que passou sem o projeto estar pronto sai como
+    ATRASADO, e os projetos finalizados não aparecem.
+
+    Com o <id> e uma das opções de status, troca o status: flatcap status 41 --finalizado.
+    A troca é escrita na hora, sem --sim, e o historico.md a registra com o status de antes.
+    Com o <id> e sem opção, mostra a linha do projeto — mesmo finalizado.
     """
+    pedidos = [
+        status
+        for status, marcado in (
+            (STATUS_NAO_INICIADO, nao_iniciado),
+            (STATUS_CALCULO_AMOSTRAL, calculo_amostral),
+            (STATUS_AGUARDANDO_BANCO, aguardando_banco),
+            (STATUS_EM_ANDAMENTO, em_andamento),
+            (STATUS_PRONTO, pronto),
+            (STATUS_FINALIZADO, finalizado),
+        )
+        if marcado
+    ]
+    # As duas recusas de uso vêm antes da configuração: não dependem dela, e um `.env`
+    # que falta não deve esconder que a linha de comando também estava errada.
+    if len(pedidos) > 1:
+        raise _abortar(
+            "Status",
+            f"Um status por vez: {' e '.join(OPCOES_DO_STATUS[s] for s in pedidos)} vieram "
+            "juntos, e nada foi escrito.\n"
+            f"Exemplo: flatcap status {identificador or '41'} "
+            f"{OPCOES_DO_STATUS[STATUS_FINALIZADO]}",
+        )
+    if pedidos and identificador is None:
+        raise _abortar(
+            "Status",
+            "Falta dizer de qual projeto, e nada foi escrito:\n"
+            f"  flatcap status <id> {OPCOES_DO_STATUS[pedidos[0]]}\n"
+            "O <id> é o record_id, a primeira coluna do painel, ou a matrícula.",
+        )
+
     cfg = _configuracao(env)
 
+    if identificador is None:
+        _mostrar_o_painel(cfg)
+    elif not pedidos:
+        _mostrar_o_projeto(cfg, identificador)
+    else:
+        _trocar_o_status(cfg, identificador, pedidos[0])
+
+
+def _mostrar_o_painel(cfg: Config) -> None:
+    """
+    `flatcap status`: a tabela de todos os projetos com pasta, o resumo e os avisos.
+    """
     try:
         painel = montar_painel(cfg.root)
     except FichaError as erro:
@@ -594,6 +707,111 @@ def status_dos_projetos(
     console.print(_resumo_do_status(painel))
     for aviso in _avisos_do_status(painel):
         erro_console.print(aviso)
+
+
+def _mostrar_o_projeto(cfg: Config, identificador: str) -> None:
+    """
+    `flatcap status 41`: a linha do projeto, na tabela do painel — o finalizado também —,
+    e como trocar o status dele.
+    """
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        painel = painel_do_projeto(raiz)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_tabela_do_status(painel))
+    for aviso in _avisos_do_status(painel):
+        erro_console.print(aviso)
+
+    (linha,) = painel.linhas
+    opcoes = ", ".join(
+        f"{opcao} (ou {ATALHO_DO_AGUARDANDO})" if status == STATUS_AGUARDANDO_BANCO else opcao
+        for status, opcao in OPCOES_DO_STATUS.items()
+    )
+    console.print(
+        Text(
+            f"\nPara trocar o status: flatcap status {linha.record_id or identificador} e "
+            f"uma destas opções — {opcoes}.",
+            style = "dim",
+        )
+    )
+
+
+def _trocar_o_status(cfg: Config, identificador: str, novo: str) -> None:
+    """
+    `flatcap status 41 --finalizado`: escreve na hora, e diz como voltar.
+
+    Sem simulação, ao contrário dos outros comandos que escrevem na pasta do projeto — o
+    porquê está no docstring do `painel.py`. O que torna isso seguro está na tela: o
+    status de antes e o comando que o devolve.
+    """
+    try:
+        troca = preparar_troca(cfg.root, identificador, novo)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(_cabecalho_da_troca(troca))
+
+    if not troca.muda:
+        _nada_a_fazer(f"O projeto já está `{novo}`. Nada foi escrito.")
+        return
+
+    try:
+        resultado = executar_troca(troca)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar(
+            "Escrita em disco",
+            f"Não consegui escrever o status no {ARQUIVO_PROJETO}.\n"
+            f"Detalhe técnico: {erro}\n"
+            "A ficha ficou como estava. Confira se ela está aberta noutro programa, e rode "
+            "o comando de novo.",
+        ) from erro
+
+    for aviso in resultado.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+
+    anterior = troca.anterior_reconhecido
+    console.print(
+        Text.assemble(
+            ("\nStatus trocado: ", "green"),
+            _texto_do_status(anterior or troca.anterior, reconhecido = anterior is not None),
+            " → ",
+            _texto_do_status(novo),
+            "." if novo != STATUS_FINALIZADO else ". O projeto sai do painel.",
+        )
+    )
+    if anterior is not None:
+        console.print(
+            Text(
+                f"Para voltar: flatcap status {troca.ficha.record_id or identificador} "
+                f"{OPCOES_DO_STATUS[anterior]}",
+                style = "dim",
+            )
+        )
+
+
+def _cabecalho_da_troca(troca: TrocaDeStatus) -> Text:
+    ficha = troca.ficha
+    return Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+    )
+
+
+def _texto_do_status(status: str, reconhecido: bool = True) -> Text:
+    """
+    O status na cor dele, como na coluna do painel; o que não é da lista, em magenta.
+    """
+    if reconhecido:
+        return Text(status, style = CORES_DO_STATUS.get(status, ""))
+    return Text(status or "(em branco)", style = COR_DO_STATUS_FORA_DA_LISTA)
 
 
 def _tabela_do_status(painel: Painel) -> Table:

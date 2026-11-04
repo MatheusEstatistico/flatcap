@@ -36,6 +36,7 @@ from flatcap.projeto import (
     RegistroNaoEncontradoError,
     anotar,
     executar,
+    frase_do_status,
     marcar_somente_leitura,
     nome_do_banco,
     preparar,
@@ -376,6 +377,20 @@ class TestProjetoYaml:
         assert "2026-11-04" in cabecalho and "04/11/2026" in cabecalho
         assert "ATRASADO" in cabecalho
 
+    def test_o_cabecalho_ensina_a_trocar_o_status_pelo_terminal(self, cfg, redcap):
+        """
+        A ficha é onde você vai escrever o status; é ali que se aprende que o terminal
+        escreve o mesmo, com a data no histórico.
+        """
+        redcap([REGISTRO])
+        texto = preparar(cfg, "42", agora=AGORA).projeto_yaml
+        cabecalho = " ".join(
+            linha.lstrip("# ") for linha in texto.splitlines() if linha.startswith("#")
+        )
+        cabecalho = " ".join(cabecalho.split())
+        assert "`flatcap status <id> --finalizado`" in cabecalho
+        assert "historico.md" in cabecalho
+
     def test_os_seis_status_na_ordem_do_atendimento(self):
         """
         O cálculo amostral vem antes da coleta, e por isso antes do banco.
@@ -419,6 +434,25 @@ class TestHistorico:
         """
         anotar(projeto_vazio, "ação", datetime(2026, 9, 9, 15, 0))
         assert linhas_do_historico(projeto_vazio)[-1].startswith("- **2026-09-09 15:00** — ")
+
+    def test_a_frase_do_status_e_uma_so(self):
+        """
+        O `flatcap relatorio` e o `flatcap status <id> --<status>` escrevem a mesma frase,
+        e quem conta as trocas lendo o histórico procura uma. O de antes vai como estava
+        escrito na ficha.
+        """
+        assert frase_do_status("em andamento", "pronto") == (
+            "Status de `em andamento` para `pronto`."
+        )
+        assert frase_do_status("Em Andamento", "finalizado") == (
+            "Status de `Em Andamento` para `finalizado`."
+        )
+
+    def test_a_frase_do_status_sem_o_de_antes(self):
+        """
+        A ficha sem `status:`, ou com ele em branco: a frase diz só para onde foi.
+        """
+        assert frase_do_status("", "finalizado") == "Status para `finalizado`."
 
 
 class TestTamanhoLegivel:

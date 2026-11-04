@@ -10,7 +10,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     projeto.py     monta a pasta do projeto: decide um Plano e depois o escreve
     ficha.py       lê e escreve o projeto.yaml; encontra o projeto a partir de um id
     dados.py       versiona os bancos: adiciona, roda a anterior, confere o disco
-    painel.py      o painel do `flatcap status`: o status e o prazo de cada projeto
+    painel.py      o `flatcap status`: o status e o prazo de cada projeto, e a troca
     banco.py       abre a versão vigente do banco como um quadro do pandas
     dicionario.py  lê, funde e escreve o dicionario.csv
     perfil.py      diagnostica o banco e escreve o perfil.md
@@ -716,6 +716,33 @@ só o texto de algarismos; `12e3` e `0o17` ainda saíam sem aspas e voltavam com
 **O `.csv` com campo a mais volta a abrir.** O pandas 3.1 passou a recusar a linha que o
 `index_col=False` cortava; o corte agora é do `banco._ler_csv`, pelo `on_bad_lines`. E o
 `REDCAP_API_URL` com `http://` só vale para um servidor nesta máquina.
+
+## 1.19.0 — a troca de status pelo terminal
+
+**`flatcap status 41 --finalizado`.** Uma opção por status, com o nome dele sem acento e com
+hífen no lugar do espaço — `--nao-iniciado`, `--calculo-amostral`,
+`--aguardando-banco-de-dados` (ou só `--aguardando`), `--em-andamento`, `--pronto` e
+`--finalizado` —, e o `<id>` de sempre: o `record_id` da primeira coluna do painel, ou a
+matrícula. A troca escreve o `status:` pelo `ficha.definir_status`, o mesmo do relatório, que
+preserva os comentários, as aspas e a ordem das chaves (`painel.preparar_troca` e
+`executar_troca`).
+
+**A troca deixa a data.** Cada uma vira uma linha do `historico.md` — "Status de
+`em andamento` para `finalizado`." —, que a troca feita à mão não deixa: sem ela, "quantos
+projetos terminaram em outubro?" não tem resposta. A frase é uma só, a do
+`projeto.frase_do_status`, e o relatório passa a escrevê-la por ela: quem contar as trocas
+lendo os históricos procura uma frase, e não duas.
+
+**Escreve sem simular** — dos comandos que escrevem na pasta do projeto, o único. A
+simulação mostra o que seria criado ou movido antes de criar ou mover; aqui muda uma palavra
+da ficha, o histórico guarda a de antes, e o terminal mostra o comando que a devolve. O status
+em que o projeto já está não escreve nada e sai com 0, e a grafia não conta: `Em Andamento` já
+é o `em andamento`. Dois status de uma vez, ou a opção sem o `<id>`, são recusados antes de a
+configuração ser lida.
+
+**Com o `<id>` e sem opção, o painel de um projeto só** (`painel.painel_do_projeto`): a linha
+dele — com o finalizado, que no painel de todos não aparece — e as opções para trocar o status.
+O finalizado não sai ATRASADO, pelo motivo do pronto: o relatório dele já foi entregue.
 """
 
-__version__ = "1.18.2"
+__version__ = "1.19.0"
