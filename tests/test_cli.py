@@ -1275,6 +1275,7 @@ class TestComparacao:
         assert "Comparação" in saida
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
+        assert "- repetidas: [pas_0, pas_1]" in saida
 
     def test_o_help_mostra_a_forma(self):
         """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
@@ -1282,6 +1283,7 @@ class TestComparacao:
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
         assert "- [imc, sexo]" in saida
+        assert "- repetidas: [pas_0, pas_1]" in saida
         assert "- repetidas: [pas_0, pas_1, pas_2]" in saida
 
     def test_a_virgula_decimal_sai_com_um_e_ensina_o_numero(self, rodar, projeto_com_rodada):
@@ -1419,12 +1421,64 @@ class TestComparacao:
         assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
         assert (raiz / PASTA_ANALISES / PASTA_COMPARACAO / "repetidas.csv").is_file()
 
-    def test_duas_medidas_sai_com_um(self, rodar, projeto_com_rodada):
+    def test_duas_medidas_sao_o_pareado(self, rodar, projeto_com_rodada):
+        """
+        A tabela do pareado na simulação, com a normalidade das diferenças na frase da
+        escolha, e o `.csv` dela com `--sim`.
+        """
         raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
         acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1]\n")
         resultado = rodar("comparacao", RECORD_ID)
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Comparação entre duas medidas pareadas" in saida
+        assert "o Shapiro-Wilk não rejeita a normal das diferenças (p = 0,434)" in saida
+        assert "→ t pareado (t = 5,08; 38 gl)" in saida
+        assert rodar("comparacao", RECORD_ID, "--sim").exit_code == 0
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        assert sorted(p.name for p in pasta.iterdir()) == ["manifesto.json", "pareado.csv"]
+
+    def test_duas_numericas_entre_colchetes_ensinam_o_pareado(self, rodar, projeto_com_rodada):
+        """
+        O pedido que levou ao pareado: duas equações da mesma TFG, nos mesmos pacientes,
+        escritas como uma comparação entre grupos e com o método no terceiro lugar. A
+        recusa diz como leu o item e escreve o do pareado — com os nomes de coluna como
+        eles vêm, com espaço —, e o item escrito assim roda.
+        """
+        from statistics import NormalDist
+
+        import pandas as pd
+
+        escores = [NormalDist().inv_cdf((j + 0.5) / 40) for j in range(40)]
+        ckd = [round(90 + 20 * escores[(7 * i) % 40], 1) for i in range(40)]
+        ekfc = [round(v - 3 + 2 * escores[(11 * i) % 40], 1) for i, v in enumerate(ckd)]
+        raiz = projeto_com_rodada(pd.DataFrame({"CKD EPI": ckd, "EKFC": ekfc}))
+        acrescentar_a_ficha(raiz, "comparacao:\n  - [CKD EPI, EKFC, student]\n")
+        resultado = rodar("comparacao", RECORD_ID)
         assert resultado.exit_code == 1
-        assert "a comparação é o t pareado" in _sem_moldura(resultado)
+        saida = _sem_moldura(resultado)
+        assert (
+            "[CKD EPI, EKFC, student] — lido como a média de `CKD EPI` entre os grupos de "
+            "`EKFC`, pelo t de Student; mas o segundo nome é o da variável de grupo, que "
+            "precisa ser `categorica`, e `EKFC` está marcada `numerica`"
+        ) in saida
+        assert (
+            "são um pareado: o item `- repetidas: [CKD EPI, EKFC]`, com o método, quando "
+            "quiser escolhê-lo, na chave `metodo:` ao lado"
+        ) in saida
+        assert "ainda não está no FlatCap" not in saida
+
+        ficha = raiz / ARQUIVO_PROJETO
+        texto = ficha.read_text(encoding="utf-8")
+        ficha.write_text(
+            texto.replace("- [CKD EPI, EKFC, student]", "- repetidas: [CKD EPI, EKFC]"),
+            encoding="utf-8",
+        )
+        resultado = rodar("comparacao", RECORD_ID)
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "CKD EPI e EKFC: n = 40 com as duas medidas" in saida
+        assert "→ t pareado (t =" in saida
 
     def test_entre_grupos_com_sim_escreve_as_duas_tabelas(self, rodar, projeto_com_rodada):
         raiz = projeto_com_rodada()

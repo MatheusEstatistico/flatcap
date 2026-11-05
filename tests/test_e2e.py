@@ -542,6 +542,73 @@ class TestFluxoCompleto:
         )
         assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == do_csv
 
+    def test_o_pareado_do_docx_e_o_do_csv(self, tmp_path):
+        """
+        O pareado pela mesma régua: as duas medidas da PAS pelo t pareado, as duas da dor
+        pelo Wilcoxon pareado — o Shapiro-Wilk rejeita a normal das diferenças —, e as do
+        peso, em que cada caso ganha um quilo, com o t escrito no item e sem teste. A
+        tabela no documento é, célula por célula, a do `pareado.csv`.
+        """
+        from docx import Document
+
+        anexo = bancos.csv_do_r(tmp_path / "banco.csv", bancos.para_comparar_repetidas())
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo.read_bytes())}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            acrescentar_a_ficha(
+                raiz,
+                "comparacao:\n  - repetidas: [pas_0, pas_1]\n"
+                "  - repetidas: [dor_0, dor_1]\n"
+                "  - {repetidas: [peso_0, peso_1], metodo: t}\n",
+            )
+            resultado = flatcap("perfil", "40", "--sim", env=env)
+            assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+            marcar_numericas(raiz, "dor_0", "dor_1", "dor_2")
+            for comando in (
+                ("descritiva", "40", "--sim"),
+                ("comparacao", "40", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        csv = raiz / "3. Análises" / "comparacao" / "pareado.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_csv[0] == [
+            "medida",
+            "n",
+            "média (DP) ou mediana [Q1 a Q3]",
+            "diferença ou pseudomediana das diferenças (IC 95%)",
+            "teste",
+            "p-valor",
+        ]
+        assert do_csv[1] == [
+            "pas_0", "39", "129,59 (11,92)", "3,03 (1,82 a 4,23)", "t pareado", "< 0,001",
+        ]
+        assert do_csv[3][2:5] == ["1 [0 a 1,25]", "0,00 (-0,50 a 1,00)", "Wilcoxon pareado"]
+        assert [linha[4] for linha in do_csv[1:]] == [
+            "t pareado", "", "Wilcoxon pareado", "", "não testado: as diferenças não variam", "",
+        ]
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        quadro = next(
+            t for t in documento.tables
+            if [c.text.strip() for c in t.rows[0].cells] == do_csv[0]
+        )
+        assert [[c.text.strip() for c in linha.cells] for linha in quadro.rows] == do_csv
+        texto = " ".join(p.text for p in documento.paragraphs)
+        assert (
+            "Entre duas medidas pareadas, usaram-se o teste t pareado e o de Wilcoxon pareado."
+            in texto
+        )
+
 
 class TestFluxoDaAmostragem:
     """

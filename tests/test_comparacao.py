@@ -26,7 +26,8 @@ sobre ele — em `STUDENT_DO_R` —, o `t.test(y ~ sexo)`, o de Welch, em `WELCH
 o `oneway.test(y ~ escolaridade, var.equal = TRUE)` em `ANOVA_DO_R` e o
 `oneway.test(y ~ escolaridade)`, o de Welch, em `ANOVA_DE_WELCH_DO_R`. Nas medidas
 repetidas, o `bancos.para_comparar_repetidas()`, com o `aov` e o ε de Greenhouse-Geisser
-do R em `REPETIDAS_DO_R`.
+do R em `REPETIDAS_DO_R`; e o pareado sobre o mesmo banco, com o `t.test` e o
+`wilcox.test` com `paired = TRUE` e o `shapiro.test` das diferenças, em `PAREADO_DO_R`.
 
 Os testes de postos sobre os mesmos bancos: o `wilcox.test(x, mu = mu, conf.int = TRUE)`
 em `WILCOXON_DO_R`, o `wilcox.test(x ~ sexo, conf.int = TRUE)` em `MANN_WHITNEY_DO_R`, o
@@ -56,14 +57,17 @@ from flatcap.comparacao import (
     ANOVA_DE_WELCH,
     ARQUIVO_DOIS_GRUPOS,
     ARQUIVO_K_GRUPOS,
+    ARQUIVO_PAREADO,
     ARQUIVO_REPETIDAS,
     ARQUIVO_TABELA,
     COLUNA_DA_DIFERENCA,
     COLUNA_DA_DIFERENCA_DE_LOCACAO,
     COLUNA_DA_MEDIA,
     COLUNA_DA_MEDIANA,
+    COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS,
     COLUNA_DAS_DUAS,
     COLUNA_DAS_DUAS_DIFERENCAS,
+    COLUNA_DAS_DUAS_DO_PAREADO,
     COLUNA_DO_IC,
     COLUNA_DO_IC_DA_MEDIA,
     COLUNA_DO_IC_DA_PSEUDOMEDIANA,
@@ -72,11 +76,14 @@ from flatcap.comparacao import (
     K_GRUPOS,
     KRUSKAL_WALLIS,
     MANN_WHITNEY,
+    PAREADO,
     REGRA,
     REPETIDAS,
     T_DE_WELCH,
+    T_PAREADO,
     UMA_AMOSTRA,
     WILCOXON,
+    WILCOXON_PAREADO,
     Grupo,
     ItemInvalidoError,
     Normal,
@@ -326,6 +333,47 @@ FRIEDMAN_DO_R = [
     ("peso", 40, 80, 2, 4.2483542552915889e-18,
      ((70, 64.125, 75.875), (71, 65.125, 76.875), (72, 66.125, 77.875))),
 ]
+
+
+# `t.test(x, y, paired = TRUE)`, `wilcox.test(x, y, paired = TRUE, conf.int = TRUE)` e o
+# `shapiro.test` das diferenças no R 4.3.3, sobre os casos com as duas medidas de
+# `bancos.para_comparar_repetidas()`, e o resumo de cada medida desses casos — a média e o
+# DP, e a mediana e os quartis do `quantile`, o tipo 7:
+#
+#     (medidas, n, (t, gl, p, IC, diferença média), (W e p do Shapiro-Wilk das diferenças),
+#      (V, p, IC, pseudomediana das diferenças), distintos das diferenças,
+#      ((média, DP, mediana, Q1, Q3) de cada medida))
+PAREADO_DO_R = [
+    (("pas_0", "pas_1"), 39,
+     (5.0836127017118597, 38, 1.0221855099968598e-05,
+      (1.8207714980435061, 4.2305105532385445), 3.0256410256410255),
+     (0.97207976869947577, 0.43396879773873265),
+     (588, 6.1380647748085853e-05, (1.9999872759196036, 4.5000174209235029),
+      3.4999320677651129),
+     15,
+     ((129.58974358974359, 11.915752397380599, 130, 123.5, 136.5),
+      (126.56410256410257, 12.032401151178762, 126, 118.5, 135))),
+    (("pas_1", "pas_2"), 38,
+     (3.3502576714007328, 37, 0.0018686655668204424,
+      (0.99843270884996127, 4.054198870097407), 2.5263157894736841),
+     (0.98683251227529378, 0.92682717500967182),
+     (469, 0.003409139153897445, (1.0000035901268087, 4.5000300268523716),
+      2.9999756914728413),
+     18,
+     ((126.81578947368421, 12.089430861255437, 126.5, 119.25, 135),
+      (124.28947368421052, 12.595382883651265, 124.5, 116.5, 131.75))),
+    (("dor_0", "dor_1"), 40,
+     (0.9843495818960265, 39, 0.33101128797057233,
+      (-0.21097003691324989, 0.61097003691324991), 0.20000000000000001),
+     (0.9208213190714073, 0.0081737003967579675),
+     (191.5, 0.42475514747733467, (-0.49995297548988438, 1.0000174528706332),
+      4.7328032225835286e-05),
+     7,
+     ((0.875, 1.0423715563744347, 1, 0, 1.25),
+      (0.67500000000000004, 0.88831445113910201, 0, 0, 1))),
+]
+ITEM_PAS_PAREADO = ("repetidas", ["pas_0", "pas_1"])
+ITEM_DOR_PAREADO = ("repetidas", ["dor_0", "dor_1"])
 
 
 def _repetidas(itens, quadro=None, linhas=DICIONARIO_DAS_REPETIDAS):
@@ -1628,10 +1676,17 @@ class TestRecusasEntreGrupos:
         assert "os dois estão trocados" in mensagem
         assert "`[imc, sexo]`" in mensagem
 
-    def test_duas_numericas_sao_uma_correlacao(self):
+    def test_duas_numericas_sao_um_pareado_ou_uma_correlacao(self):
+        """
+        A frase diz como o item foi lido — quem escreve duas numéricas quase sempre quis
+        compará-las uma com a outra, e não leria «variável de grupo» como o segundo nome.
+        """
         mensagem = self._recusa(("imc", "pas"))
-        assert "a variável de grupo é categórica" in mensagem
+        assert "lido como a média de `imc` entre os grupos de `pas`" in mensagem
+        assert "o segundo nome é o da variável de grupo, que precisa ser `categorica`" in mensagem
+        assert "o item `- repetidas: [imc, pas]`" in mensagem
         assert "`correlacao:`" in mensagem
+        assert "ainda não está no FlatCap" not in mensagem
 
     def test_duas_categoricas_sao_uma_associacao(self):
         mensagem = self._recusa(("sexo", "escolaridade"))
@@ -2268,9 +2323,12 @@ class TestRepetidasRecusas:
         mensagem = self._recusa(ITEM_PAS, ("repetidas", ["pas_2", "pas_1", "pas_0"]))
         assert "repete repetidas: [pas_0, pas_1, pas_2]" in mensagem
 
-    def test_duas_numericas_entre_grupos_ensinam_as_repetidas(self):
-        mensagem = self._recusa(("pas_0", "pas_1"))
-        assert "`- repetidas: [pas_0, pas_1, ...]`" in mensagem
+    def test_duas_numericas_entre_grupos_ensinam_o_pareado(self):
+        """O `[CKD EPI, EKFC, student]` de quem queria comparar duas medidas da mesma pessoa."""
+        mensagem = self._recusa(("pas_0", "pas_1", "student"))
+        assert "[pas_0, pas_1, student] — lido como a média de `pas_0`" in mensagem
+        assert "são um pareado: o item `- repetidas: [pas_0, pas_1]`" in mensagem
+        assert "duas, no pareado, ou três ou mais, nas medidas repetidas" in mensagem
 
 
 class TestRepetidasFicha:
@@ -2288,13 +2346,13 @@ class TestRepetidasFicha:
             Pedido("peso_0", metodo="anova", medidas=("peso_0", "peso_1", "peso_2")),
         )
 
-    def test_duas_medidas_sao_o_t_pareado(self, projeto_vazio):
-        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1]\n")
-        assert "duas medidas: a comparação é o t pareado, que ainda não está" in mensagem
+    def test_duas_medidas_sao_o_pareado(self, projeto_vazio):
+        itens = _itens(projeto_vazio, "  - repetidas: [pas_0, pas_1]\n")
+        assert itens == (Pedido("pas_0", medidas=("pas_0", "pas_1")),)
 
     def test_uma_medida_so(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - repetidas: pas_0\n")
-        assert "uma medida só" in mensagem
+        assert "uma medida só; a comparação é entre duas medidas, no pareado" in mensagem
 
     def test_a_mesma_medida_duas_vezes(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_0]\n")
@@ -2330,6 +2388,550 @@ class TestRepetidasFicha:
     def test_numero_na_lista(self, projeto_vazio):
         mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, 120, pas_2]\n")
         assert "depois de `repetidas:` vem a lista das medidas" in mensagem
+
+
+# ── O pareado ──────────────────────────────────────────────────────────────
+
+
+def _pareado(*itens, quadro=None, linhas=DICIONARIO_DAS_REPETIDAS):
+    return _repetidas(itens, quadro, linhas)
+
+
+class TestPareadoDoR:
+    @pytest.mark.parametrize(
+        ("medidas", "n", "t", "shapiro", "wilcoxon", "distintos", "resumos"),
+        PAREADO_DO_R,
+        ids=["-".join(medidas) for medidas, *_ in PAREADO_DO_R],
+    )
+    def test_o_t_test_o_wilcox_test_e_o_shapiro_test_das_diferencas(
+        self, medidas, n, t, shapiro, wilcoxon, distintos, resumos
+    ):
+        """
+        Com o método escrito, cada teste sai mesmo onde a regra escolheria o outro — e dá
+        para conferir os dois contra o R, com o Shapiro-Wilk das diferenças e o resumo de
+        cada medida sobre os casos com as duas.
+        """
+        estatistica, gl, p, ic, diferenca = t
+        com_t = _pareado(("repetidas", list(medidas), "t")).variaveis[0]
+        assert com_t.delineamento == PAREADO
+        assert com_t.validos == n
+        assert com_t.distintos == distintos
+        assert com_t.resultado.metodo == T_PAREADO
+        assert com_t.resultado.estatistica == pytest.approx(estatistica, rel=1e-12)
+        assert com_t.resultado.gl == (gl,)
+        assert com_t.resultado.p == pytest.approx(p, rel=1e-10)
+        assert com_t.resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert com_t.resultado.estimativa == pytest.approx(diferenca, rel=1e-12)
+        assert com_t.resumo["media"] == pytest.approx(diferenca, rel=1e-12)
+        assert com_t.normal.w == pytest.approx(shapiro[0], rel=1e-6)
+        assert com_t.normal.p == pytest.approx(shapiro[1], rel=1e-4)
+        for grupo, (media, dp, mediana, q1, q3) in zip(com_t.grupos, resumos, strict=True):
+            assert grupo.n == n
+            assert grupo.resumo["media"] == pytest.approx(media, rel=1e-12)
+            assert grupo.resumo["desvio"] == pytest.approx(dp, rel=1e-12)
+            _quartis_conferidos(grupo.resumo, mediana, q1, q3)
+
+        v, p, ic, estimativa = wilcoxon
+        com_w = _pareado(("repetidas", list(medidas), "wilcoxon")).variaveis[0]
+        assert com_w.resultado.metodo == WILCOXON_PAREADO
+        assert com_w.resultado.estatistica == v
+        assert com_w.resultado.p == pytest.approx(p, rel=1e-12)
+        assert com_w.resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert com_w.resultado.estimativa == pytest.approx(estimativa, rel=1e-9)
+
+
+class TestPareadoRegra:
+    def test_as_diferencas_normais_vao_para_o_t_pareado(self):
+        comparada = _pareado(ITEM_PAS_PAREADO).variaveis[0]
+        assert (comparada.metodo, comparada.escolha.pela_ficha) == (T_PAREADO, False)
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk não rejeita a normal das diferenças (p = 0,434)"
+        )
+        assert comparada.justificativa == (
+            "PAS basal e PAS 30 dias: n = 39 com as duas medidas; o Shapiro-Wilk não "
+            "rejeita a normal das diferenças (p = 0,434) → t pareado (t = 5,08; 38 gl)."
+        )
+
+    def test_as_diferencas_que_nao_sao_normais_vao_para_o_wilcoxon_pareado(self):
+        comparacao = _pareado(ITEM_DOR_PAREADO)
+        comparada = comparacao.variaveis[0]
+        assert (comparada.escolha.metodo, comparada.escolha.da_regra) == (
+            WILCOXON_PAREADO,
+            WILCOXON_PAREADO,
+        )
+        assert comparada.escolha.motivo == (
+            "o Shapiro-Wilk rejeita a normal das diferenças (p = 0,008)"
+        )
+        assert "→ Wilcoxon pareado (V = 191,5; p aproximado pela normal" in (
+            comparada.justificativa
+        )
+        assert "porque há empates e diferenças nulas" in comparada.justificativa
+        assert any(
+            "`repetidas: [dor_0, dor_1]`: as diferenças têm 7 valores distintos em 40 casos"
+            in aviso
+            for aviso in comparacao.avisos
+        )
+
+    def test_a_normalidade_e_a_das_diferencas_e_nao_a_de_cada_medida(self):
+        """
+        Duas medidas assimétricas — o Shapiro-Wilk rejeita nas duas — com diferenças
+        normais: a regra fica com o t pareado, como no R, em que `shapiro.test(antes)` e
+        `shapiro.test(depois)` dão p < 0,001 e `shapiro.test(antes - depois)`, p = 1,000.
+        """
+        from statistics import NormalDist
+
+        n = 30
+        z = [NormalDist().inv_cdf((j + 0.5) / n) for j in range(n)]
+        antes = [round(math.exp(1 + 0.8 * z[(7 * i) % n]) * 10, 1) for i in range(n)]
+        mudanca = [round(2 + 1.5 * z[(11 * i) % n], 1) for i in range(n)]
+        depois = [round(a - d, 1) for a, d in zip(antes, mudanca, strict=True)]
+        quadro = pd.DataFrame({"antes": antes, "depois": depois})
+        linhas = (Linha("antes", "Antes", NUMERICA), Linha("depois", "Depois", NUMERICA))
+        comparada = _pareado(
+            ("repetidas", ["antes", "depois"]), quadro=quadro, linhas=linhas
+        ).variaveis[0]
+        assert comparada.metodo == T_PAREADO
+        assert comparada.normal.p == pytest.approx(0.99999999774410486, rel=1e-6)
+        assert comparada.resultado.estatistica == pytest.approx(7.2547625011001138, rel=1e-12)
+        assert comparada.resultado.p == pytest.approx(5.466478337030513e-08, rel=1e-10)
+        repetidas = _repetidas(
+            (("repetidas", ["antes", "depois"], "t"),), quadro, linhas
+        ).variaveis[0]
+        assert repetidas.normal.p == comparada.normal.p
+
+    def test_o_t_pareado_pela_regra_com_poucos_casos_avisa(self):
+        quadro = pd.DataFrame(
+            {
+                "pas_0": [132, 140, 128, 150, 138, 126, 145, 133, 129, 141],
+                "pas_1": [128, 135, 127, 142, 131, 124, 139, 130, 126, 133],
+            }
+        )
+        comparacao = _pareado(ITEM_PAS_PAREADO, quadro=quadro, linhas=(PAS_0, PAS_1))
+        assert comparacao.variaveis[0].metodo == T_PAREADO
+        assert any(
+            "`repetidas: [pas_0, pas_1]`: t pareado com 10 casos" in aviso
+            and "`{repetidas: [pas_0, pas_1], metodo: wilcoxon}`" in aviso
+            for aviso in comparacao.avisos
+        )
+        assert not any("t pareado com 39" in a for a in _pareado(ITEM_PAS_PAREADO).avisos)
+
+    def test_o_wilcoxon_escrito_contra_a_regra(self):
+        comparacao = _pareado(("repetidas", ["pas_0", "pas_1"], "wilcoxon"))
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.contra_a_regra
+        assert (
+            "Wilcoxon pareado escrito na ficha (V = 588; p aproximado pela normal"
+        ) in comparada.justificativa
+        assert "contra a regra — ela escolheria t pareado: o Shapiro-Wilk não rejeita" in (
+            comparada.justificativa
+        )
+        assert any("escrito na ficha, contra a regra" in a for a in comparacao.avisos)
+
+    def test_o_t_escrito_que_a_regra_tambem_escolheria(self):
+        comparada = _pareado(("repetidas", ["pas_0", "pas_1"], "student")).variaveis[0]
+        assert comparada.escolha.pela_ficha and not comparada.escolha.contra_a_regra
+        assert "t pareado escrito na ficha (t = 5,08; 38 gl), o mesmo que a regra" in (
+            comparada.justificativa
+        )
+
+    def test_o_registro_da_regra_do_pareado(self):
+        assert REGRA[PAREADO] == (T_PAREADO, WILCOXON_PAREADO)
+        for escrito, teste in (
+            ("t", T_PAREADO),
+            ("Student", T_PAREADO),
+            ("t pareado", T_PAREADO),
+            ("t-pareado", T_PAREADO),
+            ("t de Student pareado", T_PAREADO),
+            ("wilcoxon", WILCOXON_PAREADO),
+            ("wilcox", WILCOXON_PAREADO),
+            ("Wilcoxon pareado", WILCOXON_PAREADO),
+            ("anova", ""),
+            ("friedman", ""),
+            ("mannwhitney", ""),
+            ("welch", ""),
+        ):
+            assert metodo_escrito(escrito, PAREADO) == teste, escrito
+
+
+class TestPareadoNoBanco:
+    def test_so_os_casos_com_as_duas_medidas(self):
+        """
+        A `pas_1` tem uma célula vazia: 39 casos com as duas — a `pas_2` não entra, e a
+        célula vazia dela não tira caso nenhum daqui.
+        """
+        comparada = _pareado(ITEM_PAS_PAREADO).variaveis[0]
+        assert (comparada.validos, comparada.faltantes) == (39, 1)
+        assert comparada.colunas == ("pas_0", "pas_1")
+
+    def test_a_diferenca_e_a_primeira_menos_a_segunda(self):
+        """Na outra ordem, o sinal troca, e o p e o resto ficam."""
+        ida = _pareado(ITEM_PAS_PAREADO).variaveis[0].resultado
+        volta = _pareado(("repetidas", ["pas_1", "pas_0"])).variaveis[0].resultado
+        assert volta.estatistica == pytest.approx(-ida.estatistica, rel=1e-14)
+        assert volta.estimativa == pytest.approx(-ida.estimativa, rel=1e-14)
+        assert volta.p == pytest.approx(ida.p, rel=1e-14)
+
+    def test_nenhum_caso_com_as_duas_medidas(self):
+        quadro = bancos.para_comparar_repetidas().assign(pas_1=None)
+        comparada = _pareado(ITEM_PAS_PAREADO, quadro=quadro).variaveis[0]
+        assert comparada.celula_do_teste == "não testado: nenhum caso com as duas medidas"
+        assert [linha[2] for linha in linhas_da_tabela(comparada)] == ["—", "—"]
+
+    def test_um_caso_com_as_duas_medidas(self):
+        quadro = bancos.para_comparar_repetidas()
+        quadro.loc[1:, "pas_1"] = None
+        comparada = _pareado(ITEM_PAS_PAREADO, quadro=quadro).variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: 1 caso com as duas medidas — o teste precisa de pelo menos 2"
+        )
+
+    def test_as_duas_medidas_iguais_em_todos_os_casos(self):
+        """Onde o R devolve `NaN` nos dois testes: não há diferença a testar."""
+        quadro = bancos.para_comparar_repetidas().assign(pas_1=lambda q: q["pas_0"])
+        comparacao = _pareado(
+            ("repetidas", ["pas_0", "pas_1"], "wilcoxon"), quadro=quadro
+        )
+        comparada = comparacao.variaveis[0]
+        assert comparada.celula_do_teste == (
+            "não testado: as duas medidas são iguais em todos os casos"
+        )
+        assert any("uma coluna não foi copiada da outra" in a for a in comparacao.avisos)
+
+    def test_cada_caso_muda_o_mesmo_tanto(self):
+        """
+        Cada caso ganha um quilo. As diferenças saem −1 e −0,9999999999999929 — o resto
+        do arredondamento —, e o `shapiro.test` do R roda sobre elas e rejeita (W = 0,147,
+        p = 6,6e-14); aqui a normalidade não se verifica, e a regra vai ao Wilcoxon
+        pareado, que dá o p do R: V = 0, p = 4,24e-10, e o intervalo de nível 0 — a célula
+        sai com o traço. O t escrito no item sai sem teste, ensinando o Wilcoxon.
+        """
+        comparacao = _pareado(("repetidas", ["peso_0", "peso_1"]))
+        comparada = comparacao.variaveis[0]
+        assert comparada.metodo == WILCOXON_PAREADO
+        assert not comparada.escolha.pela_ficha
+        assert comparada.escolha.motivo == (
+            "a normalidade das diferenças não pôde ser verificada (cada caso muda o mesmo "
+            "tanto)"
+        )
+        assert comparada.normal == Normal(
+            w=None, p=None, impedimento="cada caso muda o mesmo tanto"
+        )
+        assert comparada.distintos == 2
+        resultado = comparada.resultado
+        assert resultado.estatistica == 0
+        assert resultado.p == pytest.approx(4.2429806280742191e-10, rel=1e-12)
+        assert (resultado.ic, resultado.estimativa, resultado.confianca_do_ic) == (
+            (-1.0, -1.0),
+            -1.0,
+            0.0,
+        )
+        assert linhas_da_tabela(comparada)[0][3] == "—"
+        assert (
+            "`repetidas: [peso_0, peso_1]`: cada caso muda o mesmo tanto da primeira medida "
+            "para a segunda, e a normalidade das diferenças não se verifica: a regra fica "
+            "com o Wilcoxon pareado, que olha o sinal de cada diferença. Vale conferir se "
+            "uma das colunas não foi calculada a partir da outra."
+        ) in comparacao.avisos
+        assert any("não há intervalo nenhum" in aviso for aviso in comparacao.avisos)
+
+        com_t = _pareado(("repetidas", ["peso_0", "peso_1"], "t"))
+        assert com_t.variaveis[0].celula_do_teste == "não testado: as diferenças não variam"
+        (aviso,) = [a for a in com_t.avisos if "as diferenças não variam" in a]
+        assert "`{repetidas: [peso_0, peso_1], metodo: wilcoxon}`" in aviso
+        assert aviso.endswith(
+            "Vale conferir se uma das colunas não foi calculada a partir da outra."
+        )
+        assert not any("a regra fica com o Wilcoxon" in a for a in com_t.avisos)
+
+        com_wilcoxon = _pareado(("repetidas", ["peso_0", "peso_1"], "wilcoxon"))
+        assert com_wilcoxon.variaveis[0].resultado.p == resultado.p
+        assert (
+            "`{repetidas: [peso_0, peso_1], metodo: wilcoxon}`: cada caso muda o mesmo tanto "
+            "da primeira medida para a segunda. Vale conferir se uma das colunas não foi "
+            "calculada a partir da outra."
+        ) in com_wilcoxon.avisos
+
+    def test_o_arredondamento_nao_vira_um_t_de_dez_a_treze(self):
+        """
+        Trinta casos que ganham exatamente 0,1 numa PAS em torno de 100, com uma casa: as
+        diferenças variam em 10⁻¹⁴, o critério do R não as vê, e o R devolve
+        `t.test(x, y, paired = TRUE)` = −7,6 × 10¹³ com p = 0, e o `shapiro.test` delas
+        com p = 1,8e-7. Aqui as duas contas feitas de ruído não saem: a normalidade não
+        se verifica, e o Wilcoxon pareado dá o do R — V = 0, p = 8,30e-7, o intervalo de
+        −0,10000000000000853 a −0,099999999999994316.
+        """
+        from statistics import NormalDist
+
+        n = 30
+        z = [NormalDist().inv_cdf((j + 0.5) / n) for j in range(n)]
+        antes = [round(100 + 10 * z[(7 * i) % n], 1) for i in range(n)]
+        quadro = pd.DataFrame({"pas_0": antes, "pas_1": [round(v + 0.1, 1) for v in antes]})
+        assert quadro["pas_0"].sub(quadro["pas_1"]).nunique() == 2
+        comparada = _pareado(ITEM_PAS_PAREADO, quadro=quadro, linhas=(PAS_0, PAS_1)).variaveis[0]
+        assert comparada.escolha.motivo == (
+            "a normalidade das diferenças não pôde ser verificada (cada caso muda o mesmo "
+            "tanto)"
+        )
+        resultado = comparada.resultado
+        assert resultado.metodo == WILCOXON_PAREADO
+        assert resultado.estatistica == 0
+        assert resultado.p == pytest.approx(8.3037464277233348e-07, rel=1e-12)
+        assert resultado.ic == (-0.10000000000000853, -0.099999999999994316)
+        assert resultado.estimativa == pytest.approx(-0.099999999999994316, rel=1e-15)
+        assert linhas_da_tabela(comparada)[0][3] == "-0,10 (-0,10 a -0,10)"
+        com_t = _pareado(
+            ("repetidas", ["pas_0", "pas_1"], "t"), quadro=quadro, linhas=(PAS_0, PAS_1)
+        )
+        assert com_t.variaveis[0].celula_do_teste == "não testado: as diferenças não variam"
+
+    def test_a_variacao_em_torno_de_zero_tambem_nao_vira_um_t(self):
+        """
+        Oito pessoas que ganham 0,1 kg, numa variação de peso em torno de zero: o
+        `t.test` do R devolve t = −1,1 × 10¹⁴ e p = 1,4 × 10⁻⁹⁶. Aqui a normalidade não se
+        verifica, e o Wilcoxon pareado dá o do R — V = 0, p = 0,012984, e o intervalo de
+        nível 90%, que não vai para a tabela.
+        """
+        antes = [-48.3, 31.7, -12.9, 45.1, -27.4, 18.6, -36.2, 29.4]
+        quadro = pd.DataFrame(
+            {"delta_0": antes, "delta_1": [round(valor + 0.1, 1) for valor in antes]}
+        )
+        linhas = (
+            Linha("delta_0", "Variação no 1º mês", NUMERICA),
+            Linha("delta_1", "Variação no 2º mês", NUMERICA),
+        )
+        comparacao = _pareado(("repetidas", ["delta_0", "delta_1"]), quadro=quadro, linhas=linhas)
+        comparada = comparacao.variaveis[0]
+        assert comparada.escolha.motivo == (
+            "a normalidade das diferenças não pôde ser verificada (cada caso muda o mesmo "
+            "tanto)"
+        )
+        resultado = comparada.resultado
+        assert (resultado.metodo, resultado.estatistica) == (WILCOXON_PAREADO, 0)
+        assert resultado.p == pytest.approx(0.0129840292564408, rel=1e-12)
+        assert resultado.ic == (-0.10000000000000142, -0.099999999999994316)
+        assert resultado.confianca_do_ic == pytest.approx(0.89999999999999991, rel=1e-15)
+        assert resultado.estimativa == pytest.approx(-0.10000000000000142, rel=1e-15)
+        assert linhas_da_tabela(comparada)[0][3] == "—"
+        assert any("o mais largo que existe tem 90" in aviso for aviso in comparacao.avisos)
+
+    def test_o_wilcoxon_pareado_sem_intervalo_de_95(self):
+        """Quatro pares: o mais largo dos intervalos exatos tem 88%, e a célula sai com o traço."""
+        quadro = pd.DataFrame(
+            {"pas_0": [3.2, 5.1, 4.4, 7.0], "pas_1": [2.0, 1.7, 2.2, 1.9]}
+        )
+        comparacao = _pareado(
+            ("repetidas", ["pas_0", "pas_1"], "wilcoxon"), quadro=quadro, linhas=(PAS_0, PAS_1)
+        )
+        comparada = comparacao.variaveis[0]
+        assert comparada.resultado.confianca_do_ic == 0.88
+        assert linhas_da_tabela(comparada)[0][3] == "—"
+        assert any(
+            "Wilcoxon pareado com 4 pares — o menor p que ele pode dar é 0,125" in aviso
+            for aviso in comparacao.avisos
+        )
+
+
+class TestPareadoTabela:
+    def test_as_seis_colunas_e_uma_linha_por_medida(self):
+        _, n, t, _, _, _, resumos = PAREADO_DO_R[0]
+        tabela = _pareado(ITEM_PAS_PAREADO).tabela_de(PAREADO)
+        assert (tabela.nome, tabela.especie, tabela.titulo) == (
+            ARQUIVO_PAREADO,
+            PAREADO,
+            "Comparação entre duas medidas pareadas",
+        )
+        assert tabela.colunas == (
+            "medida", "n", COLUNA_DA_MEDIA, COLUNA_DA_DIFERENCA, "teste", "p-valor"
+        )
+
+        def media_dp(resumo):
+            return f"{_como_a_descritiva(resumo[0])} ({_como_a_descritiva(resumo[1])})"
+
+        _, _, p, ic, diferenca = t
+        assert tabela.linhas == (
+            (
+                "PAS basal",
+                str(n),
+                media_dp(resumos[0]),
+                f"{_duas_casas(diferenca)} ({_duas_casas(ic[0])} a {_duas_casas(ic[1])})",
+                T_PAREADO,
+                valor_p(p),
+            ),
+            ("PAS 30 dias", str(n), media_dp(resumos[1]), "", "", ""),
+        )
+
+    def test_o_wilcoxon_pareado_leva_a_mediana_e_a_pseudomediana(self):
+        _, _, _, _, (_, p, ic, estimativa), _, resumos = PAREADO_DO_R[2]
+        tabela = _pareado(ITEM_DOR_PAREADO).tabela_de(PAREADO)
+        assert tabela.colunas[2:4] == (COLUNA_DA_MEDIANA, COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS)
+        assert [linha[2] for linha in tabela.linhas] == [
+            _mediana_quartis(*resumo[2:]) for resumo in resumos
+        ]
+        assert tabela.linhas[0][3] == (
+            f"{_duas_casas(estimativa)} ({_duas_casas(ic[0])} a {_duas_casas(ic[1])})"
+        )
+        assert tabela.linhas[0][3] == "0,00 (-0,50 a 1,00)"
+        assert tabela.linhas[0][4:] == (WILCOXON_PAREADO, valor_p(p))
+
+    def test_a_tabela_que_mistura_diz_as_duas(self):
+        tabela = _pareado(ITEM_PAS_PAREADO, ITEM_DOR_PAREADO).tabela_de(PAREADO)
+        assert tabela.colunas[2:4] == (COLUNA_DAS_DUAS, COLUNA_DAS_DUAS_DO_PAREADO)
+        assert len(tabela.linhas) == 4
+
+    def test_as_notas_dizem_como_o_r_faz(self):
+        texto = _pareado(ITEM_PAS_PAREADO).tabela_de(PAREADO).texto()
+        assert "t.test do R com paired = TRUE" in texto
+        assert "wilcox.test do R com paired = TRUE" in texto
+        assert "a primeira medida menos a segunda" in texto
+        assert "que não é a diferença das medianas" in texto
+        assert "Shapiro-Wilk não rejeita a normal das diferenças (p ≥ 0,05)" in texto
+        assert "e não a de cada medida, que o t pareado não supõe" in texto
+        assert "`metodo: t`, `metodo: student` ou `metodo: wilcoxon`" in texto
+        assert "um caso com uma delas faltando sai do item" in texto
+
+    def test_as_cinco_tabelas_na_ordem(self):
+        quadro = bancos.para_comparar_repetidas().assign(
+            imc=[20.0 + (i % 7) for i in range(40)],
+            escolaridade=["A", "B", "C", "D"] * 10,
+        )
+        linhas = (
+            *DICIONARIO_DAS_REPETIDAS,
+            IMC,
+            Linha("escolaridade", "Escolaridade", CATEGORICA, ("A", "B", "C", "D")),
+        )
+        comparacao = _repetidas(
+            (
+                ITEM_PAS,
+                ITEM_PAS_PAREADO,
+                ("imc", 25),
+                ("imc", "sexo"),
+                ("imc", "escolaridade"),
+            ),
+            quadro,
+            linhas,
+        )
+        assert [t.nome for t in comparacao.tabelas] == [
+            ARQUIVO_TABELA,
+            ARQUIVO_DOIS_GRUPOS,
+            ARQUIVO_K_GRUPOS,
+            ARQUIVO_PAREADO,
+            ARQUIVO_REPETIDAS,
+        ]
+
+    def test_os_detalhes_do_pareado(self):
+        comparacao = _pareado(ITEM_PAS_PAREADO)
+        (item,) = montar_manifesto(comparacao, DICIONARIO_DAS_REPETIDAS).itens
+        (pas,) = item.detalhes[PAREADO]
+        assert pas["delineamento"] == PAREADO
+        assert pas["medidas"] == ["pas_0", "pas_1"]
+        assert (pas["n"], pas["faltantes"], pas["distintos"]) == (39, 1, 15)
+        assert [m["rotulo"] for m in pas["por_medida"]] == ["PAS basal", "PAS 30 dias"]
+        assert pas["diferencas"]["media"] == pytest.approx(3.025641, abs=1e-6)
+        assert pas["diferencas"]["shapiro"]["p"] == pytest.approx(0.433969, abs=1e-6)
+        assert pas["estimativa"] == {"nome": "diferença média", "valor": pas["diferencas"]["media"]}
+        assert pas["teste"] == T_PAREADO
+        assert item.colunas == ("pas_0", "pas_1")
+        assert [a.arquivo for a in item.artefatos] == [ARQUIVO_PAREADO]
+        regras = montar_manifesto(comparacao, DICIONARIO_DAS_REPETIDAS).regras
+        assert "paired = TRUE" in regras["t_pareado"]
+        assert "não é a diferença das medianas" in regras["wilcoxon_pareado"]
+        assert regras["escolha_do_teste"][PAREADO] == (
+            "t pareado se o Shapiro-Wilk não rejeita a normal (p ≥ 0.05) nas diferenças, "
+            "sobre os casos com as duas medidas; senão Wilcoxon pareado. O método escrito "
+            "no item (`metodo:`) tem precedência."
+        )
+
+
+class TestPareadoFicha:
+    def test_as_formas_do_pareado(self, projeto_vazio):
+        itens = _itens(
+            projeto_vazio,
+            "  - repetidas: [pas_0, pas_1]\n"
+            "  - repetidas: [dor_0, dor_1]\n"
+            "    metodo: Wilcoxon\n"
+            "  - {repetidas: [peso_0, peso_1], metodo: t pareado}\n",
+        )
+        assert itens == (
+            Pedido("pas_0", medidas=("pas_0", "pas_1")),
+            Pedido("dor_0", metodo="wilcoxon", medidas=("dor_0", "dor_1")),
+            Pedido("peso_0", metodo="tpareado", medidas=("peso_0", "peso_1")),
+        )
+
+    def test_a_anova_com_duas_medidas_ensina_o_t(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1]\n    metodo: anova\n")
+        assert "o F da ANOVA de medidas repetidas é o t pareado ao quadrado" in mensagem
+        assert "escreva `metodo: t`" in mensagem
+
+    def test_o_friedman_com_duas_medidas_ensina_o_wilcoxon(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1]\n    metodo: friedman\n"
+        )
+        assert "com duas medidas, o Friedman é o teste do sinal" in mensagem
+        assert "escreva `metodo: wilcoxon`" in mensagem
+
+    def test_o_t_com_tres_medidas_ensina_a_anova(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: t\n"
+        )
+        assert "o t pareado compara duas medidas; escreva `metodo: anova`" in mensagem
+
+    def test_o_wilcoxon_com_tres_medidas_ensina_o_friedman(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1, pas_2]\n    metodo: wilcoxon\n"
+        )
+        assert "o Wilcoxon pareado compara duas medidas; escreva `metodo: friedman`" in mensagem
+
+    def test_o_welch_no_pareado_ensina_o_t(self, projeto_vazio):
+        """
+        Os testes de grupos independentes são os que mais se escrevem por engano num par:
+        a recusa diz por que não servem, e qual se escreve no lugar.
+        """
+        mensagem = _recusa(projeto_vazio, "  - repetidas: [pas_0, pas_1]\n    metodo: welch\n")
+        assert "o Welch compara dois grupos independentes, cada um com a sua variância" in (
+            mensagem
+        )
+        assert "escreva `metodo: t`" in mensagem
+
+    def test_o_mann_whitney_no_pareado_ensina_o_wilcoxon(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1]\n    metodo: Mann-Whitney\n"
+        )
+        assert "nas mesmas pessoas, o de postos é o Wilcoxon pareado" in mensagem
+        assert "escreva `metodo: wilcoxon`" in mensagem
+
+    def test_o_metodo_que_nao_e_do_pareado_lista_os_que_sao(self, projeto_vazio):
+        mensagem = _recusa(
+            projeto_vazio, "  - repetidas: [pas_0, pas_1]\n    metodo: kruskal\n"
+        )
+        assert "`kruskal` não é um método do pareado" in mensagem
+        assert "o método que se escreve é `t`, `student` ou `wilcoxon`" in mensagem
+
+    def test_o_t_pareado_entre_colchetes_ensina_a_marca(self, projeto_vazio):
+        """
+        Quem copia o nome da tabela para o item entre colchetes quer o pareado: a recusa
+        diz que o item compara grupos e escreve a forma com a marca.
+        """
+        mensagem = _recusa(projeto_vazio, "  - [CKD EPI, EKFC, t pareado]\n")
+        assert "`t pareado` é o teste de duas medidas nos mesmos casos" in mensagem
+        assert "`- repetidas: [CKD EPI, EKFC]`, com `metodo: t`" in mensagem
+
+    def test_o_t_pareado_contra_uma_referencia(self, projeto_vazio):
+        mensagem = _recusa(projeto_vazio, "  - [imc, 25, t pareado]\n")
+        assert "`t pareado` não se aplica à comparação com um valor de referência" in mensagem
+
+    def test_as_mesmas_medidas_em_outra_ordem_repetem(self):
+        with pytest.raises(ItemInvalidoError, match="repete repetidas: \\[pas_0, pas_1\\]"):
+            _pareado(ITEM_PAS_PAREADO, ("repetidas", ["pas_1", "pas_0"]))
+
+    def test_o_par_e_as_tres_medidas_sao_perguntas_diferentes(self):
+        """O pareado das duas primeiras e a ANOVA das três convivem na mesma ficha."""
+        comparacao = _pareado(ITEM_PAS_PAREADO, ITEM_PAS)
+        assert [v.delineamento for v in comparacao.variaveis] == [PAREADO, REPETIDAS]
+
+    def test_medida_categorica_no_pareado(self):
+        with pytest.raises(ItemInvalidoError) as erro:
+            _pareado(("repetidas", ["pas_0", "sexo"]))
+        assert "`sexo` está marcada `categorica`" in str(erro.value)
 
 
 # ── Os testes de postos: o R sobre os bancos ───────────────────────────────
@@ -2845,8 +3447,10 @@ class TestManifestoEntreGrupos:
             "t_de_student": 3,
             "anova": "2 em cada grupo",
             "anova_de_welch": "2 em cada grupo",
+            "t_pareado": "2 casos com as duas medidas",
             "anova_de_medidas_repetidas": "3 medidas e 2 casos com todas elas",
             "wilcoxon": 2,
+            "wilcoxon_pareado": "2 casos com as duas medidas",
             "mann_whitney": "1 em cada grupo",
             "kruskal_wallis": "1 em cada grupo",
             "friedman": "3 medidas e 2 casos com todas elas",
@@ -3042,6 +3646,29 @@ class TestRelatorio:
         (tabela,) = secao.tabelas
         assert [linha[0] for linha in tabela.linhas] == ["pas_0", "pas_1", "pas_2"]
         assert tabela.linhas[0][3] == ANOVA_DE_MEDIDAS_REPETIDAS
+
+    def test_o_pareado_no_documento(self, projeto_com_rodada):
+        """Pelo disco: a tabela do pareado chega à seção, sem alerta, e o relatório não muda."""
+        from flatcap.relatorio import preparar_relatorio
+
+        raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
+        acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1]\n")
+        executar_comparacao(preparar_comparacao(raiz, agora=AGORA))
+        pasta = raiz / PASTA_ANALISES / PASTA_COMPARACAO
+        assert sorted(p.name for p in pasta.iterdir()) == [ARQUIVO_MANIFESTO, ARQUIVO_PAREADO]
+        relatorio = preparar_relatorio(raiz, agora=AGORA).relatorio
+        assert relatorio.alertas == ()
+        secao = next(s for s in relatorio.secoes if s.rotulo == "Comparação")
+        (tabela,) = secao.tabelas
+        assert tabela.especie == PAREADO
+        assert [linha[0] for linha in tabela.linhas] == ["pas_0", "pas_1"]
+        assert tabela.linhas[0][4] == T_PAREADO
+        (metodologia,) = relatorio.metodologia
+        assert (
+            "Entre duas medidas pareadas, usou-se o teste t pareado. O teste paramétrico foi "
+            "usado quando o de Shapiro-Wilk não rejeitou a normalidade das diferenças entre "
+            "as medidas pareadas, e o de postos nos demais casos."
+        ) in metodologia
 
     def test_sem_ficha_mandando_vem_no_fim(self, projeto_para_comparar):
         from flatcap.normalidade import executar_normalidade, preparar_normalidade

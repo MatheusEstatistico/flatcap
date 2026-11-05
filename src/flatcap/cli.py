@@ -3348,25 +3348,29 @@ def comparacao(
     amostra, ou o Wilcoxon. Entre os dois grupos de uma variável categórica, o t de
     Welch — o padrão do t.test —, ou o Mann-Whitney; o t de Student roda quando está
     escrito no item. Entre três grupos ou mais, a ANOVA de Welch — o padrão do
-    oneway.test —, ou o Kruskal-Wallis; a clássica roda quando está escrita no item. Nas
-    medidas repetidas — a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA
-    de medidas repetidas, sempre com a correção de Greenhouse-Geisser, ou o Friedman.
-    Todos como o R os calcula; o Wilcoxon e o Mann-Whitney com o intervalo de
-    Hodges-Lehmann. Sai uma tabela por delineamento em `3. Análises/comparacao/`, com um
-    `manifesto.json`.
+    oneway.test —, ou o Kruskal-Wallis; a clássica roda quando está escrita no item.
+    Entre duas medidas nos mesmos casos — antes e depois, ou dois métodos —, o t pareado,
+    ou o Wilcoxon pareado, com a normalidade olhada nas diferenças. Nas medidas repetidas
+    — a mesma medida, três vezes ou mais, nos mesmos casos —, a ANOVA de medidas
+    repetidas, sempre com a correção de Greenhouse-Geisser, ou o Friedman. Todos como o R
+    os calcula; os dois Wilcoxon e o Mann-Whitney com o intervalo de Hodges-Lehmann. Sai
+    uma tabela por delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
 
     Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
-    variável e a de grupo; ou as medidas repetidas, com a marca:
+    variável e a de grupo; ou as medidas nos mesmos casos, com a marca — duas são o
+    pareado:
 
         comparacao:
           - \\[imc, 25]
           - \\[pas, 120, t]
           - \\[imc, sexo]
+          - repetidas: \\[pas_0, pas_1]
           - repetidas: \\[pas_0, pas_1, pas_2]
 
     O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra, e
-    `wilcoxon`, `mannwhitney` ou `kruskal`, o de postos. Nas medidas repetidas, o método
-    vem na chave `metodo:`, na linha de baixo — `anova` ou `friedman`.
+    `wilcoxon`, `mannwhitney` ou `kruskal`, o de postos. Nas medidas nos mesmos casos, o
+    método vem na chave `metodo:`, na linha de baixo — `t` ou `wilcoxon` com duas
+    medidas, `anova` ou `friedman` com três ou mais.
 
     Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
 

@@ -743,6 +743,61 @@ configuração ser lida.
 **Com o `<id>` e sem opção, o painel de um projeto só** (`painel.painel_do_projeto`): a linha
 dele — com o finalizado, que no painel de todos não aparece — e as opções para trocar o status.
 O finalizado não sai ATRASADO, pelo motivo do pronto: o relatório dele já foi entregue.
+
+## 1.20.0 — o pareado
+
+**As mesmas pessoas, medidas duas vezes.** O item é o das medidas repetidas com duas
+medidas — `- repetidas: [pas_0, pas_1]` —, a forma que a 1.12.0 reservou para ele: antes e
+depois de uma intervenção, ou duas equações da mesma grandeza nos mesmos pacientes. A recusa
+de duas medidas, que dizia que o t pareado ainda não estava no FlatCap, sai. O número de
+medidas escolhe o delineamento, como o número de grupos escolhe entre a tabela dos dois e a
+dos k — só que aqui ele está escrito na ficha, e o método escrito é conferido antes de abrir
+o banco: a `anova` com duas medidas recusa ensinando o `t`, porque o F dela seria o t pareado
+ao quadrado; o `friedman`, ensinando o `wilcoxon`, porque com duas medidas ele é o teste do
+sinal; e o `t` com três medidas, ensinando a `anova`.
+
+**O t pareado e o Wilcoxon pareado são os de uma amostra sobre as diferenças**, como no R,
+em que o `paired = TRUE` troca `x` por `x − y` e segue pelo caminho da uma amostra. Os
+números são, bit a bit, os do `t.test` e do `wilcox.test` com `paired = TRUE`
+(`hipoteses.t_pareado` e `wilcoxon_pareado`): o motor que a 1.7.0 separou para isso é o que
+roda, e do `Resultado` mudam o nome do teste e o da estimativa. O Wilcoxon sai com a
+pseudomediana das diferenças e o intervalo de Hodges-Lehmann, que não é a diferença das
+medianas das duas medidas — e o cabeçalho diz isso: `pseudomediana das diferenças (IC 95%)`.
+
+**A regra olha as diferenças, e não cada medida.** O Shapiro-Wilk roda na primeira medida
+menos a segunda, caso a caso, sobre os casos com as duas — é a normalidade que o t pareado
+supõe. Duas medidas assimétricas do mesmo jeito podem ter diferenças normais: no exemplo do
+`test_comparacao.py`, o `shapiro.test` do R rejeita nas duas medidas, com p < 0,001, e não
+nas diferenças, com p = 1,000.
+
+**A tabela `pareado.csv`**: uma linha por medida, e na primeira a diferença com o IC 95%, o
+teste e o p — a tabela das medidas repetidas com a coluna da diferença da dos dois grupos. A
+diferença é a primeira medida menos a segunda; para o sinal ao contrário, as medidas se
+escrevem na outra ordem. A metodologia ganha a frase dela, e diz que a normalidade olhada
+foi a das diferenças.
+
+**Uma barreira que o R não tem: as diferenças que não variam.** O R para o t pareado quando
+o erro-padrão das diferenças some perto da média delas, e deixa passar o resto que a
+subtração de duas medidas com casas decimais deixa no último bit: trinta casos que ganham
+exatamente 0,1 numa PAS em torno de 100 dão, no `t.test` do R, t = −7,6 × 10¹³ e p = 0. Aqui
+o resto é medido também contra a escala das medidas — o maior valor delas, e não a maior
+média, que é a régua das medidas repetidas e que uma variação em torno de zero engana
+(`hipoteses.sem_variacao_nas_diferencas`). A normalidade dessas diferenças não se verifica —
+o `shapiro.test` do R roda sobre o resto, e rejeita —, e a regra fica com o Wilcoxon pareado,
+que olha o sinal de cada uma. O aviso pede para conferir se uma coluna não foi calculada da
+outra.
+
+**O empate que o arredondamento desfaz fica desfeito, como no R.** Duas diferenças de 1,7 no
+papel — 77,7 − 76,0 e 66,6 − 64,9 — diferem no último bit, e o posto as separa: é o que o
+`wilcox.test` faz com o `digits.rank = Inf`, o padrão dele. O R-devel passa o padrão para 7,
+e fica para decidir junto da migração para o `wilcox.test` do R 4.6.
+
+**A recusa de duas numéricas entre colchetes diz como leu o item.** `[CKD EPI, EKFC, student]`
+era recusado com "a variável de grupo é categórica" — certo, e incompreensível para quem não
+escreveu variável de grupo nenhuma. A frase agora começa por "lido como a média de `CKD EPI`
+entre os grupos de `EKFC`, pelo t de Student", e escreve o item do pareado.
+
+O `relatorio.py` e o `documento.py` não mudaram uma linha.
 """
 
-__version__ = "1.19.0"
+__version__ = "1.20.0"

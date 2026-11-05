@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """
 A comparação — uma variável contra um valor de referência, entre os grupos de outra,
-ou entre medidas repetidas nos mesmos casos —, com o teste que os pressupostos pedem:
-o paramétrico, ou o de postos, que dispensa a normal.
+ou entre medidas feitas nos mesmos casos, duas (o pareado) ou mais (as repetidas) —, com
+o teste que os pressupostos pedem: o paramétrico, ou o de postos, que dispensa a normal.
 
 Responde ao passo 2b do fluxo. Cada item da ficha é uma pergunta, e cada delineamento
 tem a sua tabela, na mesma pasta:
@@ -26,15 +26,21 @@ tem a sua tabela, na mesma pasta:
                  Médio         52  131,0 (16,9)
                  Superior      28  138,4 (16,1)
 
+    pareado.csv
+    medida        n  média (DP)      diferença (IC 95%)   teste       p-valor
+    PAS basal    39  129,59 (11,92)  3,03 (1,82 a 4,23)   t pareado   < 0,001
+    PAS 30 dias  39  126,56 (12,03)
+
     repetidas.csv
     medida        n  média (DP)     teste                        p-valor
     PAS basal    40  131,2 (16,6)   ANOVA de medidas repetidas     0,003
     PAS 30 dias  40  128,4 (15,1)
     PAS 90 dias  40  125,9 (14,8)
 
-Nas linhas de um teste de postos — o Wilcoxon, o Mann-Whitney, o Kruskal-Wallis e o
-Friedman —, o resumo é a mediana e os quartis, `2982,62 [1774,62 a 5013,54]`, e o
-intervalo é o de Hodges-Lehmann: o da pseudomediana na uma amostra, e o da diferença de
+Nas linhas de um teste de postos — o Wilcoxon, o Wilcoxon pareado, o Mann-Whitney, o
+Kruskal-Wallis e o Friedman —, o resumo é a mediana e os quartis,
+`2982,62 [1774,62 a 5013,54]`, e o intervalo é o de Hodges-Lehmann: o da pseudomediana
+na uma amostra, o da pseudomediana das diferenças no pareado, e o da diferença de
 locação entre dois grupos, `-921,57 (-2414,48 a 406,97)`. O cabeçalho de cada coluna diz
 o que ela tem — ver "O resumo, linha a linha", abaixo.
 
@@ -73,8 +79,8 @@ A forma do item e os tipos das variáveis dizem qual comparação é:
     [imc, 25]                  numérica, e um número       uma amostra
     [imc, sexo]                numérica, categórica        dois grupos
     [imc, escolaridade]        numérica, categórica        três grupos ou mais
+    repetidas: [pas_0, pas_1]          duas numéricas              pareado
     repetidas: [pas_0, pas_1, pas_2]   três numéricas ou mais      medidas repetidas
-    repetidas: [pas_0, pas_1]          duas numéricas              pareado (depois)
 
 **O número de grupos sai do banco, e não do dicionário.** Os grupos são os rótulos
 com resposta entre os casos que responderam as duas variáveis — pelas mesmas
@@ -84,26 +90,31 @@ marcou não é grupo. Dois grupos são a tabela dos dois grupos; três ou mais, 
 grupos. Um grupo só dá linha sem teste, na tabela que o dicionário promete.
 
 **Os faltantes são por comparação**: entra quem respondeu as duas variáveis. É o
-`na.omit` da fórmula do R. Nas medidas repetidas, entra quem tem todas as medidas do
-item: a ANOVA compara cada pessoa com ela mesma, e um caso com uma medida faltando sai
-inteiro — como no `lm` do R.
+`na.omit` da fórmula do R. No pareado e nas medidas repetidas, entra quem tem todas as
+medidas do item: o teste compara cada pessoa com ela mesma, e um caso com uma medida
+faltando sai inteiro — como no `complete.cases` do `t.test` pareado e no `lm` do R.
 
-**As medidas repetidas têm a marca na ficha.** Duas numéricas lado a lado,
+**As medidas nos mesmos casos têm a marca na ficha.** Duas numéricas lado a lado,
 `[pas_0, pas_1]`, seriam um pareado — ou `[idade, imc]` escrito por engano,
 comparando médias de unidades diferentes sem erro nenhum. A marca `repetidas:` diz que
-são a mesma medida, feita mais de uma vez nas mesmas pessoas.
+são a mesma medida, feita mais de uma vez nas mesmas pessoas: com duas medidas — antes
+e depois, ou dois métodos na mesma pessoa —, o item é o **pareado**; com três ou mais,
+as **medidas repetidas**. O número de medidas escolhe o delineamento como o número de
+grupos escolhe entre a tabela dos dois e a dos k, só que aqui ele está escrito na ficha.
 
 ## A regra dos pressupostos
 
 Três passos, como na correlação:
 
 1. **o Shapiro-Wilk sobre o vetor do delineamento.** Na uma amostra, os valores
-   preenchidos da variável; entre grupos, **cada grupo**, separado — é a normalidade
-   que o t supõe, e não a da coluna inteira. Não rejeitou em nenhum → o paramétrico;
+   preenchidos da variável; no pareado, **as diferenças** — a primeira medida menos a
+   segunda, caso a caso —, e não cada medida; entre grupos, **cada grupo**, separado —
+   é a normalidade que o t supõe, e não a da coluna inteira. Não rejeitou em nenhum →
+   o paramétrico;
 2. **rejeitou em algum, ou não pôde ser verificado em algum** (menos de três valores,
    ou um grupo que não varia) → o teste de postos, que dispensa a normal: o Wilcoxon
-   na uma amostra, o Mann-Whitney entre dois grupos, o Kruskal-Wallis entre três ou
-   mais, o Friedman nas medidas repetidas;
+   na uma amostra, o Wilcoxon pareado no pareado, o Mann-Whitney entre dois grupos, o
+   Kruskal-Wallis entre três ou mais, o Friedman nas medidas repetidas;
 3. **o método escrito no item manda**: `[imc, 25, t]` roda o t contra a regra, e
    `[imc, 25, wilcoxon]` o Wilcoxon, com um aviso e a frase nas notas do `.csv`.
 
@@ -118,6 +129,13 @@ grupos diferem.
 `oneway.test` do R —, e a clássica, de Fisher, quando está escrita no item:
 `[imc, escolaridade, anova]`, com o mesmo aviso das variâncias do t de Student. A
 ANOVA diz se as médias diferem, e não quais: o pós-teste ainda não está no FlatCap.
+
+**No pareado, o t pareado e o Wilcoxon pareado** — o `t.test` e o `wilcox.test` do R
+com `paired = TRUE`, que são os de uma amostra sobre as diferenças, contra zero. A
+normalidade que o t pareado supõe é a das diferenças, e não a de cada medida: duas
+medidas assimétricas do mesmo jeito podem ter diferenças normais, e duas normais,
+diferenças que não são. A diferença é a primeira medida menos a segunda, na ordem da
+ficha; para o sinal ao contrário, as medidas se escrevem na outra ordem.
 
 **Nas medidas repetidas, a ANOVA com a correção de Greenhouse-Geisser, sempre** — a
 mesma lógica do Welch: a correção custa pouco quando a esfericidade vale e protege
@@ -141,14 +159,16 @@ manda. A decisão é sua, e fica registrada contra a regra.
 
 ## Os testes de postos
 
-São os do R, pela aritmética do `hipoteses.py`: o `wilcox.test` — de uma amostra e de
-duas, que é o Mann-Whitney —, o `kruskal.test` e o `friedman.test`. O Wilcoxon e o
-Mann-Whitney saem **com a estimativa de Hodges-Lehmann e o intervalo dela**, o
-`conf.int = TRUE` do R: a pseudomediana, lida contra a referência como o intervalo da
-média; a diferença de locação entre dois grupos, lida contra o zero como a diferença
-das médias. **A diferença de locação não é a diferença das medianas** dos grupos — é a
-mediana das diferenças entre um valor de cada grupo —, e a nota da tabela diz isso. O
-Kruskal-Wallis e o Friedman, como a ANOVA, dizem se há diferença, e não quanto.
+São os do R, pela aritmética do `hipoteses.py`: o `wilcox.test` — de uma amostra,
+pareado e de duas, que é o Mann-Whitney —, o `kruskal.test` e o `friedman.test`. Os
+dois Wilcoxon e o Mann-Whitney saem **com a estimativa de Hodges-Lehmann e o intervalo
+dela**, o `conf.int = TRUE` do R: a pseudomediana, lida contra a referência como o
+intervalo da média; no pareado, a pseudomediana das diferenças, lida contra o zero como
+a diferença média; a diferença de locação entre dois grupos, lida contra o zero como a
+diferença das médias. **Nem uma nem outra é a diferença das medianas** — a de locação é
+a mediana das diferenças entre um valor de cada grupo, e a das diferenças é o centro
+das diferenças caso a caso —, e as notas das tabelas dizem isso. O Kruskal-Wallis e o
+Friedman, como a ANOVA, dizem se há diferença, e não quanto.
 
 Com poucos valores, a distribuição exata pode não ter um intervalo de 95% — o mais
 largo, do menor ao maior valor, fica abaixo disso —, e o menor p que o teste consegue
@@ -166,10 +186,11 @@ quando ele não pôde rodar; sem teste nenhum, a média. As duas formas saem pel
 relance, e o cabeçalho diz o que a coluna tem: `média (DP)`, `mediana [Q1 a Q3]`, ou as
 duas, quando a tabela mistura. O mesmo vale para o intervalo da uma amostra — `IC 95% da
 média`, `da pseudomediana`, ou só `IC 95%` — e para a diferença entre dois grupos:
-`diferença (IC 95%)` no t, `diferença de locação (IC 95%)` no Mann-Whitney. As notas,
-que dizem o que é a diferença de locação, ficam no `.csv`; o documento leva a tabela, e
-é o cabeçalho que impede a leitura dela como a diferença das medianas ao lado. Uma tabela
-só de paramétricos sai com os cabeçalhos de antes.
+`diferença (IC 95%)` no t, `diferença de locação (IC 95%)` no Mann-Whitney; e no
+pareado, `diferença (IC 95%)` no t pareado e `pseudomediana das diferenças (IC 95%)` no
+Wilcoxon pareado. As notas, que dizem o que é cada estimativa, ficam no `.csv`; o
+documento leva a tabela, e é o cabeçalho que impede a leitura dela como a diferença das
+medianas ao lado. Uma tabela só de paramétricos sai com os cabeçalhos de antes.
 
 ## A ficha
 
@@ -180,7 +201,8 @@ só de paramétricos sai com os cabeçalhos de antes.
       - [imc, sexo]              # o IMC difere entre os sexos?
       - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
-      - repetidas: [pas_0, pas_1, pas_2]   # a PAS mudou entre as três medidas?
+      - repetidas: [pas_0, pas_1]          # a PAS mudou entre as duas medidas? o pareado
+      - repetidas: [pas_0, pas_1, pas_2]   # e entre as três? as medidas repetidas
       - repetidas: [pad_0, pad_1, pad_2]
         metodo: anova                      # a ANOVA, mesmo que a regra discorde
 
@@ -263,7 +285,9 @@ from .hipoteses import (
     MINIMO_T,
     T_DE_STUDENT,
     T_DE_WELCH,
+    T_PAREADO,
     WILCOXON,
+    WILCOXON_PAREADO,
     Resultado,
     anova_de_medidas_repetidas,
     anova_de_um_fator,
@@ -275,10 +299,13 @@ from .hipoteses import (
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_entre_medidas,
+    sem_variacao_nas_diferencas,
     sem_variacao_nos_grupos,
     t_de_student,
     t_de_welch,
+    t_pareado,
     t_uma_amostra,
+    wilcoxon_pareado,
     wilcoxon_uma_amostra,
 )
 from .manifesto import (
@@ -311,23 +338,30 @@ from .projeto import (
 
 # Os delineamentos, na ordem em que as tabelas saem. Cada um tem a sua tabela, porque
 # as colunas mudam de um para outro: a uma amostra tem a referência; os grupos, uma
-# linha por grupo e a diferença.
+# linha por grupo e a diferença; o pareado, uma linha por medida e a diferença. A
+# ordem põe lado a lado os de grupos independentes e os de medidas nos mesmos casos:
+# dois grupos e k grupos, duas medidas e k medidas.
 UMA_AMOSTRA = "uma_amostra"
 DOIS_GRUPOS = "dois_grupos"
 K_GRUPOS = "k_grupos"
+PAREADO = "pareado"
 REPETIDAS = "repetidas"
-DELINEAMENTOS = (UMA_AMOSTRA, DOIS_GRUPOS, K_GRUPOS, REPETIDAS)
+DELINEAMENTOS = (UMA_AMOSTRA, DOIS_GRUPOS, K_GRUPOS, PAREADO, REPETIDAS)
 
-# As chaves do item de medidas repetidas — a marca, e o método, que ali não tem um
-# terceiro lugar na lista para morar:
+# As chaves do item das medidas nos mesmos casos — a marca, e o método, que ali não
+# tem um terceiro lugar na lista para morar:
 #
 #     - repetidas: [pas_0, pas_1, pas_2]
 #       metodo: anova
+#
+# A marca é a mesma no pareado, que é o item com duas medidas.
 CHAVE_REPETIDAS = "repetidas"
 CHAVE_METODO = "metodo"
 
-# O menor número de medidas da ANOVA de medidas repetidas nesta versão. Com duas, a
-# pergunta é a do t pareado, que usa a mesma forma de item e ainda não está no FlatCap.
+# Quantas medidas o item tem diz o delineamento: duas são o pareado — o t pareado ou o
+# Wilcoxon pareado —, e três ou mais, as medidas repetidas — a ANOVA ou o Friedman, que
+# com duas medidas seriam o t pareado ao quadrado e o teste do sinal.
+MEDIDAS_DO_PAREADO = 2
 MINIMO_DE_MEDIDAS = 3
 
 # A forma do item entre grupos, antes de o banco dizer quantos são. A `Pergunta` sai
@@ -338,11 +372,13 @@ _DOS_GRUPOS = (DOIS_GRUPOS, K_GRUPOS)
 ARQUIVO_TABELA = "uma_amostra.csv"
 ARQUIVO_DOIS_GRUPOS = "dois_grupos.csv"
 ARQUIVO_K_GRUPOS = "k_grupos.csv"
+ARQUIVO_PAREADO = "pareado.csv"
 ARQUIVO_REPETIDAS = "repetidas.csv"
 ARQUIVOS: dict[str, str] = {
     UMA_AMOSTRA: ARQUIVO_TABELA,
     DOIS_GRUPOS: ARQUIVO_DOIS_GRUPOS,
     K_GRUPOS: ARQUIVO_K_GRUPOS,
+    PAREADO: ARQUIVO_PAREADO,
     REPETIDAS: ARQUIVO_REPETIDAS,
 }
 
@@ -353,6 +389,7 @@ REGRA: dict[str, tuple[str, str]] = {
     UMA_AMOSTRA: (T_DE_STUDENT, WILCOXON),
     DOIS_GRUPOS: (T_DE_WELCH, MANN_WHITNEY),
     K_GRUPOS: (ANOVA_DE_WELCH, KRUSKAL_WALLIS),
+    PAREADO: (T_PAREADO, WILCOXON_PAREADO),
     REPETIDAS: (ANOVA_DE_MEDIDAS_REPETIDAS, FRIEDMAN),
 }
 
@@ -368,6 +405,8 @@ _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
     (K_GRUPOS, ANOVA_DE_WELCH): anova_de_welch,
     (K_GRUPOS, ANOVA): anova_de_um_fator,
     (K_GRUPOS, KRUSKAL_WALLIS): kruskal_wallis,
+    (PAREADO, T_PAREADO): t_pareado,
+    (PAREADO, WILCOXON_PAREADO): wilcoxon_pareado,
     (REPETIDAS, ANOVA_DE_MEDIDAS_REPETIDAS): anova_de_medidas_repetidas,
     (REPETIDAS, FRIEDMAN): friedman,
 }
@@ -375,34 +414,47 @@ _CALCULO: dict[tuple[str, str], Callable[..., Resultado]] = {
 # Os testes de postos: os que dispensam a normal, e cujas linhas resumem a variável
 # pela mediana e pelos quartis, e não pela média e pelo desvio.
 TESTES_DE_POSTOS: frozenset[str] = frozenset(
-    {WILCOXON, MANN_WHITNEY, KRUSKAL_WALLIS, FRIEDMAN}
+    {WILCOXON, WILCOXON_PAREADO, MANN_WHITNEY, KRUSKAL_WALLIS, FRIEDMAN}
 )
 
 # Como cada método se escreve no item — o terceiro nome —, e o teste que ele quer
 # dizer em cada delineamento. Sem acento, minúsculo e sem hífen, que é como `_chave`
-# deixa o que se digitou. `t` é o t que o R roda sem argumento: o de uma amostra, e o
-# de Welch entre dois grupos — o `var.equal = FALSE` padrão do `t.test`. `welch` é o
-# de Welch do número de grupos que o banco trouxer: o t com dois, a ANOVA com mais.
-# `wilcoxon` é o `wilcox.test` do R: o do posto sinalizado contra uma referência, e o
+# deixa o que se digitou. `t` é o t que o R roda sem argumento: o de uma amostra, o
+# pareado — o `paired = TRUE`, que não tem outro —, e o de Welch entre dois grupos — o
+# `var.equal = FALSE` padrão do `t.test`. `welch` é o de Welch do número de grupos que
+# o banco trouxer: o t com dois, a ANOVA com mais. `wilcoxon` é o `wilcox.test` do R: o
+# do posto sinalizado contra uma referência e sobre as diferenças do pareado, e o
 # Mann-Whitney entre dois grupos — que o R chama de soma de postos de Wilcoxon.
+#
+# `tpareado` e `wilcoxonpareado` são o nome que a tabela escreve, copiado para o item
+# — como `t de Welch` vale pelo `welch` —, e querem dizer o pareado e mais nada: num
+# item entre grupos, o `t pareado` escrito por engano recusa, em vez de virar o t de
+# Welch sem aviso. Não entram na lista do que se escreve: ver `_POR_EXTENSO`.
 METODOS: dict[str, dict[str, str]] = {
-    "t": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_WELCH},
-    "student": {UMA_AMOSTRA: T_DE_STUDENT, DOIS_GRUPOS: T_DE_STUDENT},
+    "t": {UMA_AMOSTRA: T_DE_STUDENT, PAREADO: T_PAREADO, DOIS_GRUPOS: T_DE_WELCH},
+    "student": {UMA_AMOSTRA: T_DE_STUDENT, PAREADO: T_PAREADO, DOIS_GRUPOS: T_DE_STUDENT},
     "welch": {DOIS_GRUPOS: T_DE_WELCH, K_GRUPOS: ANOVA_DE_WELCH},
     "anova": {K_GRUPOS: ANOVA, REPETIDAS: ANOVA_DE_MEDIDAS_REPETIDAS},
-    "wilcoxon": {UMA_AMOSTRA: WILCOXON, DOIS_GRUPOS: MANN_WHITNEY},
+    "wilcoxon": {UMA_AMOSTRA: WILCOXON, PAREADO: WILCOXON_PAREADO, DOIS_GRUPOS: MANN_WHITNEY},
     "mannwhitney": {DOIS_GRUPOS: MANN_WHITNEY},
     "kruskal": {K_GRUPOS: KRUSKAL_WALLIS},
     "friedman": {REPETIDAS: FRIEDMAN},
+    "tpareado": {PAREADO: T_PAREADO},
+    "wilcoxonpareado": {PAREADO: WILCOXON_PAREADO},
 }
+
+# Os nomes por extenso, que valem na leitura e não se ensinam, e o nome curto que as
+# mensagens ensinam no lugar de cada um.
+_POR_EXTENSO: dict[str, str] = {"tpareado": "t", "wilcoxonpareado": "wilcoxon"}
 
 # Os nomes que a regra ainda não conhece em delineamento nenhum desta versão. Escritos
 # na ficha, recusam com a frase certa, em vez de "não é um método". Vazio nesta versão:
 # cada nome conhecido tem o seu delineamento; o lugar fica para o próximo.
 PREVISTOS: dict[str, str] = {}
 
-# O método de um número de grupos escrito para outro: o que se escreve no lugar dele,
-# e por quê. O banco é que diz quantos grupos há, e a recusa ensina a troca.
+# O método de um número de grupos escrito para outro — ou de um número de medidas: o
+# que se escreve no lugar dele, e por quê. Entre grupos, o banco é que diz quantos
+# são; nas medidas, a ficha. Nos dois casos, a recusa ensina a troca.
 _EQUIVALENTES: dict[tuple[str, str], tuple[str, str]] = {
     ("student", K_GRUPOS): ("anova", "o t de Student compara dois grupos"),
     ("t", K_GRUPOS): ("welch", "o t compara dois grupos"),
@@ -416,6 +468,30 @@ _EQUIVALENTES: dict[tuple[str, str], tuple[str, str]] = {
         "o Wilcoxon entre grupos é o Mann-Whitney, que compara dois",
     ),
     ("kruskal", DOIS_GRUPOS): ("mannwhitney", "com dois grupos, o teste é o Mann-Whitney"),
+    ("anova", PAREADO): (
+        "t",
+        "com duas medidas, o F da ANOVA de medidas repetidas é o t pareado ao quadrado",
+    ),
+    ("friedman", PAREADO): (
+        "wilcoxon",
+        "com duas medidas, o Friedman é o teste do sinal, que olha só o lado de cada "
+        "diferença; o de postos que usa também o tamanho dela é o Wilcoxon pareado",
+    ),
+    ("welch", PAREADO): (
+        "t",
+        "o Welch compara dois grupos independentes, cada um com a sua variância; no "
+        "pareado, o t é o de uma amostra sobre as diferenças, que têm uma variância só",
+    ),
+    ("mannwhitney", PAREADO): (
+        "wilcoxon",
+        "o Mann-Whitney compara dois grupos independentes; nas mesmas pessoas, o de postos "
+        "é o Wilcoxon pareado",
+    ),
+    ("t", REPETIDAS): ("anova", "o t pareado compara duas medidas"),
+    ("student", REPETIDAS): ("anova", "o t pareado compara duas medidas"),
+    ("tpareado", REPETIDAS): ("anova", "o t pareado compara duas medidas"),
+    ("wilcoxon", REPETIDAS): ("friedman", "o Wilcoxon pareado compara duas medidas"),
+    ("wilcoxonpareado", REPETIDAS): ("friedman", "o Wilcoxon pareado compara duas medidas"),
 }
 
 # Outras grafias do mesmo método. `welsh` é a troca mais comum de letra no nome do
@@ -425,6 +501,7 @@ _SINONIMOS: dict[str, str] = {
     "tdewelch": "welch",
     "twelch": "welch",
     "tdestudent": "student",
+    "tdestudentpareado": "tpareado",
     "tstudent": "student",
     "anovadewelch": "welch",
     "welchanova": "welch",
@@ -479,6 +556,12 @@ COLUNA_DA_DIFERENCA = "diferença (IC 95%)"
 COLUNA_DA_DIFERENCA_DE_LOCACAO = "diferença de locação (IC 95%)"
 COLUNA_DAS_DUAS_DIFERENCAS = "diferença de médias ou de locação (IC 95%)"
 
+# E a do pareado: a diferença média no t pareado, com o cabeçalho de sempre; a
+# pseudomediana das diferenças no Wilcoxon pareado, que não é a diferença das medianas
+# das duas medidas; e as duas quando a tabela mistura.
+COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS = "pseudomediana das diferenças (IC 95%)"
+COLUNA_DAS_DUAS_DO_PAREADO = "diferença ou pseudomediana das diferenças (IC 95%)"
+
 # A referência sai como foi escrita, sem arredondar para duas casas: um `0,125` da
 # ficha impresso `0,12` seria uma hipótese que ninguém testou.
 CASAS_REFERENCIA = 6
@@ -495,6 +578,7 @@ EXEMPLO_DA_FICHA = f"""  {PASTA_COMPARACAO}:
     - [imc, 25]
     - [pas, 120, t]
     - [imc, sexo]
+    - {CHAVE_REPETIDAS}: [pas_0, pas_1]
     - {CHAVE_REPETIDAS}: [pas_0, pas_1, pas_2]"""
 
 
@@ -561,8 +645,8 @@ class Pedido:
     `student`), e não o teste: o que `t` quer dizer depende do delineamento, e entre
     grupos o delineamento só se conhece com o banco aberto.
 
-    Nas medidas repetidas, `medidas` são as variáveis, na ordem da ficha, e `variavel`
-    é a primeira delas.
+    Nas medidas feitas nos mesmos casos — o pareado e as repetidas —, `medidas` são as
+    variáveis, na ordem da ficha, e `variavel` é a primeira delas.
     """
 
     variavel: str
@@ -607,9 +691,10 @@ class Pergunta:
     média desta variável difere desta referência?", "difere entre estes grupos?" —
     com a forma que ela tem.
 
-    `delineamento` é `UMA_AMOSTRA`, `GRUPOS` ou `REPETIDAS`: entre grupos, quantos são
-    só se sabe com o banco aberto. `metodo` é o nome escrito na ficha, como no
-    `Pedido`. Nas medidas repetidas, `medidas` são as linhas do dicionário de cada uma.
+    `delineamento` é `UMA_AMOSTRA`, `GRUPOS`, `PAREADO` ou `REPETIDAS`: entre grupos,
+    quantos são só se sabe com o banco aberto; nas medidas, a ficha já diz. `metodo` é o
+    nome escrito na ficha, como no `Pedido`. No pareado e nas medidas repetidas,
+    `medidas` são as linhas do dicionário de cada uma.
     """
 
     linha: Linha
@@ -696,7 +781,10 @@ class VariavelComparada:
     depende de pressuposto nenhum.
 
     Na uma amostra, `referencia`, `resumo` e `normal` são da variável inteira; entre
-    grupos, `referencia` é `None`, e o resumo e o Shapiro-Wilk estão em cada `Grupo`.
+    grupos, `referencia` é `None`, e o resumo e o Shapiro-Wilk estão em cada `Grupo`. No
+    pareado, `resumo` e `normal` são os **das diferenças** — o vetor que o teste usa —, o
+    resumo de cada medida está em cada `Grupo`, como nas medidas repetidas, e
+    `distintos` conta os valores distintos das diferenças.
     """
 
     variavel: str
@@ -733,8 +821,12 @@ class VariavelComparada:
         return bool(self.variavel_de_grupo)
 
     @property
+    def pareado(self) -> bool:
+        return self.delineamento == PAREADO
+
+    @property
     def repetidas(self) -> bool:
-        return bool(self.medidas)
+        return self.delineamento == REPETIDAS
 
     @property
     def metodo(self) -> str:
@@ -743,7 +835,7 @@ class VariavelComparada:
     @property
     def colunas(self) -> tuple[str, ...]:
         """As colunas do banco que esta comparação usou."""
-        if self.repetidas:
+        if self.medidas:
             return self.medidas
         if self.entre_grupos:
             return (self.variavel, self.variavel_de_grupo)
@@ -752,10 +844,11 @@ class VariavelComparada:
     @property
     def cabeca(self) -> str:
         """
-        Como a comparação se chama nas frases: `IMC (kg/m²) por Sexo`; nas medidas
-        repetidas, os rótulos delas — `PAS basal, PAS 30 dias e PAS 90 dias`.
+        Como a comparação se chama nas frases: `IMC (kg/m²) por Sexo`; no pareado e nas
+        medidas repetidas, os rótulos delas — `PAS basal e PAS 30 dias`,
+        `PAS basal, PAS 30 dias e PAS 90 dias`.
         """
-        if self.repetidas:
+        if self.medidas:
             return _em_frase(grupo.rotulo for grupo in self.grupos)
         if self.entre_grupos:
             return f"{self.rotulo} por {self.rotulo_de_grupo}"
@@ -764,9 +857,11 @@ class VariavelComparada:
     @property
     def n_na_frase(self) -> str:
         """
-        `n = 57`, e entre grupos `n = 57 (29 em Feminino e 28 em Masculino)`. Nas medidas
-        repetidas o n é um só — os casos com todas as medidas.
+        `n = 57`, e entre grupos `n = 57 (29 em Feminino e 28 em Masculino)`. No pareado e
+        nas medidas repetidas o n é um só — os casos com todas as medidas.
         """
+        if self.pareado:
+            return f"n = {self.validos} com as duas medidas"
         if self.repetidas:
             return f"n = {self.validos} com todas as medidas"
         if not self.grupos:
@@ -879,6 +974,30 @@ class VariavelComparada:
             "calculo_do_p": resultado.calculo_do_p if resultado else None,
             "motivo": self.motivo or None,
         }
+        if self.pareado:
+            # O resumo e o Shapiro-Wilk das diferenças — o vetor do teste — vão juntos,
+            # como os de uma medida: a média delas é a estimativa do t pareado, e a
+            # normalidade delas, a que decidiu a regra.
+            return {
+                "delineamento": self.delineamento,
+                "medidas": list(self.medidas),
+                "n": self.validos,
+                "faltantes": self.faltantes,
+                "distintos": self.distintos,
+                "por_medida": [
+                    {
+                        "medida": variavel,
+                        "rotulo": grupo.rotulo,
+                        **_resumo_no_manifesto(grupo.resumo),
+                    }
+                    for variavel, grupo in zip(self.medidas, self.grupos, strict=True)
+                ],
+                "diferencas": {
+                    **_resumo_no_manifesto(self.resumo),
+                    "shapiro": _shapiro_no_manifesto(self.normal),
+                },
+                **comum,
+            }
         if self.repetidas:
             return {
                 "delineamento": self.delineamento,
@@ -935,7 +1054,8 @@ def _casas_da_coluna(*colunas: pd.Series) -> int:
     As casas decimais da variável, decididas como a descritiva as decide: pela coluna
     inteira, e não pelos casos da comparação — a média da uma amostra sai, letra por
     letra, a do `resumo_<variável>.csv`, e a de cada grupo sai com as mesmas casas.
-    Nas medidas repetidas, as da medida que pede mais, para a tabela não misturar.
+    No pareado e nas medidas repetidas, as da medida que pede mais, para a tabela não
+    misturar — e a diferença do pareado sai com elas também.
     """
     casas = [
         casas_do_resumo(resumo_numerico(coluna.dropna().astype("float64")))
@@ -1187,6 +1307,9 @@ def comparar(
     comparadas: list[VariavelComparada] = []
     problemas: list[str] = []
     for pergunta in perguntas:
+        if pergunta.delineamento == PAREADO:
+            comparadas.append(_comparar_pareado(quadro, pergunta, total))
+            continue
         if pergunta.medidas:
             comparadas.append(_comparar_repetidas(quadro, pergunta, total))
             continue
@@ -1422,8 +1545,9 @@ def _avisos_do_resultado(
     nome: str, resultado: Resultado, tamanhos: Sequence[int], valores: str
 ) -> tuple[str, ...]:
     """
-    O que o Wilcoxon e o Mann-Whitney devolvem e precisa de rastro — os três casos são
-    de amostra pequena, ou de amostra sem variação, e nenhum deles é erro:
+    O que o Wilcoxon — o de uma amostra e o pareado — e o Mann-Whitney devolvem e
+    precisa de rastro — os três casos são de amostra pequena, ou de amostra sem
+    variação, e nenhum deles é erro:
 
     * **o menor p possível acima do α.** No caminho exato, o p mais extremo que a
       distribuição tem é 2/2ⁿ no Wilcoxon e 2/C(n₁ + n₂, n₁) no Mann-Whitney; com cinco
@@ -1433,14 +1557,14 @@ def _avisos_do_resultado(
       é o menor que existe;
     * **o intervalo que não chega a 95%** — o R baixa o nível e avisa. A tabela promete
       95%, e a célula sai com o traço;
-    * **o intervalo que não existe**: sem os valores iguais à referência, os que sobram
-      são todos iguais; ou os dois grupos não variam por dentro. O p sai, e a célula,
-      com o traço.
+    * **o intervalo que não existe**: sem os valores iguais à referência — ou sem as
+      diferenças nulas, no pareado —, os que sobram são todos iguais; ou os dois grupos
+      não variam por dentro. O p sai, e a célula, com o traço.
 
-    `tamanhos` são os n do teste — o da uma amostra, ou o de cada grupo —, e `valores`,
-    como eles se escrevem na frase.
+    `tamanhos` são os n do teste — o da uma amostra, o de pares, ou o de cada grupo —, e
+    `valores`, como eles se escrevem na frase.
     """
-    if resultado.metodo not in (WILCOXON, MANN_WHITNEY):
+    if resultado.metodo not in (WILCOXON, WILCOXON_PAREADO, MANN_WHITNEY):
         return ()
     menor = _menor_p_exato(resultado.metodo, tamanhos) if resultado.exato else 0.0
     nivel = resultado.confianca_do_ic
@@ -1475,6 +1599,13 @@ def _avisos_do_resultado(
                 "iguais — a pseudomediana e o intervalo dela não existem, e a célula sai "
                 "com —. O p do Wilcoxon sai.",
             )
+        if resultado.metodo == WILCOXON_PAREADO:
+            return (
+                f"{nome}: sem as diferenças nulas, as que sobram são todas iguais — cada "
+                "caso que mudou, mudou o mesmo tanto —, e a pseudomediana das diferenças e "
+                "o intervalo dela não existem: a célula sai com —. O p do Wilcoxon "
+                "pareado sai.",
+            )
         return (
             f"{nome}: os grupos não variam por dentro — a diferença de locação e o "
             "intervalo dela não existem, e a célula sai com —. O p do Mann-Whitney sai.",
@@ -1485,10 +1616,10 @@ def _avisos_do_resultado(
 def _menor_p_exato(metodo: str, tamanhos: Sequence[int]) -> float:
     """
     O menor p bilateral que o caminho exato dá: as duas caudas mais extremas da
-    distribuição, com uma combinação cada — 2/2ⁿ no Wilcoxon, 2/C(n₁ + n₂, n₁) no
+    distribuição, com uma combinação cada — 2/2ⁿ nos dois Wilcoxon, 2/C(n₁ + n₂, n₁) no
     Mann-Whitney —, e nunca acima de 1.
     """
-    if metodo == WILCOXON:
+    if metodo in (WILCOXON, WILCOXON_PAREADO):
         return min(1.0, 2 / 2 ** tamanhos[0])
     primeiro, segundo = tamanhos
     return min(1.0, 2 / math.comb(primeiro + segundo, primeiro))
@@ -1918,6 +2049,228 @@ def _problema_do_metodo(
     return ""
 
 
+# O pareado
+
+
+def _comparar_pareado(
+    quadro: pd.DataFrame, pergunta: Pergunta, total: int
+) -> VariavelComparada:
+    """
+    As mesmas pessoas, medidas duas vezes — antes e depois, ou por dois métodos —: as
+    diferenças caso a caso, o pressuposto nelas, a regra (ou a ficha) e o teste.
+
+    **Os faltantes são por item**, como nas medidas repetidas: entra quem tem as duas
+    medidas — o `complete.cases` do `t.test` e do `wilcox.test` do R com
+    `paired = TRUE`. **O vetor do teste são as diferenças**, a primeira medida menos a
+    segunda, e é nelas que o Shapiro-Wilk roda: é a normalidade que o t pareado supõe, e
+    não a de cada medida. O resumo de cada medida é o dos casos com as duas, e o das
+    diferenças vai para o manifesto, com o Shapiro-Wilk delas.
+
+    Três barreiras antes da regra — nenhum caso com as duas medidas, um só, e as duas
+    medidas iguais em todos os casos, em que não há diferença a testar e o R devolve
+    `NaN` nos dois testes —, e a do t depois dela: **as diferenças que não variam**,
+    cada caso mudando o mesmo tanto, em que o t é uma divisão por zero. A pergunta é a do
+    `hipoteses.sem_variacao_nas_diferencas`, que vê também o resto de arredondamento que
+    o critério do R deixa passar — e ela vem antes do Shapiro-Wilk, que o R roda sobre
+    esse resto e rejeita: a normalidade de diferenças que não variam não se verifica, e a
+    regra fica com o Wilcoxon pareado, que olha o sinal de cada uma. O t só chega na
+    barreira dele escrito no item, e o aviso ensina a trocar.
+    """
+    primeira, segunda = pergunta.medidas
+    colunas = [_coluna(quadro, linha.variavel) for linha in pergunta.medidas]
+    if any(coluna is None for coluna in colunas):  # pragma: no cover - a recusa já barrou
+        raise VariavelIncompativelError("uma das medidas não existe no banco.")
+
+    completos = colunas[0].notna() & colunas[1].notna()
+    valores = [coluna[completos].astype("float64") for coluna in colunas]
+    validos = int(completos.sum())
+    diferencas = valores[0] - valores[1]
+    distintos = int(diferencas.nunique()) if validos else 0
+    grupos = tuple(
+        Grupo(
+            rotulo=_rotulo(linha),
+            n=validos,
+            resumo=resumo_numerico(valor) if validos else None,
+        )
+        for linha, valor in zip(pergunta.medidas, valores, strict=True)
+    )
+    base: dict[str, Any] = {
+        "variavel": primeira.variavel,
+        "rotulo": _rotulo(primeira),
+        "referencia": None,
+        "total": total,
+        "validos": validos,
+        "distintos": distintos,
+        "delineamento": PAREADO,
+        "medidas": (primeira.variavel, segunda.variavel),
+        "resumo": resumo_numerico(diferencas) if validos else None,
+        "casas": _casas_da_coluna(*colunas),
+    }
+    nome = f"`{_pedido_de(pergunta).escrito}`"
+
+    impedimento = _impedimento_do_pareado(validos, diferencas)
+    if impedimento:
+        aviso = f"{nome}: {impedimento}. A linha saiu sem teste."
+        if impedimento == _MEDIDAS_IGUAIS:
+            aviso += (
+                " Não há diferença a testar — vale conferir se uma coluna não foi copiada da "
+                "outra."
+            )
+        return VariavelComparada(**base, grupos=grupos, motivo=impedimento, avisos=(aviso,))
+
+    x, y = valores[0].to_numpy(), valores[1].to_numpy()
+    constantes = sem_variacao_nas_diferencas(x, y)
+    if constantes:
+        normal = Normal(w=None, p=None, impedimento=_CADA_CASO_O_MESMO_TANTO)
+    else:
+        normal = _normal_do_grupo(
+            f"{primeira.variavel} − {segunda.variavel}", "", diferencas, onde="nas diferenças"
+        )
+    escolha = regra(PAREADO, normal)
+    if pergunta.metodo:
+        escolha = replace(
+            escolha, metodo=metodo_escrito(pergunta.metodo, PAREADO), pela_ficha=True
+        )
+    avisos = list(
+        _avisos_do_pareado(nome, pergunta, escolha, normal, validos, distintos, constantes)
+    )
+
+    if not escolha.metodo:
+        return VariavelComparada(
+            **base,
+            grupos=grupos,
+            normal=normal,
+            escolha=escolha,
+            motivo=_motivo_sem_teste(normal, validos),
+            avisos=tuple(avisos),
+        )
+
+    if escolha.metodo == T_PAREADO and constantes:
+        motivo = "as diferenças não variam"
+        escrito = replace(_pedido_de(pergunta), metodo="wilcoxon").escrito
+        avisos.append(
+            f"{nome}: {motivo} — cada caso muda o mesmo tanto da primeira medida para a "
+            "segunda, e o t é uma divisão por zero. A linha saiu sem teste. O Wilcoxon "
+            "pareado, que olha o sinal de cada diferença, roda com o método escrito no "
+            f"item: `{escrito}`. {_CONFERIR_AS_COLUNAS}"
+        )
+        return VariavelComparada(
+            **base,
+            grupos=grupos,
+            normal=normal,
+            escolha=escolha,
+            motivo=motivo,
+            avisos=tuple(avisos),
+        )
+
+    calcular = _CALCULO[(PAREADO, escolha.metodo)]
+    resultado = calcular(x, y)
+    avisos += _avisos_do_resultado(nome, resultado, (validos,), f"{validos} pares")
+    return VariavelComparada(
+        **base,
+        grupos=grupos,
+        normal=normal,
+        escolha=escolha,
+        resultado=resultado,
+        avisos=tuple(avisos),
+    )
+
+
+# A barreira das duas medidas iguais em todos os casos, que o aviso completa; a
+# normalidade que não se verifica quando cada caso muda o mesmo tanto; e o que se confere
+# nos dois casos, que no banco de verdade costumam ser uma coluna feita da outra.
+_MEDIDAS_IGUAIS = "as duas medidas são iguais em todos os casos"
+_CADA_CASO_O_MESMO_TANTO = "cada caso muda o mesmo tanto"
+_CONFERIR_AS_COLUNAS = "Vale conferir se uma das colunas não foi calculada a partir da outra."
+
+
+def _impedimento_do_pareado(validos: int, diferencas: pd.Series) -> str:
+    """
+    O motivo de não haver teste nenhum no pareado, ou vazio — vale para os dois testes,
+    escritos na ficha ou não. As duas primeiras são as da uma amostra, contadas em
+    casos; a terceira é a do Wilcoxon sem diferença nenhuma, que o t também não passaria.
+    """
+    if not validos:
+        return "nenhum caso com as duas medidas"
+    if validos < MINIMO_T:
+        return f"{validos} caso com as duas medidas — o teste precisa de pelo menos {MINIMO_T}"
+    if not bool((diferencas != 0).any()):
+        return _MEDIDAS_IGUAIS
+    return ""
+
+
+def _avisos_do_pareado(
+    nome: str,
+    pergunta: Pergunta,
+    escolha: Escolha,
+    normal: Normal,
+    validos: int,
+    distintos: int,
+    constantes: bool,
+) -> tuple[str, ...]:
+    """
+    Os avisos da uma amostra, na forma do pareado — o vetor são as diferenças:
+
+    * **a linha sem teste** porque o teste da regra ainda não existe ensina a escrever o
+      método no item — `metodo: t`, na linha de baixo;
+    * **a ficha contra a regra**;
+    * **cada caso mudando o mesmo tanto**, pela regra ou com o Wilcoxon escrito: a
+      normalidade das diferenças não se verifica, e a regra fica com o Wilcoxon
+      pareado. No banco de verdade é quase sempre uma coluna calculada da outra, e o
+      aviso diz isso. Com o t escrito, o aviso é o da barreira dele, no
+      `_comparar_pareado`;
+    * **o t pareado pela regra com poucos casos**: abaixo de `MINIMO_CONFIAVEL` o
+      Shapiro-Wilk das diferenças quase não rejeita, e o aviso mostra o Wilcoxon pareado
+      escrito, que não depende da normal;
+    * **as diferenças discretas com a normal rejeitada**: duas medidas de uma escala têm
+      diferenças inteiras, e o Shapiro-Wilk rejeita quase sempre;
+    * **o recado do `scipy`** sobre o Shapiro-Wilk das diferenças.
+    """
+    avisos: list[str] = []
+    faltou = "" if _disponivel(PAREADO, escolha.da_regra) else (
+        ", que ainda não está no FlatCap"
+    )
+    if not escolha.metodo:
+        chave, teste = _metodo_sugerido(PAREADO)
+        escrito = replace(_pedido_de(pergunta), metodo=chave).escrito
+        avisos.append(
+            f"{nome}: {escolha.motivo} — a regra escolheria {escolha.da_regra}{faltou}, e a "
+            f"linha saiu sem teste. Se {_com_artigo(teste)} vale aqui — n grande e "
+            f"assimetria pequena, por exemplo —, escreva o método no item: `{escrito}`."
+        )
+    if escolha.contra_a_regra:
+        avisos.append(_aviso_contra_a_regra(nome, escolha, faltou))
+    if constantes and escolha.metodo != T_PAREADO:
+        regra_ficou = (
+            ""
+            if escolha.pela_ficha
+            else ", e a normalidade das diferenças não se verifica: a regra fica com o "
+            "Wilcoxon pareado, que olha o sinal de cada diferença"
+        )
+        avisos.append(
+            f"{nome}: {_CADA_CASO_O_MESMO_TANTO} da primeira medida para a segunda"
+            f"{regra_ficou}. {_CONFERIR_AS_COLUNAS}"
+        )
+    if escolha.metodo == T_PAREADO and not escolha.pela_ficha and validos < MINIMO_CONFIAVEL:
+        escrito = replace(_pedido_de(pergunta), metodo="wilcoxon").escrito
+        avisos.append(
+            f"{nome}: t pareado com {validos} casos. Abaixo de {MINIMO_CONFIAVEL} o "
+            "Shapiro-Wilk quase não rejeita — «não rejeitou» aí não é evidência de que as "
+            "diferenças são normais. Se não forem, o Wilcoxon pareado não depende disso: "
+            f"`{escrito}`."
+        )
+    if normal.rejeita and distintos <= POUCOS_DISTINTOS and distintos < validos:
+        avisos.append(
+            f"{nome}: as diferenças têm {distintos} valores distintos em {validos} casos. "
+            "O Shapiro-Wilk supõe variável contínua e rejeita a normal quase sempre quando "
+            "as medidas são de uma escala — a rejeição aí diz «as diferenças são "
+            "discretas», e não «a forma delas está errada»."
+        )
+    if normal.aviso and normal.aviso not in avisos:
+        avisos.append(normal.aviso)
+    return tuple(avisos)
+
+
 # As medidas repetidas
 
 
@@ -2115,9 +2468,10 @@ def regra(delineamento: str, normal: Normal | Sequence[Grupo]) -> Escolha:
     a `Escolha` sai com `metodo` vazio e `da_regra` preenchido: a linha fica sem teste,
     e a nota diz qual faltou.
 
-    Na uma amostra recebe o `Normal` da variável; entre grupos, os `Grupo`, cada um
-    com o seu — e a normal se sustenta quando se sustenta **em todos**: um grupo que
-    rejeita basta para o paramétrico não valer.
+    Na uma amostra recebe o `Normal` da variável, e no pareado o das diferenças — e a
+    frase diz de quem é; entre grupos, os `Grupo`, cada um com o seu — e a normal se
+    sustenta quando se sustenta **em todos**: um grupo que rejeita basta para o
+    paramétrico não valer.
 
     Não olha o método escrito na ficha: quem o aplica é quem chama, por cima do que a
     regra devolveu — e é assim que a nota consegue dizer o que a regra teria
@@ -2125,22 +2479,23 @@ def regra(delineamento: str, normal: Normal | Sequence[Grupo]) -> Escolha:
     """
     parametrico, sem_normal = REGRA[delineamento]
     if isinstance(normal, Normal):
+        de_quem = " das diferenças" if delineamento == PAREADO else ""
         if not normal.testada:
             return _pela_regra(
                 delineamento,
                 sem_normal,
-                f"a normalidade não pôde ser verificada ({normal.impedimento})",
+                f"a normalidade{de_quem} não pôde ser verificada ({normal.impedimento})",
             )
         if normal.rejeita:
             return _pela_regra(
                 delineamento,
                 sem_normal,
-                f"o Shapiro-Wilk rejeita a normal ({_p_na_frase(normal.p)})",
+                f"o Shapiro-Wilk rejeita a normal{de_quem} ({_p_na_frase(normal.p)})",
             )
         return _pela_regra(
             delineamento,
             parametrico,
-            f"o Shapiro-Wilk não rejeita a normal ({_p_na_frase(normal.p)})",
+            f"o Shapiro-Wilk não rejeita a normal{de_quem} ({_p_na_frase(normal.p)})",
         )
 
     grupos = tuple(normal)
@@ -2191,6 +2546,7 @@ def _tabelas(variaveis: tuple[VariavelComparada, ...], total: int) -> tuple[Tabe
         UMA_AMOSTRA: _tabela_uma_amostra,
         DOIS_GRUPOS: _tabela_dois_grupos,
         K_GRUPOS: _tabela_k_grupos,
+        PAREADO: _tabela_pareado,
         REPETIDAS: _tabela_repetidas,
     }
     tabelas: list[Tabela] = []
@@ -2208,8 +2564,9 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
     Na uma amostra, uma linha. Entre grupos, um bloco: a linha da comparação — o
     rótulo da variável, o da variável de grupo, o n dos casos com as duas respostas, a
     diferença (entre dois grupos), o teste e o p — e uma linha por grupo, com o n, a
-    média e o desvio. Nas medidas repetidas, uma linha por medida, com o teste e o p na
-    primeira: não há variável de grupo para uma linha de cabeça.
+    média e o desvio. No pareado e nas medidas repetidas, uma linha por medida, com o
+    teste e o p na primeira — e, no pareado, a diferença também: não há variável de
+    grupo para uma linha de cabeça.
 
     Pública porque o terminal desenha as mesmas linhas, item por item, com os
     destaques dele: as células saem daqui, e de mais lugar nenhum.
@@ -2219,6 +2576,18 @@ def linhas_da_tabela(variavel: VariavelComparada) -> tuple[tuple[str, ...], ...]
     """
     resultado = variavel.resultado
     p = valor_p(resultado.p if resultado else None)
+    if variavel.pareado:
+        return tuple(
+            (
+                grupo.rotulo,
+                str(variavel.validos),
+                _resumo_da_linha(variavel, grupo.resumo),
+                _diferenca(resultado, variavel.casas) if ordem == 0 else "",
+                variavel.celula_do_teste if ordem == 0 else "",
+                p if ordem == 0 else "",
+            )
+            for ordem, grupo in enumerate(variavel.grupos)
+        )
     if variavel.repetidas:
         return tuple(
             (
@@ -2340,6 +2709,22 @@ def _coluna_da_diferenca(variaveis: Sequence[VariavelComparada]) -> str:
         return COLUNA_DA_DIFERENCA_DE_LOCACAO
     if formas == {True, False}:
         return COLUNA_DAS_DUAS_DIFERENCAS
+    return COLUNA_DA_DIFERENCA
+
+
+def _coluna_da_diferenca_do_pareado(variaveis: Sequence[VariavelComparada]) -> str:
+    """
+    O cabeçalho da diferença do pareado, pela mesma régua: o de sempre no t pareado, a
+    pseudomediana das diferenças no Wilcoxon pareado — que, ao lado da mediana de cada
+    medida, seria lida como a diferença das duas —, e as duas quando a tabela mistura.
+    """
+    formas = {
+        teste == WILCOXON_PAREADO for teste in map(_teste_da_linha, variaveis) if teste
+    }
+    if formas == {True}:
+        return COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS
+    if formas == {True, False}:
+        return COLUNA_DAS_DUAS_DO_PAREADO
     return COLUNA_DA_DIFERENCA
 
 
@@ -2538,6 +2923,72 @@ def _tabela_k_grupos(variaveis: tuple[VariavelComparada, ...], total: int) -> Ta
     )
 
 
+def _tabela_pareado(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
+    """
+    Um bloco por item: as duas medidas, uma por linha, na ordem da ficha, com a
+    diferença, o teste e o p na primeira. Seis colunas — `medida`, `n`, o resumo, a
+    diferença, `teste` e `p-valor` —: as das medidas repetidas, com a coluna da
+    diferença que a tabela dos dois grupos também tem — com duas medidas há uma
+    diferença só, e ela é o tamanho do efeito na unidade da medida.
+
+    A diferença é a primeira medida menos a segunda, caso a caso, e o cabeçalho diz qual
+    estimativa ela é: a diferença média no t pareado, que é a primeira média menos a
+    segunda; a pseudomediana das diferenças no Wilcoxon pareado, que não é a diferença
+    das medianas que estão ao lado. O n é o dos casos com as duas medidas, nas duas
+    linhas, e o resumo de cada medida é o desses casos.
+    """
+    corpo = tuple(linha for variavel in variaveis for linha in linhas_da_tabela(variavel))
+    menor_p = numero(MENOR_P, 3)
+    parametrico, de_postos = REGRA[PAREADO]
+    escritos = _ou([f"{CHAVE_METODO}: {chave}" for chave in _metodos_de((PAREADO,))])
+    notas = (
+        "uma comparação por bloco: uma linha por medida, na ordem da ficha, com a "
+        "diferença, o teste e o p na primeira.",
+        "diferença: a primeira medida menos a segunda, caso a caso; no t pareado, a média "
+        "dessas diferenças, que é a primeira média menos a segunda; no Wilcoxon pareado, a "
+        "pseudomediana de Hodges-Lehmann das diferenças — a mediana das médias de cada par "
+        "de diferenças —, que não é a diferença das medianas; as duas com o IC 95% do "
+        "teste da linha. Com as medidas na outra ordem, o sinal se inverte.",
+        "t pareado, bilateral, como o t.test do R com paired = TRUE: o t de uma amostra "
+        "sobre as diferenças, contra zero, com n − 1 graus de liberdade.",
+        "Wilcoxon pareado — o teste do posto sinalizado sobre as diferenças —, bilateral, "
+        "como o wilcox.test do R com paired = TRUE: V é a soma dos postos de |diferença| "
+        "das diferenças positivas, e as diferenças nulas saem do teste. O p é exato com "
+        f"menos de {LIMITE_DO_EXATO} diferenças, sem empate e sem diferença nula; nos "
+        "outros casos, a aproximação normal, com a correção para empates e a de "
+        "continuidade. O IC 95% é o do wilcox.test com conf.int = TRUE.",
+        f"teste escolhido pela regra dos pressupostos: o {parametrico} quando o "
+        f"Shapiro-Wilk não rejeita a normal das diferenças (p ≥ {numero(ALFA)}), sobre os "
+        f"casos com as duas medidas — e não a de cada medida, que o t pareado não supõe —; "
+        f"o {de_postos} quando rejeita, ou quando a normalidade não pode ser verificada — "
+        f"cada caso mudando o mesmo tanto, por exemplo. {_ainda_nao(PAREADO)}O método "
+        f"escrito no item — {escritos} — tem precedência sobre a regra.",
+        f"n: casos com as duas medidas, de {total} linhas do banco — um caso com uma delas "
+        f"faltando sai do item. O resumo de cada medida — {COLUNA_DA_MEDIA} nas linhas do "
+        f"t, {COLUNA_DA_MEDIANA} nas do Wilcoxon — é sobre esses casos, calculado como no "
+        "resumo da descritiva, e diferente dele quando alguma medida tem faltante.",
+        f"valor-p abaixo de {menor_p} sai como `< {menor_p}`; ele nunca é zero.",
+        "cada comparação é um teste; não há correção para comparações múltiplas.",
+    ) + tuple(variavel.justificativa for variavel in variaveis)
+
+    return Tabela(
+        nome=ARQUIVO_PAREADO,
+        especie=PAREADO,
+        variavel="",
+        titulo="Comparação entre duas medidas pareadas",
+        colunas=(
+            "medida",
+            "n",
+            _coluna_do_resumo(variaveis),
+            _coluna_da_diferenca_do_pareado(variaveis),
+            "teste",
+            "p-valor",
+        ),
+        linhas=corpo,
+        notas=notas,
+    )
+
+
 def _tabela_repetidas(variaveis: tuple[VariavelComparada, ...], total: int) -> Tabela:
     """
     Um bloco por item: uma linha por medida, na ordem da ficha, e o teste e o p na
@@ -2622,6 +3073,8 @@ def itens_da_ficha(raiz: Path) -> tuple[Pedido, ...]:
         - repetidas: [pas_0, pas_1, pas_2]   # a mesma medida, três vezes nos mesmos casos
           metodo: anova                      # o método, quando vier, na chave ao lado
 
+    Na quarta, duas medidas são o pareado, e três ou mais, as medidas repetidas.
+
     A terceira devolve um item por nome da lista, na ordem em que foram escritos. O
     método não se escreve nela: ficaria misturado aos nomes, como na correlação. Na
     quarta ele tem a chave dele, porque a lista das medidas não tem um terceiro lugar.
@@ -2667,8 +3120,10 @@ def itens_da_ficha(raiz: Path) -> tuple[Pedido, ...]:
             "decimal, ou a variável de grupo; o terceiro, quando vem, é o método — "
             f"{_ou(_metodos_de((UMA_AMOSTRA,)))} contra uma referência, "
             f"{_ou(_metodos_de(_DOS_GRUPOS))} entre grupos. Sem ele, a regra dos "
-            f"pressupostos escolhe. Nas medidas repetidas, `{CHAVE_REPETIDAS}:` e a lista "
-            f"das medidas, e o método, quando vier, na chave `{CHAVE_METODO}:` ao lado."
+            f"pressupostos escolhe. Nas medidas feitas nos mesmos casos, "
+            f"`{CHAVE_REPETIDAS}:` e a lista das medidas — duas são o pareado; três ou "
+            f"mais, as medidas repetidas —, e o método, quando vier, na chave "
+            f"`{CHAVE_METODO}:` ao lado."
         )
     return tuple(pedidos)
 
@@ -2784,6 +3239,17 @@ def _ler_grupos(
             f"método: {_ou(_metodos_de(_DOS_GRUPOS))}. Para comparar várias variáveis "
             f"entre os grupos de `{grupo}`, escreva `- {grupo}: [{nome}, {terceiro}]`."
         )
+    if terceiro and _chave(terceiro) in _POR_EXTENSO:
+        # O `t pareado` escrito no item entre colchetes: a pessoa quer o pareado, e o
+        # item que ela escreveu compara grupos.
+        curto = _POR_EXTENSO[_chave(terceiro)]
+        return (), (
+            f"{escrito} — `{terceiro}` é o teste de duas medidas nos mesmos casos, e o item "
+            f"entre colchetes compara os grupos de `{grupo}`. Se `{nome}` e `{grupo}` são "
+            f"duas medidas das mesmas pessoas, o item é `- {CHAVE_REPETIDAS}: [{nome}, "
+            f"{grupo}]`, com `{CHAVE_METODO}: {curto}` na linha de baixo para escolher o "
+            "teste."
+        )
     chave, problema = _metodo_na_ficha(
         escrito, terceiro or _descrever_solto(item[2]), _DOS_GRUPOS
     )
@@ -2794,15 +3260,18 @@ def _ler_grupos(
 
 def _ler_repetidas(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
     """
-    O item de medidas repetidas — a marca `repetidas:` e a lista das medidas, na ordem
-    em que foram feitas, e o método numa chave ao lado, quando vier:
+    O item das medidas feitas nos mesmos casos — a marca `repetidas:` e a lista das
+    medidas, na ordem em que foram feitas, e o método numa chave ao lado, quando vier:
 
         - repetidas: [pas_0, pas_1, pas_2]
           metodo: anova
 
-    Três medidas ou mais: com duas, a pergunta é a do t pareado, que usa esta mesma
-    forma e ainda não está no FlatCap — e a recusa diz isso, em vez de rodar uma ANOVA
-    que é o t pareado ao quadrado.
+    Duas medidas são o pareado — o t pareado, ou o Wilcoxon pareado —, e três ou mais,
+    as medidas repetidas — a ANOVA, ou o Friedman. É a mesma pergunta, a mesma medida nas
+    mesmas pessoas, e por isso a mesma forma de item; o número de medidas escolhe o
+    delineamento, e o método escrito é conferido contra ele: a `anova` com duas medidas
+    recusa ensinando o `t`, porque o F dela seria o t pareado ao quadrado, e o `t` com
+    três recusa ensinando a `anova`.
     """
     chaves = {_simplificado(str(chave)): valor for chave, valor in item.items()}
     medidas = chaves.get(CHAVE_REPETIDAS)
@@ -2825,21 +3294,24 @@ def _ler_repetidas(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
     repetidas = sorted({nome for nome in nomes if nomes.count(nome) > 1})
     if repetidas:
         return (), f"{escrito} — `{repetidas[0]}` duas vezes; cada medida entra uma vez."
-    if len(nomes) < MINIMO_DE_MEDIDAS:
-        if len(nomes) == 2:
-            return (), (
-                f"{escrito} — duas medidas: a comparação é o t pareado, que ainda não está "
-                "no FlatCap. A ANOVA de medidas repetidas é para três medidas ou mais."
-            )
-        return (), f"{escrito} — uma medida só; a comparação é entre três medidas ou mais."
+    if len(nomes) < MEDIDAS_DO_PAREADO:
+        return (), (
+            f"{escrito} — uma medida só; a comparação é entre duas medidas, no pareado, ou "
+            "entre três ou mais, nas medidas repetidas."
+        )
 
     chave = ""
     if CHAVE_METODO in chaves:
         texto = _nome(chaves[CHAVE_METODO]) or _descrever_solto(chaves[CHAVE_METODO])
-        chave, problema = _metodo_na_ficha(escrito, texto, (REPETIDAS,))
+        chave, problema = _metodo_na_ficha(escrito, texto, (_das_medidas(len(nomes)),))
         if problema:
             return (), problema
     return (Pedido(nomes[0], metodo=chave, medidas=tuple(nomes)),), ""
+
+
+def _das_medidas(quantas: int) -> str:
+    """O delineamento de um item com `quantas` medidas: o pareado, ou as repetidas."""
+    return PAREADO if quantas == MEDIDAS_DO_PAREADO else REPETIDAS
 
 
 def _ler_uma_contra_varias(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
@@ -2893,15 +3365,27 @@ def _metodo_na_ficha(escrito: str, texto: str, familia: tuple[str, ...]) -> tupl
         return chave, ""
 
     disponiveis = _ou(_metodos_de(familia))
-    if familia == (REPETIDAS,):
+    if familia in ((PAREADO,), (REPETIDAS,)):
+        # Nas medidas a ficha já diz quantas são, e o método de um número de medidas
+        # escrito para o outro recusa aqui mesmo, ensinando a troca — como o de um
+        # número de grupos, que só o banco revela, recusa depois de abri-lo.
+        (delineamento,) = familia
+        troca, porque = _EQUIVALENTES.get((chave, delineamento), ("", ""))
+        if troca and _metodos_da_chave(troca, familia):
+            return "", f"{escrito} — {porque}; escreva `{CHAVE_METODO}: {troca}`."
+        onde, de_quem = (
+            ("no pareado", "do pareado")
+            if delineamento == PAREADO
+            else ("nas medidas repetidas", "das medidas repetidas")
+        )
         if da_familia:
             return "", (
                 f"{escrito} — {_com_artigo(da_familia[0][1])} ainda não está no FlatCap; "
-                f"nas medidas repetidas, o método que se escreve é {disponiveis}."
+                f"{onde}, o método que se escreve é {disponiveis}."
             )
         return "", (
-            f"{escrito} — `{texto}` não é um método das medidas repetidas; o método que "
-            f"se escreve é {disponiveis}."
+            f"{escrito} — `{texto}` não é um método {de_quem}; o método que se escreve é "
+            f"{disponiveis}."
         )
     if familia == (UMA_AMOSTRA,):
         if da_familia:
@@ -2951,12 +3435,16 @@ def _metodo_na_ficha(escrito: str, texto: str, familia: tuple[str, ...]) -> tupl
 
 
 def _metodos_de(familia: Iterable[str]) -> list[str]:
-    """Os nomes que se escrevem no item e têm teste com aritmética na família."""
+    """
+    Os nomes que se escrevem no item e têm teste com aritmética na família — sem os
+    nomes por extenso, que valem na leitura e não se ensinam.
+    """
     familia = tuple(familia)
     return [
         chave
         for chave, testes in METODOS.items()
-        if any(d in familia and _disponivel(d, teste) for d, teste in testes.items())
+        if chave not in _POR_EXTENSO
+        and any(d in familia and _disponivel(d, teste) for d, teste in testes.items())
     ]
 
 
@@ -3058,10 +3546,12 @@ def _como_pedido(item: Pedido | tuple[Any, ...]) -> Pedido:
         return item
     variavel, segundo, *resto = item
     if variavel == CHAVE_REPETIDAS and isinstance(segundo, list | tuple):
-        chave = _chave(str(resto[0])) if resto else ""
-        if resto and not _metodos_da_chave(chave, (REPETIDAS,)):
-            raise ItemInvalidoError(f"`{resto[0]}` não é um método das medidas repetidas.")
         nomes = tuple(str(nome) for nome in segundo)
+        chave = _chave(str(resto[0])) if resto else ""
+        if resto and not _metodos_da_chave(chave, (_das_medidas(len(nomes)),)):
+            raise ItemInvalidoError(
+                f"`{resto[0]}` não é um método de {len(nomes)} medidas nos mesmos casos."
+            )
         return Pedido(nomes[0], metodo=chave, medidas=nomes)
     chave = _chave(str(resto[0])) if resto else ""
     numero_ = referencia_escrita(segundo)
@@ -3111,8 +3601,8 @@ def _conferir_itens(pedidos: Sequence[Pedido], linhas: Sequence[Linha]) -> list[
 
     Entre grupos, as mesmas para as duas variáveis, e os tipos precisam formar a
     comparação: a primeira numérica, a segunda categórica. Os outros arranjos são
-    outras análises, e a recusa diz qual — duas categóricas são uma associação, duas
-    numéricas são uma correlação —, ou diz que os dois nomes estão trocados.
+    outras análises, e a recusa diz qual — duas categóricas são uma associação; duas
+    numéricas, um pareado ou uma correlação —, ou diz que os dois nomes estão trocados.
     """
     por_nome = {linha.variavel: linha for linha in linhas}
     perguntas: list[Pergunta] = []
@@ -3138,7 +3628,7 @@ def _conferir_itens(pedidos: Sequence[Pedido], linhas: Sequence[Linha]) -> list[
                 Pergunta(
                     linha=linhas_das_medidas[0],
                     metodo=pedido.metodo,
-                    delineamento=REPETIDAS,
+                    delineamento=_das_medidas(len(linhas_das_medidas)),
                     medidas=linhas_das_medidas,
                 )
             )
@@ -3179,7 +3669,8 @@ def _conferir_itens(pedidos: Sequence[Pedido], linhas: Sequence[Linha]) -> list[
             + "\n".join(problemas)
             + "\n\nA comparação é sobre a média de uma variável marcada `numerica` no "
             f"{ARQUIVO_DICIONARIO} — contra um valor de referência, ou entre os grupos de "
-            "uma variável marcada `categorica` —, ou entre medidas repetidas, todas "
+            "uma variável marcada `categorica` —, ou entre medidas feitas nos mesmos "
+            "casos — duas, no pareado, ou três ou mais, nas medidas repetidas —, todas "
             "`numerica`.\n\n"
             f"Corrija o nome na lista do {ARQUIVO_PROJETO} — ele é o da coluna "
             f"`variavel` do {ARQUIVO_DICIONARIO} —, ou o `tipo` no dicionário, e rode "
@@ -3294,12 +3785,26 @@ def _motivo_de_recusa_entre_grupos(pedido: Pedido, por_nome: dict[str, Linha]) -
             f"primeiro — `[{grupo}, {nome}]`, ou `- {nome}: [{grupo}]`"
         )
     if tipo == NUMERICA and tipo_do_grupo == NUMERICA:
+        # A frase diz como o item foi lido: com as duas marcadas `numerica`, quem o
+        # escreveu quase sempre quis comparar uma com a outra, e lê «a variável de grupo»
+        # como um nome que não escreveu — e o método no terceiro lugar, como o teste
+        # dessa comparação, que ele nunca pediu.
+        teste = _teste_da_chave(pedido.metodo, DOIS_GRUPOS) or _teste_da_chave(
+            pedido.metodo, K_GRUPOS
+        )
+        pelo = f", pel{_com_artigo(teste)}" if teste else ""
+        metodo = (
+            f", com o método, quando quiser escolhê-lo, na chave `{CHAVE_METODO}:` ao lado"
+            if pedido.metodo
+            else ""
+        )
         return (
-            f"`{grupo}` está marcada `numerica` no {ARQUIVO_DICIONARIO}, e a variável de "
-            "grupo é categórica. A relação entre duas numéricas é uma correlação — a "
-            "lista `correlacao:` —; a mesma medida em três momentos ou mais é o item "
-            f"`- {CHAVE_REPETIDAS}: [{nome}, {grupo}, ...]`, e em dois é um pareado, que "
-            "ainda não está no FlatCap"
+            f"lido como a média de `{nome}` entre os grupos de `{grupo}`{pelo}; mas o "
+            "segundo nome é o da variável de grupo, que precisa ser `categorica`, e "
+            f"`{grupo}` está marcada `numerica` no {ARQUIVO_DICIONARIO}. As mesmas pessoas "
+            "medidas duas vezes — antes e depois, ou por dois métodos — são um pareado: o "
+            f"item `- {CHAVE_REPETIDAS}: [{nome}, {grupo}]`{metodo}. A relação entre duas "
+            "numéricas é uma correlação: a lista `correlacao:`"
         )
     if tipo == CATEGORICA and tipo_do_grupo == CATEGORICA:
         return (
@@ -3438,6 +3943,10 @@ def _regras() -> dict[str, Any]:
                 "a média de uma numérica entre os três grupos ou mais de uma categórica, "
                 "contados no banco"
             ),
+            PAREADO: (
+                "a média de duas medidas numéricas feitas nos mesmos casos, pela diferença "
+                f"caso a caso — o item `{CHAVE_REPETIDAS}:` da lista, com duas medidas"
+            ),
             REPETIDAS: (
                 "a média de três medidas numéricas ou mais, feitas nos mesmos casos — o "
                 f"item `{CHAVE_REPETIDAS}:` da lista"
@@ -3461,6 +3970,11 @@ def _regras() -> dict[str, Any]:
                 "A ANOVA clássica roda quando está escrita no item; o método escrito na "
                 "ficha tem precedência.",
             ),
+            PAREADO: escolha(
+                PAREADO,
+                "nas diferenças, sobre os casos com as duas medidas",
+                f"O método escrito no item (`{CHAVE_METODO}:`) tem precedência.",
+            ),
             REPETIDAS: escolha(
                 REPETIDAS,
                 "em nenhuma das medidas, sobre os casos completos",
@@ -3476,6 +3990,11 @@ def _regras() -> dict[str, Any]:
             "t.test do R, o padrão dele (var.equal = FALSE): bilateral, cada grupo com a "
             "sua variância, graus de liberdade de Welch-Satterthwaite e IC "
             f"{CONFIANCA:.0%} da diferença das médias"
+        ),
+        "t_pareado": (
+            "t.test do R com paired = TRUE: bilateral; o t de uma amostra sobre as "
+            "diferenças — a primeira medida menos a segunda —, contra zero, com n − 1 "
+            f"graus de liberdade, e IC {CONFIANCA:.0%} da diferença média"
         ),
         "anova": (
             "oneway.test do R com var.equal = TRUE: a variância dentro dos grupos "
@@ -3497,6 +4016,14 @@ def _regras() -> dict[str, Any]:
             "referência, senão a aproximação normal com a correção para empates e a de "
             f"continuidade; IC {CONFIANCA:.0%} da pseudomediana de Hodges-Lehmann"
         ),
+        "wilcoxon_pareado": (
+            "wilcox.test do R com paired = TRUE e conf.int = TRUE: bilateral; o posto "
+            "sinalizado sobre as diferenças — a primeira medida menos a segunda —, sem as "
+            f"nulas; p exato com menos de {LIMITE_DO_EXATO} diferenças, sem empate e sem "
+            "diferença nula, senão a aproximação normal com a correção para empates e a "
+            f"de continuidade; IC {CONFIANCA:.0%} da pseudomediana de Hodges-Lehmann das "
+            "diferenças, que não é a diferença das medianas"
+        ),
         "mann_whitney": (
             "wilcox.test do R para duas amostras, com conf.int = TRUE: bilateral; W, o U "
             f"do primeiro grupo; p exato com menos de {LIMITE_DO_EXATO} valores em cada "
@@ -3513,9 +4040,9 @@ def _regras() -> dict[str, Any]:
             "com k − 1 graus de liberdade, com a correção para empates; sem pós-teste"
         ),
         "resumo": (
-            f"{COLUNA_DA_MEDIA} nas linhas do t e da ANOVA; {COLUNA_DA_MEDIANA} nas do "
-            "Wilcoxon, do Mann-Whitney, do Kruskal-Wallis e do Friedman — o do teste que "
-            "rodou, ou do que a regra escolheu quando ele não pôde rodar"
+            f"{COLUNA_DA_MEDIA} nas linhas do t e da ANOVA; {COLUNA_DA_MEDIANA} nas dos "
+            "dois Wilcoxon, do Mann-Whitney, do Kruskal-Wallis e do Friedman — o do teste "
+            "que rodou, ou do que a regra escolheu quando ele não pôde rodar"
         ),
         "intervalo": (
             f"só o de {CONFIANCA:.0%} vai para a tabela; quando o teste de postos não o "
@@ -3523,8 +4050,9 @@ def _regras() -> dict[str, Any]:
         ),
         "normalidade": (
             "Shapiro-Wilk, pela mesma função da análise de normalidade — sobre os valores "
-            "preenchidos na uma amostra, dentro de cada grupo entre grupos, e em cada "
-            "medida, sobre os casos completos, nas medidas repetidas"
+            "preenchidos na uma amostra, dentro de cada grupo entre grupos, sobre as "
+            "diferenças entre as duas medidas no pareado, e em cada medida, sobre os casos "
+            "completos, nas medidas repetidas"
         ),
         "grupos": (
             "os rótulos do dicionário com resposta entre os casos que responderam as duas "
@@ -3537,17 +4065,19 @@ def _regras() -> dict[str, Any]:
             "t_de_student": MINIMO_STUDENT,
             "anova": f"{MINIMO_T} em cada grupo",
             "anova_de_welch": f"{MINIMO_T} em cada grupo",
+            "t_pareado": f"{MINIMO_T} casos com as duas medidas",
             "anova_de_medidas_repetidas": (
                 f"{MINIMO_DE_MEDIDAS} medidas e {MINIMO_T} casos com todas elas"
             ),
             "wilcoxon": MINIMO_T,
+            "wilcoxon_pareado": f"{MINIMO_T} casos com as duas medidas",
             "mann_whitney": "1 em cada grupo",
             "kruskal_wallis": "1 em cada grupo",
             "friedman": f"{MINIMO_DE_MEDIDAS} medidas e {MINIMO_T} casos com todas elas",
         },
         "faltantes": (
-            "por variável na uma amostra; por comparação entre grupos; nas medidas "
-            "repetidas, só os casos com todas as medidas do item"
+            "por variável na uma amostra; por comparação entre grupos; no pareado e nas "
+            "medidas repetidas, só os casos com todas as medidas do item"
         ),
         "hipotese": "bilateral",
         "comparacoes_multiplas": "nenhuma correção",
@@ -3735,7 +4265,9 @@ def _ou(nomes: Sequence[str]) -> str:
 
 def _unidades(delineamento: str) -> tuple[str, str]:
     """O que se compara no delineamento, no singular e no plural."""
-    return ("medida", "medidas") if delineamento == REPETIDAS else ("grupo", "grupos")
+    if delineamento in (PAREADO, REPETIDAS):
+        return ("medida", "medidas")
+    return ("grupo", "grupos")
 
 
 def _nenhum(delineamento: str, quantos: int) -> str:
@@ -3886,6 +4418,7 @@ __all__ = [
     "ARQUIVOS",
     "ARQUIVO_DOIS_GRUPOS",
     "ARQUIVO_K_GRUPOS",
+    "ARQUIVO_PAREADO",
     "ARQUIVO_REPETIDAS",
     "ARQUIVO_TABELA",
     "ANOVA_DE_MEDIDAS_REPETIDAS",
@@ -3895,10 +4428,12 @@ __all__ = [
     "CHAVE_REPETIDAS",
     "COLUNA_DAS_DUAS",
     "COLUNA_DAS_DUAS_DIFERENCAS",
+    "COLUNA_DAS_DUAS_DO_PAREADO",
     "COLUNA_DA_DIFERENCA",
     "COLUNA_DA_DIFERENCA_DE_LOCACAO",
     "COLUNA_DA_MEDIA",
     "COLUNA_DA_MEDIANA",
+    "COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS",
     "COLUNA_DO_IC",
     "COLUNA_DO_IC_DA_MEDIA",
     "COLUNA_DO_IC_DA_PSEUDOMEDIANA",
@@ -3910,16 +4445,20 @@ __all__ = [
     "KRUSKAL_WALLIS",
     "K_GRUPOS",
     "MANN_WHITNEY",
+    "MEDIDAS_DO_PAREADO",
     "METODOS",
     "MINIMO_DE_MEDIDAS",
+    "PAREADO",
     "PREVISTOS",
     "RAZAO_DE_DESVIOS",
     "REGRA",
     "REPETIDAS",
     "TESTES_DE_POSTOS",
     "T_DE_WELCH",
+    "T_PAREADO",
     "UMA_AMOSTRA",
     "WILCOXON",
+    "WILCOXON_PAREADO",
     "Comparacao",
     "ComparacaoError",
     "DicionarioAusenteError",

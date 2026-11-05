@@ -7,6 +7,32 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.20.0] — o pareado
+
+### Acrescentado
+- O pareado na comparação: `- repetidas: [antes, depois]`, com duas medidas, compara as
+  mesmas pessoas medidas duas vezes — antes e depois, ou por dois métodos — pelo t pareado,
+  ou pelo Wilcoxon pareado quando o Shapiro-Wilk rejeita a normal **das diferenças**. São o
+  `t.test` e o `wilcox.test` do R com `paired = TRUE`; o Wilcoxon sai com a pseudomediana
+  das diferenças e o intervalo de Hodges-Lehmann. O método, quando vier, vai na chave
+  `metodo:` ao lado — `t` ou `wilcoxon`.
+- A tabela `pareado.csv`: uma linha por medida, e na primeira a diferença (a primeira
+  medida menos a segunda) com o IC 95%, o teste e o p. Ela entra na seção da comparação do
+  relatório, e a metodologia ganha a frase do pareado.
+- Uma barreira que o R não tem: o t pareado não sai quando cada caso muda o mesmo tanto da
+  primeira medida para a segunda — também quando a diferença só varia no último bit, onde o
+  `t.test` do R devolve um t de 10¹³ com p = 0. A normalidade dessas diferenças não se
+  verifica, e a regra fica com o Wilcoxon pareado.
+
+### Mudado
+- `- repetidas: [a, b]`, com duas medidas, era recusado ("o t pareado ainda não está no
+  FlatCap"), e agora roda. `metodo: anova` ou `friedman` num item de duas medidas recusa
+  ensinando o `t` ou o `wilcoxon`; `metodo: t` ou `wilcoxon` num de três, a `anova` ou o
+  `friedman`.
+- Duas numéricas entre colchetes — `[CKD EPI, EKFC, student]` — são recusadas dizendo como
+  o item foi lido ("a média de `CKD EPI` entre os grupos de `EKFC`, pelo t de Student") e
+  com o item do pareado escrito, em vez de "a variável de grupo é categórica".
+
 ## [1.19.0] — a troca de status pelo terminal
 
 ### Acrescentado

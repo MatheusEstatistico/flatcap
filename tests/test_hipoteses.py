@@ -19,7 +19,10 @@ e independentes dele:
   `wilcox.test(x, y, conf.int = TRUE)`, `kruskal.test` e `friedman.test`, em
   `REFERENCIAS_DO_R_WILCOXON`, `REFERENCIAS_DO_R_MANN_WHITNEY`,
   `REFERENCIAS_DO_R_KRUSKAL` e `REFERENCIAS_DO_R_FRIEDMAN`, com dezessete algarismos —
-  o intervalo e a estimativa inclusive, e o nível do intervalo quando o R o baixa;
+  o intervalo e a estimativa inclusive, e o nível do intervalo quando o R o baixa. E o
+  pareado, com `t.test(x, y, paired = TRUE)` e `wilcox.test(x, y, paired = TRUE,
+  conf.int = TRUE)`, em `REFERENCIAS_DO_R_T_PAREADO` e
+  `REFERENCIAS_DO_R_WILCOXON_PAREADO`;
 * o **exemplo da documentação do `t.test`**: os dados do sono de Student (1908), o
   `sleep` do R. O t pareado que a documentação imprime — t = 4,0621, 9 gl,
   p = 0,002833 — é o t de uma amostra sobre as diferenças, que é a razão de o motor
@@ -58,7 +61,9 @@ from flatcap.hipoteses import (
     MINIMO_T,
     T_DE_STUDENT,
     T_DE_WELCH,
+    T_PAREADO,
     WILCOXON,
+    WILCOXON_PAREADO,
     Resultado,
     anova_de_medidas_repetidas,
     anova_de_um_fator,
@@ -70,10 +75,13 @@ from flatcap.hipoteses import (
     sem_variacao,
     sem_variacao_em_duas,
     sem_variacao_entre_medidas,
+    sem_variacao_nas_diferencas,
     sem_variacao_nos_grupos,
     t_de_student,
     t_de_welch,
+    t_pareado,
     t_uma_amostra,
+    wilcoxon_pareado,
     wilcoxon_uma_amostra,
 )
 
@@ -477,6 +485,122 @@ REFERENCIAS_DO_R_FRIEDMAN = [
     ("contorno_da_base", 11.142857142857142, 2, 0.003805040775511363),
     ("aditivas", 8, 2, 0.018315638888734179),
     ("vinte", 59.223350253807105, 3, 8.6130169000145924e-13),
+]
+
+
+# ── O pareado: os dados ─────────────────────────────────────────────────────
+
+
+def _ganham_um_decimo() -> tuple[list[float], list[float]]:
+    """
+    Trinta casos de uma PAS em torno de 100, com uma casa, e a mesma PAS mais 0,1 —
+    cada caso muda exatamente o mesmo tanto, a menos do arredondamento.
+    """
+    from statistics import NormalDist
+
+    n = 30
+    escores = [NormalDist().inv_cdf((j + 0.5) / n) for j in range(n)]
+    antes = [round(100 + 10 * escores[(7 * i) % n], 1) for i in range(n)]
+    return antes, [round(valor + 0.1, 1) for valor in antes]
+
+
+def _quarenta_pares() -> tuple[list[float], list[float]]:
+    """O `quarenta` de `_dados` e uma segunda medida dele, numa grade fixa: `(13 i) mod 9`."""
+    base = _dados("quarenta")
+    return base, [b - 1.5 + ((i * 13) % 9) / 4 for i, b in enumerate(base)]
+
+
+# Os pares de `REFERENCIAS_DO_R_T_PAREADO` e `REFERENCIAS_DO_R_WILCOXON_PAREADO`, o i-ésimo
+# de um com o i-ésimo do outro. O `sono` e a `depressao` são os exemplos das documentações
+# do `t.test` e do `wilcox.test`, e o `invertido` é o sono na outra ordem, para o sinal; o
+# `dois` é o menor que o t pareado aceita; o `sem_diferenca` tem a média das diferenças em
+# zero; o `pas` são as duas primeiras medidas das repetidas; o `um_par` é o menor que o
+# Wilcoxon aceita; o `quatro` não alcança o intervalo de 95%; o `com_zero` vai para a
+# aproximação só pela diferença nula; o `quarenta_e_nove` e o `cinquenta` são o limite
+# do exato, contado nas diferenças; e o `arredondamento` tem duas diferenças de 1,7 no
+# papel que a subtração deixa diferentes no último bit — o posto as separa, como no R.
+PAREADOS: dict[str, tuple[list[float], list[float]]] = {
+    "sono": (SONO_1, SONO_2),
+    "invertido": (SONO_2, SONO_1),
+    "depressao": (DEPRESSAO_X, DEPRESSAO_Y),
+    "dois": ([120.0, 135.0], [118.0, 130.0]),
+    "sem_diferenca": ([1.0, 2.0, 3.0, 4.0], [2.0, 1.0, 4.0, 3.0]),
+    "pas": (_medidas("pas")[0], _medidas("pas")[1]),
+    "quarenta": _quarenta_pares(),
+    "um_par": ([1.0], [2.0]),
+    "quatro": ([3.2, 5.1, 4.4, 7.0], [2.0, 1.7, 2.2, 1.9]),
+    "com_zero": ([10.0, 12.0, 15.0, 11.0, 14.0, 13.0], [10.0, 11.0, 12.0, 13.0, 10.0, 18.0]),
+    "quarenta_e_nove": (
+        _irracionais(49),
+        [round(v * 0.5 + 2, 6) for v in _irracionais(49, 300)],
+    ),
+    "cinquenta": (
+        _irracionais(50),
+        [round(v * 0.5 + 2, 6) for v in _irracionais(50, 300)],
+    ),
+    "arredondamento": (
+        [70.3, 80.5, 85.3, 90.1, 77.7, 66.6],
+        [69.1, 79.3, 84.1, 88.0, 76.0, 64.9],
+    ),
+}
+
+# `t.test(x, y, paired = TRUE)` no R 4.3.3; o `um_par` fica de fora, porque o R recusa
+# (`not enough 'x' observations`):
+#
+#     (caso, t, gl, p, intervalo, diferença média)
+REFERENCIAS_DO_R_T_PAREADO = [
+    ("sono", -4.0621276833820366, 9, 0.0028328901973842702,
+     (-2.4598857632769824, -0.70011423672301754), -1.5800000000000001),
+    ("invertido", 4.0621276833820366, 9, 0.0028328901973842702,
+     (0.70011423672301754, 2.4598857632769824), 1.5800000000000001),
+    ("depressao", 3.0353754156485913, 8, 0.016176627434908095,
+     (0.10377871227216852, 0.75999906550560925), 0.43188888888888888),
+    ("dois", 2.3333333333333335, 1, 0.25776211681831307,
+     (-15.559307104262039, 22.559307104262043), 3.5),
+    ("sem_diferenca", 0, 3, 1, (-1.8373862310370785, 1.8373862310370785), 0),
+    ("pas", 5.9530246659825625, 9, 0.00021453897703870372,
+     (2.9139938498983695, 6.4860061501016322), 4.7000000000000002),
+    ("quarenta", 4.8408975256961062, 39, 2.0664856421492897e-05,
+     (0.29472160617774823, 0.71777839382225173), 0.50624999999999998),
+    ("quatro", 3.5457939352911918, 3, 0.03820522418562889,
+     (0.30485674548470149, 5.6451432545152977), 2.9749999999999996),
+    ("com_zero", 0.12327841818038447, 5, 0.90668882375384485,
+     (-3.3086399787551963, 3.6419733120885298), 0.16666666666666666),
+    ("quarenta_e_nove", 1.0420231730591449, 48, 0.30262100688386828,
+     (-0.44349613055225545, 1.3977140081032757), 0.47710893877551019),
+    ("cinquenta", 1.1893095505227409, 49, 0.24004923668848879,
+     (-0.37141703088885919, 1.4484578708888591), 0.53852042),
+    ("arredondamento", 9.8703358307489548, 5, 0.00018198274509412764,
+     (1.1216734414206941, 1.9116598919126373), 1.5166666666666657),
+]
+
+# `wilcox.test(x, y, paired = TRUE, conf.int = TRUE)` no R 4.3.3:
+#
+#     (caso, V, p, intervalo, pseudomediana das diferenças, nível do intervalo, p exato)
+REFERENCIAS_DO_R_WILCOXON_PAREADO = [
+    ("sono", 0, 0.0090906980159250559, (-2.9499207995407808, -1.0500179906645428),
+     -1.4000306721873526, 0.94999999999999996, False),
+    ("invertido", 45, 0.0090906980159250559, (1.0500179906645428, 2.9499207995407808),
+     1.4000208422698908, 0.94999999999999996, False),
+    ("depressao", 40, 0.0390625, (0.010000000000000009, 0.78600000000000003),
+     0.46000000000000008, 0.94999999999999996, True),
+    ("dois", 3, 0.5, (2, 5), 3.5, 0.5, True),
+    ("sem_diferenca", 5, 1, (-1, 1), 0, 0.59999999999999964, False),
+    ("pas", 55, 0.005857099085284128, (2.5000340108728558, 6.9999806632541386),
+     4.5000222800660978, 0.94999999999999996, False),
+    ("quarenta", 580.5, 9.6533845264712653e-05, (0.37496691287387324, 0.87493730082749821),
+     0.59381014091281115, 0.94999999999999996, False),
+    ("um_par", 0, 1, (-1, -1), -1, 0, True),
+    ("quatro", 10, 0.125, (1.2000000000000002, 5.0999999999999996), 2.9749999999999996,
+     0.88, True),
+    ("com_zero", 8, 1, (-2.0000311525806223, 3.0000316898726593), 0.50002806594646798,
+     0.79999999999999982, False),
+    ("quarenta_e_nove", 780, 0.096928444163875596, (-0.87470899999999974, 1.9368205000000003),
+     1.293436, 0.94999999999999996, True),
+    ("cinquenta", 820, 0.078935415041154255, (-0.80887563759841608, 1.9697200590350459),
+     1.3795163687084333, 0.94999999999999996, False),
+    ("arredondamento", 21, 0.034006402864386984, (1.2000000000000028, 1.7000472504803261),
+     1.450046190337611, 0.79999999999999982, False),
 ]
 
 
@@ -888,6 +1012,115 @@ class TestFriedmanDoR:
         with pytest.raises(ValueError):
             stats.friedmanchisquare(*_friedman("duas_medidas"))
         assert friedman(_friedman("duas_medidas")).gl == (1.0,)
+
+
+class TestPareadoDoR:
+    @pytest.mark.parametrize(
+        ("caso", "t", "gl", "p", "ic", "diferenca"),
+        REFERENCIAS_DO_R_T_PAREADO,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_T_PAREADO],
+    )
+    def test_o_t_test_pareado_do_r(self, caso, t, gl, p, ic, diferenca):
+        """O t, os gl, o p, o intervalo e a diferença média — a `mean difference` do R."""
+        resultado = t_pareado(*PAREADOS[caso])
+        assert resultado.estatistica == pytest.approx(t, rel=1e-12, abs=1e-12)
+        assert resultado.gl == (gl,)
+        assert resultado.p == pytest.approx(p, rel=1e-10)
+        assert resultado.ic == pytest.approx(ic, rel=1e-12)
+        assert resultado.estimativa == pytest.approx(diferenca, rel=1e-12, abs=1e-15)
+        assert resultado.referencia == 0.0
+
+    @pytest.mark.parametrize(
+        ("caso", "v", "p", "ic", "estimativa", "nivel", "exato"),
+        REFERENCIAS_DO_R_WILCOXON_PAREADO,
+        ids=[caso for caso, *_ in REFERENCIAS_DO_R_WILCOXON_PAREADO],
+    )
+    def test_o_wilcox_test_pareado_do_r(self, caso, v, p, ic, estimativa, nivel, exato):
+        """
+        O V, o p, o caminho dele, a pseudomediana das diferenças, o intervalo e o nível
+        dele — com a régua do de uma amostra: no exato, iguais ao R até o último bit; no
+        aproximado, a menos do quantil da normal do `scipy`.
+        """
+        resultado = wilcoxon_pareado(*PAREADOS[caso])
+        assert resultado.estatistica == v
+        assert resultado.p == pytest.approx(p, rel=1e-12)
+        assert resultado.exato is exato
+        assert resultado.confianca_do_ic == pytest.approx(nivel, abs=1e-15)
+        if exato:
+            assert resultado.ic == ic
+            assert resultado.estimativa == estimativa
+        else:
+            assert resultado.ic == pytest.approx(ic, rel=1e-12, abs=1e-15)
+            assert resultado.estimativa == pytest.approx(estimativa, rel=1e-12, abs=1e-15)
+        assert resultado.referencia == 0.0
+
+    @pytest.mark.parametrize("caso", list(PAREADOS))
+    def test_o_pareado_e_a_uma_amostra_sobre_as_diferencas(self, caso):
+        """
+        O `paired = TRUE` do R troca `x` por `x − y` e segue pela uma amostra, com
+        `mu = 0`: os números são, bit a bit, os da uma amostra sobre as diferenças. Mudam
+        o nome do teste e o da estimativa.
+        """
+        x, y = PAREADOS[caso]
+        diferencas = [a - b for a, b in zip(x, y, strict=True)]
+        campos = ("estatistica", "gl", "p", "ic", "estimativa", "exato", "confianca_do_ic")
+        if len(diferencas) >= MINIMO_T:
+            pareado, uma = t_pareado(x, y), t_uma_amostra(diferencas, 0)
+            assert [getattr(pareado, c) for c in campos] == [getattr(uma, c) for c in campos]
+            assert (pareado.metodo, uma.metodo) == (T_PAREADO, T_DE_STUDENT)
+        pareado, uma = wilcoxon_pareado(x, y), wilcoxon_uma_amostra(diferencas, 0)
+        assert [getattr(pareado, c) for c in campos] == [getattr(uma, c) for c in campos]
+        assert (pareado.metodo, uma.metodo) == (WILCOXON_PAREADO, WILCOXON)
+
+    def test_a_ordem_dos_vetores_e_a_do_sinal(self):
+        """`x − y`, como no R: na outra ordem, o t e o intervalo trocam de sinal, e o p fica."""
+        sono, invertido = t_pareado(*PAREADOS["sono"]), t_pareado(*PAREADOS["invertido"])
+        assert invertido.estatistica == -sono.estatistica
+        assert invertido.ic == pytest.approx((-sono.ic[1], -sono.ic[0]), rel=1e-15)
+        assert invertido.p == sono.p
+        assert sono.estimativa < 0 < invertido.estimativa
+
+    def test_o_arredondamento_separa_os_postos_como_o_r(self):
+        """
+        77,7 − 76,0 e 66,6 − 64,9 são 1,7 no papel, e 1,7000000000000028 e
+        1,6999999999999886 na conta: o posto as separa (5 e 4, e não 4,5 e 4,5), como o
+        `wilcox.test` do R com o `digits.rank = Inf`, o padrão dele. O p é o dele,
+        0,034006; com `digits.rank = 7` — o padrão do R-devel, que arredonda antes de
+        ordenar —, o R daria 0,033505.
+        """
+        x, y = PAREADOS["arredondamento"]
+        diferencas = [a - b for a, b in zip(x, y, strict=True)]
+        assert diferencas[4] == 1.7000000000000028
+        assert diferencas[5] == 1.6999999999999886
+        resultado = wilcoxon_pareado(x, y)
+        assert resultado.p == pytest.approx(0.034006402864386984, rel=1e-12)
+        assert resultado.p != pytest.approx(0.033505256790828199, rel=1e-6)
+        assert resultado.calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há empates"
+        )
+
+    def test_o_exemplo_da_documentacao_do_wilcox_test(self):
+        """
+        `wilcox.test(x, y, paired = TRUE, alternative = "greater")`: V = 40, p = 0,01953 —
+        a metade do p bilateral, que é o que o FlatCap calcula.
+        """
+        resultado = wilcoxon_pareado(DEPRESSAO_X, DEPRESSAO_Y)
+        assert resultado.estatistica == 40
+        assert round(resultado.p / 2, 5) == 0.01953
+
+    @pytest.mark.parametrize("caso", list(PAREADOS))
+    def test_o_wilcoxon_do_scipy_confere_com_a_escolha_do_r(self, caso):
+        """O `wilcoxon(x, y)` do `scipy` dá o p do R quando recebe a escolha do R."""
+        x, y = PAREADOS[caso]
+        resultado = wilcoxon_pareado(x, y)
+        esperado = stats.wilcoxon(
+            x,
+            y,
+            zero_method="wilcox",
+            correction=not resultado.exato,
+            method="exact" if resultado.exato else "approx",
+        )
+        assert resultado.p == pytest.approx(float(esperado.pvalue), rel=1e-10)
 
 
 class TestRaizDoR:
@@ -1412,6 +1645,120 @@ class TestRecusas:
         assert not medidas_iguais_em_cada_caso(medidas)
         assert friedman(medidas).estatistica == pytest.approx(4.0, rel=1e-15)
 
+    def test_o_pareado_com_vetores_de_tamanhos_diferentes(self):
+        """O `'x' and 'y' must have the same length` do R: o i-ésimo de um é o par do outro."""
+        with pytest.raises(ValueError, match="do mesmo tamanho"):
+            t_pareado([1.0, 2.0, 3.0], [1.0, 2.0])
+        with pytest.raises(ValueError, match="do mesmo tamanho"):
+            wilcoxon_pareado([1.0, 2.0], [1.0, 2.0, 3.0])
+
+    def test_o_t_pareado_com_um_par_como_o_r(self):
+        """O `not enough 'x' observations` do R — que o Wilcoxon pareado aceitaria."""
+        with pytest.raises(ValueError, match="pelo menos 2 pares"):
+            t_pareado([1.0], [2.0])
+        assert wilcoxon_pareado([1.0], [2.0]).p == 1.0
+
+    def test_o_t_pareado_com_as_diferencas_constantes_como_o_r(self):
+        """
+        Cada par muda exatamente o mesmo tanto: o `data are essentially constant` do R. As
+        duas medidas iguais em todos os pares também — ali o R devolve `NaN`.
+        """
+        with pytest.raises(ValueError, match="as diferenças não variam"):
+            t_pareado([1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0])
+        with pytest.raises(ValueError, match="as diferenças não variam"):
+            t_pareado([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+
+    def test_o_t_pareado_feito_de_arredondamento_nao_sai(self):
+        """
+        Trinta casos que ganham exatamente 0,1 numa PAS em torno de 100, com uma casa: as
+        diferenças são −0,10000000000000853 e −0,09999999999999432. O critério do R não
+        as vê — o erro-padrão, perto de 4 × 10⁻¹⁶, passa de dez épsilons vezes 0,1 —, e o
+        `t.test(x, y, paired = TRUE)` do R devolve t = −76472248066499,234, com p = 0.
+        Aqui a barreira mede o resto também contra a escala das medidas — o maior valor
+        delas —, e não só contra a da diferença.
+        """
+        x, y = _ganham_um_decimo()
+        diferencas = [a - b for a, b in zip(x, y, strict=True)]
+        assert sorted(set(diferencas)) == [-0.10000000000000853, -0.09999999999999432]
+        assert not sem_variacao(diferencas)
+        assert sem_variacao_nas_diferencas(x, y)
+        with pytest.raises(ValueError, match="as diferenças não variam"):
+            t_pareado(x, y)
+
+    def test_a_escala_e_o_maior_valor_e_nao_a_maior_media(self):
+        """
+        Oito pessoas que ganham 0,1 kg numa variação de peso em torno de zero: a média
+        das medidas é 4 × 10⁻¹⁶ e 0,1, e o resto do arredondamento é o de valores em
+        torno de 48. A régua da maior média — a das medidas repetidas — não o vê, nem a
+        do R, e o `t.test` do R devolve t = −109228335053769,33 e p = 1,4 × 10⁻⁹⁶; a do
+        maior valor vê.
+        """
+        x = [-48.3, 31.7, -12.9, 45.1, -27.4, 18.6, -36.2, 29.4]
+        y = [round(valor + 0.1, 1) for valor in x]
+        assert not sem_variacao([a - b for a, b in zip(x, y, strict=True)])
+        assert not sem_variacao_entre_medidas([x, y])
+        assert sem_variacao_nas_diferencas(x, y)
+        with pytest.raises(ValueError, match="as diferenças não variam"):
+            t_pareado(x, y)
+
+    def test_o_criterio_do_r_vale_mesmo_quando_a_escala_nao_ve(self):
+        """
+        Diferenças em torno de 1 que variam no décimo quarto algarismo, com valores em
+        torno de 2: o desvio passa de dez épsilons vezes 2, e o erro-padrão, com cem
+        pares, não passa de dez épsilons vezes 1. O R para com `data are essentially
+        constant`, e aqui também — sem o critério dele, o t seria calculado.
+        """
+        x = [2.0 + passo * 1e-14 for passo in [-2, -1, 0, 1, 2] * 20]
+        y = [1.0] * len(x)
+        assert sem_variacao([a - b for a, b in zip(x, y, strict=True)])
+        assert sem_variacao_nas_diferencas(x, y)
+        with pytest.raises(ValueError, match="as diferenças não variam"):
+            t_pareado(x, y)
+
+    def test_as_diferencas_que_nao_variam_pelos_dois_criterios(self):
+        """
+        Basta um dos dois: o do R pega a diferença constante longe do zero; o da escala,
+        o resto do arredondamento. Diferenças que variam de verdade não param em nenhum,
+        e com menos de dois pares a pergunta responde que não — a barreira do tamanho vem
+        antes, com a frase dela.
+        """
+        assert sem_variacao_nas_diferencas([1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0])
+        assert sem_variacao_nas_diferencas([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+        assert not sem_variacao_nas_diferencas(*PAREADOS["pas"])
+        assert not sem_variacao_nas_diferencas(*PAREADOS["sem_diferenca"])
+        assert not sem_variacao_nas_diferencas(*PAREADOS["arredondamento"])
+        assert not sem_variacao_nas_diferencas([1.0], [2.0])
+        with pytest.raises(ValueError, match="do mesmo tamanho"):
+            sem_variacao_nas_diferencas([1.0, 2.0, 3.0], [1.0, 2.0])
+
+    def test_o_wilcoxon_pareado_com_as_diferencas_constantes_roda_como_o_r(self):
+        """
+        `wilcox.test(1:4, 2:5, paired = TRUE, conf.int = TRUE)`: V = 0, p = 0,07186 — o R
+        calcula o p, e devolve `NaN` no intervalo; aqui o intervalo e a estimativa saem
+        `None`, como na uma amostra.
+        """
+        resultado = wilcoxon_pareado([1.0, 2.0, 3.0, 4.0], [2.0, 3.0, 4.0, 5.0])
+        assert resultado.estatistica == 0
+        assert resultado.p == pytest.approx(0.071860638225851606, rel=1e-12)
+        assert (resultado.ic, resultado.estimativa, resultado.confianca_do_ic) == (
+            None,
+            None,
+            None,
+        )
+
+    def test_o_wilcoxon_pareado_sem_par_ou_sem_diferenca(self):
+        """Sem par, ou só com diferenças nulas, não há posto a somar: o R devolve `NaN`."""
+        with pytest.raises(ValueError, match="pelo menos 1 par"):
+            wilcoxon_pareado([], [])
+        with pytest.raises(ValueError, match="todas as diferenças são nulas"):
+            wilcoxon_pareado([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])
+
+    def test_o_pareado_com_valor_ausente(self):
+        with pytest.raises(ValueError, match="ausente ou infinito"):
+            t_pareado([1.0, math.nan, 3.0], [1.0, 2.0, 4.0])
+        with pytest.raises(ValueError, match="ausente ou infinito"):
+            wilcoxon_pareado([1.0, 2.0, 3.0], [1.0, math.inf, 4.0])
+
     def test_as_perguntas_das_barreiras_respondem_com_um_caso_so(self):
         """
         Quem recusa o caso único é o teste, com a frase dele; as perguntas que vêm antes
@@ -1505,6 +1852,42 @@ class TestContrato:
             assert (resultado.metodo, resultado.nome_da_estatistica) == (metodo, "χ²")
             assert (resultado.estimativa, resultado.ic, resultado.exato) == (None, None, None)
             assert "correção para empates" in resultado.calculo_do_p
+
+    def test_o_pareado_tem_a_forma_do_htest(self):
+        """
+        O `Resultado` da uma amostra com dois nomes trocados, como o R troca o `method` e o
+        nome do `estimate`: `t pareado` e a diferença média, `Wilcoxon pareado` e a
+        pseudomediana das diferenças.
+        """
+        t = t_pareado(*PAREADOS["pas"])
+        assert (t.metodo, t.nome_da_estatistica) == (T_PAREADO, "t")
+        assert T_PAREADO == "t pareado"
+        assert t.nome_da_estimativa == "diferença média"
+        assert t.calculo_do_p == "t de Student com n − 1 graus de liberdade, sobre as diferenças"
+        assert (t.referencia, t.confianca_do_ic) == (0.0, CONFIANCA)
+        wilcoxon = wilcoxon_pareado(*PAREADOS["depressao"])
+        assert (wilcoxon.metodo, wilcoxon.nome_da_estatistica) == (WILCOXON_PAREADO, "V")
+        assert WILCOXON_PAREADO == "Wilcoxon pareado"
+        assert wilcoxon.nome_da_estimativa == "pseudomediana das diferenças"
+        assert (wilcoxon.exato, wilcoxon.calculo_do_p, wilcoxon.gl) == (True, "exato", ())
+
+    def test_o_calculo_do_p_do_pareado_fala_das_diferencas(self):
+        """
+        A frase do caminho é a da uma amostra com as diferenças no lugar dos valores: o
+        zero que fecha o exato é a diferença nula, e não o valor igual à referência.
+        """
+        assert wilcoxon_pareado(*PAREADOS["sono"]).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há empates e "
+            "diferenças nulas"
+        )
+        assert wilcoxon_pareado(*PAREADOS["cinquenta"]).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há 50 diferenças "
+            "ou mais"
+        )
+        assert wilcoxon_pareado(*PAREADOS["com_zero"]).calculo_do_p == (
+            "aproximado pela normal, com correção de continuidade, porque há diferenças "
+            "nulas"
+        )
 
     def test_o_calculo_do_p_diz_por_que_saiu_aproximado(self):
         """O R escolhe o caminho em silêncio; a frase daqui diz o que o fechou."""

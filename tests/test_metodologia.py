@@ -131,13 +131,15 @@ class TestOsNomesSaoOsDasAnalises:
         assert {d: set(nomes) for d, nomes in COMPARACOES.items()} == calculados
 
     def test_os_delineamentos_sao_os_da_comparacao(self):
-        assert set(DELINEAMENTOS) == {
+        """Na ordem da comparação, que é a das tabelas — e a das frases."""
+        assert tuple(DELINEAMENTOS) == comparacao.DELINEAMENTOS == (
             comparacao.UMA_AMOSTRA,
             comparacao.DOIS_GRUPOS,
             comparacao.K_GRUPOS,
+            comparacao.PAREADO,
             comparacao.REPETIDAS,
-        }
-        assert set(DELINEAMENTOS) == set(COMPARACOES)
+        )
+        assert tuple(COMPARACOES) == comparacao.DELINEAMENTOS
 
     def test_os_metodos_da_correlacao(self):
         assert set(CORRELACOES) == set(correlacao.METODOS.values())
@@ -422,6 +424,80 @@ class TestComparacao:
             "mais, a ANOVA de Welch; e entre medidas repetidas, a ANOVA de medidas "
             "repetidas, com a correção de Greenhouse-Geisser." in texto
         )
+
+    def test_os_cinco_delineamentos(self):
+        texto = _texto(
+            _manifesto(
+                ANALISE_COMPARACAO,
+                {
+                    "uma_amostra": [_linha("t de Student")],
+                    "dois_grupos": [_linha("Mann-Whitney")],
+                    "k_grupos": [_linha("ANOVA de Welch")],
+                    "pareado": [_linha("t pareado")],
+                    "repetidas": [_linha("ANOVA de medidas repetidas")],
+                },
+            )
+        )
+        assert (
+            "entre três grupos ou mais, a ANOVA de Welch; entre duas medidas pareadas, o "
+            "teste t pareado; e entre medidas repetidas, a ANOVA de medidas repetidas"
+            in texto
+        )
+
+    def test_so_o_pareado_diz_que_a_normalidade_e_a_das_diferencas(self):
+        """
+        A normalidade que a regra do pareado olha é a das diferenças, e não a de cada
+        medida — a frase de sempre, "em nenhum grupo ou medida", diria a outra.
+        """
+        texto = _texto(
+            _manifesto(
+                ANALISE_COMPARACAO,
+                {"pareado": [_linha("t pareado"), _linha("Wilcoxon pareado")]},
+            )
+        )
+        assert (
+            "Entre duas medidas pareadas, usaram-se o teste t pareado e o de Wilcoxon "
+            "pareado. O teste paramétrico foi usado quando o de Shapiro-Wilk não rejeitou a "
+            "normalidade das diferenças entre as medidas pareadas, e o de postos nos demais "
+            "casos." in texto
+        )
+        assert "em nenhum grupo ou medida" not in texto
+
+    def test_o_pareado_com_outro_delineamento_diz_das_diferencas_no_meio(self):
+        texto = _texto(
+            _manifesto(
+                ANALISE_COMPARACAO,
+                {"dois_grupos": [_linha("t de Welch")], "pareado": [_linha("Wilcoxon pareado")]},
+            )
+        )
+        assert (
+            "Entre dois grupos, usou-se o teste t de Welch; e entre duas medidas pareadas, "
+            "o teste de Wilcoxon pareado. O teste paramétrico foi usado quando o de "
+            "Shapiro-Wilk não rejeitou a normalidade em nenhum grupo ou medida — nas "
+            "medidas pareadas, a das diferenças —, e o de postos nos demais casos." in texto
+        )
+
+    def test_o_pareado_escrito_na_ficha_nao_fala_das_diferencas(self):
+        """
+        A regra só é explicada onde ela escolheu: o pareado com o método escrito fica na
+        lista dos testes, e a exceção abre a frase da regra, que fica a de sempre.
+        """
+        texto = _texto(
+            _manifesto(
+                ANALISE_COMPARACAO,
+                {
+                    "dois_grupos": [_linha("t de Welch")],
+                    "pareado": [_linha("t pareado", escrito=True)],
+                },
+            )
+        )
+        assert "e entre duas medidas pareadas, o teste t pareado." in texto
+        assert (
+            "Exceto quando o teste foi definido de antemão, o teste paramétrico foi usado "
+            "quando o de Shapiro-Wilk não rejeitou a normalidade em nenhum grupo ou medida, "
+            "e o de postos nos demais casos." in texto
+        )
+        assert "das diferenças" not in texto
 
     def test_linha_nao_testada_nao_entra(self):
         texto = _texto(

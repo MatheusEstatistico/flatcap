@@ -150,6 +150,7 @@ DELINEAMENTOS: dict[str, str] = {
     "uma_amostra": "na comparação com um valor de referência",
     "dois_grupos": "entre dois grupos",
     "k_grupos": "entre três grupos ou mais",
+    "pareado": "entre duas medidas pareadas",
     "repetidas": "entre medidas repetidas",
 }
 COMPARACOES: dict[str, dict[str, str]] = {
@@ -167,6 +168,10 @@ COMPARACOES: dict[str, dict[str, str]] = {
         "ANOVA": "a ANOVA de um fator",
         "Kruskal-Wallis": "o teste de Kruskal-Wallis",
     },
+    "pareado": {
+        "t pareado": "o teste t pareado",
+        "Wilcoxon pareado": "o teste de Wilcoxon pareado",
+    },
     "repetidas": {
         "ANOVA de medidas repetidas": (
             "a ANOVA de medidas repetidas, com a correção de Greenhouse-Geisser"
@@ -175,10 +180,18 @@ COMPARACOES: dict[str, dict[str, str]] = {
     },
 }
 # Sai quando a regra escolheu algum teste. Com algum escrito na ficha, a frase abre
-# com a exceção, porque ali a escolha não foi da regra.
+# com a exceção, porque ali a escolha não foi da regra. No pareado, a normalidade que a
+# regra olha é a das diferenças, e não a de cada medida: o `{pareado}` diz isso quando
+# a regra escolheu também em algum pareado, e a frase do pareado sai sozinha quando ela
+# só escolheu nele.
 FRASE_REGRA_DA_COMPARACAO = (
     "o teste paramétrico foi usado quando o de Shapiro-Wilk não rejeitou a normalidade em "
-    "nenhum grupo ou medida, e o de postos nos demais casos."
+    "nenhum grupo ou medida{pareado}, e o de postos nos demais casos."
+)
+NO_PAREADO = " — nas medidas pareadas, a das diferenças —"
+FRASE_REGRA_DO_PAREADO = (
+    "o teste paramétrico foi usado quando o de Shapiro-Wilk não rejeitou a normalidade das "
+    "diferenças entre as medidas pareadas, e o de postos nos demais casos."
 )
 EXCECAO = "Exceto quando o teste foi definido de antemão, "
 
@@ -338,7 +351,7 @@ def _correlacao(manifesto: Manifesto) -> str:
 def _comparacao(manifesto: Manifesto) -> str:
     detalhes = _detalhes(manifesto)
     partes: list[tuple[str, list[str]]] = []
-    testadas: list[dict[str, Any]] = []
+    testadas: list[tuple[str, dict[str, Any]]] = []
     for delineamento, nomes in COMPARACOES.items():
         linhas = [
             linha
@@ -347,7 +360,7 @@ def _comparacao(manifesto: Manifesto) -> str:
         ]
         if not linhas:
             continue
-        testadas += linhas
+        testadas += [(delineamento, linha) for linha in linhas]
         usados = [nome for nome in nomes if any(linha["teste"] == nome for linha in linhas)]
         partes.append((delineamento, [nomes[nome] for nome in usados]))
     if not partes:
@@ -368,12 +381,18 @@ def _comparacao(manifesto: Manifesto) -> str:
     else:
         frase = "; ".join(blocos[:-1]) + f"; e {blocos[-1]}."
 
-    pela_regra = [linha for linha in testadas if not linha.get("escrito_na_ficha")]
+    pela_regra = [onde for onde, linha in testadas if not linha.get("escrito_na_ficha")]
     if not pela_regra:
         return frase
+    if set(pela_regra) == {"pareado"}:
+        regra = FRASE_REGRA_DO_PAREADO
+    else:
+        regra = FRASE_REGRA_DA_COMPARACAO.format(
+            pareado=NO_PAREADO if "pareado" in pela_regra else ""
+        )
     if len(pela_regra) < len(testadas):
-        return f"{frase} {EXCECAO}{FRASE_REGRA_DA_COMPARACAO}"
-    return f"{frase} {_maiuscula(FRASE_REGRA_DA_COMPARACAO)}"
+        return f"{frase} {EXCECAO}{regra}"
+    return f"{frase} {_maiuscula(regra)}"
 
 
 _FRASES = {

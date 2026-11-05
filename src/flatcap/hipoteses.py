@@ -21,8 +21,9 @@ fronteira:
 
 * **o pareado é a uma amostra sobre as diferenças.** `t.test(x, y, paired = TRUE)`
   é `t.test(x - y, mu = 0)`, e o Wilcoxon pareado é o de uma amostra sobre `x - y`.
-  O motor que entra agora é o do pareado depois, e ele precisa estar num lugar que
-  os dois delineamentos alcancem;
+  O motor da uma amostra é o do pareado — o `t_pareado` e o `wilcoxon_pareado` são
+  os dois de uma amostra sobre as diferenças —, e ele precisa estar num lugar que os
+  dois delineamentos alcancem;
 * **o `test_hipoteses.py` confere contra o R sem projeto, banco nem ficha.** A
   referência entra, o número sai — é onde cabem os valores do R que cada teste novo
   traz;
@@ -38,7 +39,9 @@ de arquivo.
 mesmo objeto — `statistic`, `parameter`, `p.value`, `conf.int`, `estimate`,
 `null.value` e `method` —, e é por isso que ele serve de contrato para todos os testes
 de comparação. Os campos do `Resultado` são esses, com os nomes da casa. O
-`Coeficiente` da correlação já era quase ele.
+`Coeficiente` da correlação já era quase ele. O pareado devolve o `Resultado` da uma
+amostra sobre as diferenças, com o nome do teste e o da estimativa trocados — o R
+também só troca o `method` e o nome do `estimate`.
 
 **Sempre bilateral.** Como na correlação: um teste unilateral escolhido depois de
 olhar os dados é o p dividido por dois, e a ficha não tem como dizer que a direção
@@ -46,20 +49,21 @@ foi decidida antes.
 
 ## Os testes de postos
 
-Os quatro que dispensam a normal — o Wilcoxon de uma amostra, o Mann-Whitney, o
+Os que dispensam a normal — o Wilcoxon de uma amostra e o pareado, o Mann-Whitney, o
 Kruskal-Wallis e o Friedman — trocam os valores pelos postos deles, com o posto médio
-nos empates, como o `rank` do R. Os dois primeiros são o `wilcox.test` do R, e os dois
+nos empates, como o `rank` do R. Os três primeiros são o `wilcox.test` do R, e os três
 saem **com a estimativa e o intervalo**, o `conf.int = TRUE` — que não é o padrão do
 R, e é o que dá o tamanho do efeito na unidade da variável, como o intervalo do t: a
-pseudomediana de Hodges-Lehmann no Wilcoxon, a diferença de locação no Mann-Whitney.
-O Kruskal-Wallis e o Friedman não estimam nada, como a ANOVA.
+pseudomediana de Hodges-Lehmann no Wilcoxon — dos valores na uma amostra, das
+diferenças no pareado —, a diferença de locação no Mann-Whitney. O Kruskal-Wallis e o
+Friedman não estimam nada, como a ANOVA.
 
 **O caminho do p é a escolha do R, escrita**: exato — pela distribuição do posto
 sinalizado ou da soma dos postos — com menos de 50 valores (na uma amostra, os que não
-são iguais à referência; no Mann-Whitney, em cada grupo), sem empate e sem zero; nos
-outros casos, a aproximação normal, com a variância corrigida para os empates e a
-correção de continuidade. O Kruskal-Wallis e o Friedman só têm a aproximação do
-qui-quadrado, no R e aqui.
+são iguais à referência; no pareado, as diferenças que não são nulas; no Mann-Whitney,
+em cada grupo), sem empate e sem zero; nos outros casos, a aproximação normal, com a
+variância corrigida para os empates e a correção de continuidade. O Kruskal-Wallis e o
+Friedman só têm a aproximação do qui-quadrado, no R e aqui.
 
 ## Quando importar, e quando escrever
 
@@ -88,22 +92,26 @@ A régua é a que a Fase 7 aprendeu teste a teste, em três degraus:
 
 ## O que ele recusa
 
-Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not enough
-'x' observations`), valores que não variam (`data are essentially constant`), e
-valor ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do
-R para ele: um valor em cada grupo e três no total (`not enough observations`); no de
-Welch, dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com
-a sua variância, e a de um valor só não existe; na ANOVA — as duas —, dois em cada grupo
+Com `ValueError`, e só o que o próprio R recusa: menos de dois valores (`not enough 'x'
+observations`), valores que não variam (`data are essentially constant`), e valor
+ausente ou infinito no vetor. No t de Student de duas amostras, o mínimo é o do R para
+ele: um valor em cada grupo e três no total (`not enough observations`); no de Welch,
+dois em cada grupo (`not enough 'x' observations`), porque cada grupo entra com a sua
+variância, e a de um valor só não existe; na ANOVA — as duas —, dois em cada grupo
 também, que é o `not enough observations` do `oneway.test`; nas medidas repetidas, dois
-casos com todas as medidas. Nos testes de postos, os mínimos do R são menores — um
-valor no Wilcoxon, um em cada grupo no Mann-Whitney e no Kruskal-Wallis; no Friedman,
-dois casos, como na ANOVA —, e as barreiras que o R não tem são as do resultado sem
-sentido, onde ele devolve `NaN`: todos os valores iguais à referência no Wilcoxon,
-todos iguais no Kruskal-Wallis, e cada caso com as medidas todas iguais no Friedman. Quem
-chega aqui pelo `comparacao.py` já passou por essas barreiras, uma a uma, com a frase
-de cada uma na tabela; o `ValueError` é para quem chamar a função direto — em teste,
-ou no dia em que outra análise precisar dela —, e é erro de programação: dado que não
-dá teste não é resultado.
+casos com todas as medidas; no pareado, os da uma amostra, contados em pares, e os dois
+vetores do mesmo tamanho (`'x' and 'y' must have the same length`). Nos testes de
+postos, os mínimos do R são menores — um valor no Wilcoxon, um par no Wilcoxon pareado,
+um em cada grupo no Mann-Whitney e no Kruskal-Wallis; no Friedman, dois casos, como na
+ANOVA. As barreiras que o R não tem são as do resultado sem sentido: onde ele devolve
+`NaN` — todos os valores iguais à referência no Wilcoxon, todas as diferenças nulas no
+Wilcoxon pareado, todos iguais no Kruskal-Wallis, e cada caso com as medidas todas
+iguais no Friedman —, e onde ele devolve um número feito de arredondamento — as medidas
+que não variam dentro dos casos, em que o R dá à ANOVA de medidas repetidas um F de
+10²³, e ao t pareado, um t de 10¹³. Quem chega aqui pelo `comparacao.py` já passou por
+essas barreiras, uma a uma, com a frase de cada uma na tabela; o `ValueError` é para
+quem chamar a função direto — em teste, ou no dia em que outra análise precisar dela —,
+e é erro de programação: dado que não dá teste não é resultado.
 
 **Nenhuma função daqui começa com `test`.** `t_uma_amostra`, e não `teste_t`: o
 `pytest` coleta como caso de teste qualquer objeto `test*` importado num arquivo de
@@ -122,7 +130,7 @@ import sys
 import warnings
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 from functools import cache
 from typing import Any
@@ -140,13 +148,16 @@ MINIMO_STUDENT = 3
 # O nome de cada teste, como ele vai para a coluna `teste` da tabela. É o `method`
 # do `htest`, em português — e, nos testes de postos, o nome pelo qual cada um é
 # conhecido: o `wilcox.test` de duas amostras, que o R chama de soma de postos de
-# Wilcoxon, é o Mann-Whitney.
+# Wilcoxon, é o Mann-Whitney; o do posto sinalizado sobre as diferenças, que o R chama
+# como o de uma amostra, é o Wilcoxon pareado.
 T_DE_STUDENT = "t de Student"
+T_PAREADO = "t pareado"
 T_DE_WELCH = "t de Welch"
 ANOVA = "ANOVA"
 ANOVA_DE_WELCH = "ANOVA de Welch"
 ANOVA_DE_MEDIDAS_REPETIDAS = "ANOVA de medidas repetidas"
 WILCOXON = "Wilcoxon"
+WILCOXON_PAREADO = "Wilcoxon pareado"
 MANN_WHITNEY = "Mann-Whitney"
 KRUSKAL_WALLIS = "Kruskal-Wallis"
 FRIEDMAN = "Friedman"
@@ -352,6 +363,111 @@ def t_de_welch(x: Sequence[float], y: Sequence[float]) -> Resultado:
         referencia=0.0,
         confianca_do_ic=CONFIANCA,
     )
+
+
+def t_pareado(x: Sequence[float], y: Sequence[float]) -> Resultado:
+    """
+    O `t.test(x, y, paired = TRUE)` do R: as mesmas pessoas medidas duas vezes — antes
+    e depois, ou por dois métodos —, e o t de uma amostra sobre as diferenças, contra
+    zero. Bilateral, n − 1 graus de liberdade (n pares), e o intervalo de 95% **da
+    diferença média** — a média de `x − y`, que é `média(x) − média(y)`. A ordem dos dois
+    vetores é a do sinal, como no R.
+
+        d = x − y        t = média(d) / (DP(d) / √n)
+
+    É o motor da uma amostra, como no R: o `paired = TRUE` do `t.test` troca `x` por
+    `x − y` e segue pelo caminho da uma amostra, com `mu = 0`. Do `Resultado` dela
+    mudam só o nome do teste e o da estimativa — a `mean difference` do R.
+
+    Os pares vêm completos e na ordem: o i-ésimo de `x` é o par do i-ésimo de `y`, e
+    quem chama tira antes o caso com uma das duas medidas faltando, como o
+    `complete.cases` do R.
+
+    **A barreira das diferenças que não variam é mais larga que a do R**: ver
+    `sem_variacao_nas_diferencas`. O R para quando o erro-padrão das diferenças some
+    perto da média delas, e deixa passar o resto que a subtração de duas medidas com
+    casas decimais deixa no último bit — e aí devolve um t de 10¹³, com p = 0.
+
+    Raises:
+        ValueError: vetores de tamanhos diferentes, menos de dois pares, diferenças que
+            não variam — cada caso mudando o mesmo tanto, ou mudando só no último bit —,
+            ou valor ausente ou infinito.
+    """
+    primeiro, segundo = _pares(x, y, "o t pareado")
+    diferencas = primeiro - segundo
+    if diferencas.shape[0] < MINIMO_T:
+        raise ValueError(
+            f"o t pareado precisa de pelo menos {MINIMO_T} pares, e vieram "
+            f"{diferencas.shape[0]}"
+        )
+    if sem_variacao_nas_diferencas(primeiro, segundo):
+        raise ValueError(
+            "as diferenças não variam: cada par muda o mesmo tanto, e o t é uma divisão "
+            "por zero"
+        )
+    return replace(
+        t_uma_amostra(diferencas, 0.0),
+        metodo=T_PAREADO,
+        calculo_do_p="t de Student com n − 1 graus de liberdade, sobre as diferenças",
+        nome_da_estimativa="diferença média",
+    )
+
+
+def _pares(x: Sequence[float], y: Sequence[float], teste: str) -> tuple[Any, Any]:
+    """
+    Os dois vetores de um pareado, conferidos: do mesmo tamanho — o i-ésimo de um é o
+    par do i-ésimo do outro, o `'x' and 'y' must have the same length` do R —, e sem
+    valor ausente ou infinito. `teste` é o nome que vai para a frase.
+    """
+    primeiro, segundo = _vetor(x), _vetor(y)
+    if primeiro.shape[0] != segundo.shape[0]:
+        raise ValueError(
+            f"{teste} precisa dos dois vetores do mesmo tamanho — o i-ésimo de um é o par "
+            f"do i-ésimo do outro —, e vieram {primeiro.shape[0]} e {segundo.shape[0]}"
+        )
+    return primeiro, segundo
+
+
+def sem_variacao_nas_diferencas(x: Sequence[float], y: Sequence[float]) -> bool:
+    """
+    As diferenças de um pareado não variam: cada caso muda o mesmo tanto da primeira
+    medida para a segunda — ou não muda nada, ou muda só no último bit.
+
+    Dois critérios, e basta um:
+
+    * **o do R** — o `data are essentially constant` do `t.test(x, y, paired = TRUE)`:
+      o erro-padrão das diferenças abaixo de dez épsilons vezes a média delas, que é o
+      `sem_variacao` sobre `x − y`;
+    * **o da escala das medidas** — o desvio padrão das diferenças abaixo de dez
+      épsilons vezes o maior valor das duas medidas, em valor absoluto. É ele que pega o
+      arredondamento. Uma medida escrita com casas decimais não cabe exata num `double`,
+      e a subtração de duas delas deixa um resto do tamanho do último bit **das
+      medidas** — no máximo dois épsilons vezes o maior valor —, e não do último
+      bit da diferença, que é o que o critério do R mede. Trinta casos que ganham
+      exatamente 0,1 numa PAS em torno de 100 têm diferenças que variam em 10⁻¹⁴, e o
+      `t.test` do R devolve t = −7,6 × 10¹³ e p = 0; oito que ganham 0,1 kg numa
+      variação de peso em torno de zero, t = −1,1 × 10¹⁴ e p = 10⁻⁹⁶ — conferidos.
+
+    A escala é o maior valor, e não a maior média, que é a régua da barreira das
+    medidas repetidas (`sem_variacao_entre_medidas`): com as medidas em torno de zero —
+    uma variação, um escore —, a média é pequena e o resto do arredondamento, não; é o
+    segundo exemplo, que a régua da média deixa passar.
+
+    Pública porque o `comparacao.py` faz a mesma pergunta antes de chamar o teste: para
+    a linha sair com o motivo escrito, e para a normalidade das diferenças não ser
+    testada sobre o ruído — o `shapiro.test` do R roda ali, e rejeita.
+
+    Com menos de dois pares, devolve `False`: a barreira do tamanho vem antes, com a
+    frase dela.
+    """
+    primeiro, segundo = _pares(x, y, "a conferência das diferenças")
+    if primeiro.shape[0] < MINIMO_T:
+        return False
+    diferencas = primeiro - segundo
+    if sem_variacao(diferencas):
+        return True
+    escala = max(float(abs(primeiro).max()), float(abs(segundo).max()))
+    return float(diferencas.std(ddof=1)) < 10 * sys.float_info.epsilon * escala
 
 
 # A ANOVA
@@ -678,25 +794,106 @@ def wilcoxon_uma_amostra(x: Sequence[float], mu: float) -> Resultado:
         ValueError: nenhum valor, todos iguais à referência — onde o R devolve `NaN` —,
             valor ausente ou infinito, ou referência que não é um número finito.
     """
-    import numpy as np
-    from scipy import stats
-
     valores = _vetor(x)
     referencia = float(mu)
     if not math.isfinite(referencia):
         raise ValueError(f"a referência precisa ser um número finito, e veio {mu!r}")
     if valores.shape[0] < 1:
         raise ValueError("o Wilcoxon precisa de pelo menos 1 valor, e não veio nenhum")
+    return _posto_sinalizado(valores, referencia, _DA_UMA_AMOSTRA)
+
+
+def wilcoxon_pareado(x: Sequence[float], y: Sequence[float]) -> Resultado:
+    """
+    O `wilcox.test(x, y, paired = TRUE, conf.int = TRUE)` do R: o teste do posto
+    sinalizado sobre as diferenças `x − y`, contra zero — bilateral, com a pseudomediana
+    de Hodges-Lehmann **das diferenças** e o intervalo de 95% dela. A ordem dos dois
+    vetores é a do sinal, como no `t_pareado`.
+
+    É o de uma amostra, como no R: o `paired = TRUE` do `wilcox.test` troca `x` por
+    `x − y` e segue pelo caminho da uma amostra, com `mu = 0`. As diferenças nulas fazem
+    o papel dos valores iguais à referência — saem antes de tudo, porque um zero não tem
+    sinal —, e o p é exato com menos de `LIMITE_DO_EXATO` diferenças restantes, sem
+    empate e sem diferença nula; nos outros casos, a aproximação normal, com as duas
+    correções. A conta é uma só, a do `_posto_sinalizado`; mudam os nomes.
+
+    **A pseudomediana das diferenças não é a diferença das medianas** das duas medidas,
+    nem a mediana das diferenças: é a mediana das médias de Walsh das diferenças —
+    (dᵢ + dⱼ)/2, com i ≤ j —, que estima o centro delas quando são simétricas em torno
+    dele. É o `(pseudo)median` que o R imprime.
+
+    **As diferenças são as do R, bit a bit** — a subtração em ponto flutuante, e mais
+    nada. Duas diferenças iguais no papel podem não ser iguais no último bit: 77,7 − 76,0
+    é 1,7000000000000028, e 66,6 − 64,9 é 1,6999999999999886. O posto as separa, em vez
+    de empatá-las, como o `wilcox.test` do R faz com o `digits.rank = Inf`, o padrão
+    dele, e o p sai o do R. O R-devel passa esse padrão para 7 — arredonda a sete
+    algarismos antes de ordenar, e as duas empatam —, e com ele o p seria outro: 0,0335,
+    e não 0,0340, no exemplo do `test_hipoteses.py`. É decisão a tomar junto da de seguir
+    o `wilcox.test` do R 4.6.
+
+    Os pares vêm completos e na ordem, como no `t_pareado`. Derivada, como a de uma
+    amostra, do `wilcox.test.default` do R: ver o `NOTICE.md`.
+
+    Raises:
+        ValueError: vetores de tamanhos diferentes, nenhum par, todas as diferenças
+            nulas — onde o R devolve `NaN` —, ou valor ausente ou infinito.
+    """
+    primeiro, segundo = _pares(x, y, "o Wilcoxon pareado")
+    if primeiro.shape[0] < 1:
+        raise ValueError("o Wilcoxon pareado precisa de pelo menos 1 par, e não veio nenhum")
+    return _posto_sinalizado(primeiro - segundo, 0.0, _DO_PAREADO)
+
+
+@dataclass(frozen=True)
+class _Sinalizado:
+    """
+    O que muda entre os dois Wilcoxon do posto sinalizado — o de uma amostra e o
+    pareado —: os nomes, e mais nada. A conta é uma só.
+    """
+
+    metodo: str
+    estimativa: str
+    # O que se conta no limite do exato, e o que sai antes dos postos — as duas palavras
+    # da frase do caminho do p: «50 diferenças ou mais», «diferenças nulas».
+    valores: str
+    iguais: str
+    # A frase de quando não sobra nada para ordenar.
+    nenhum: str
+
+
+_DA_UMA_AMOSTRA = _Sinalizado(
+    metodo=WILCOXON,
+    estimativa="pseudomediana",
+    valores="valores",
+    iguais="valores iguais à referência",
+    nenhum="todos os valores são iguais à referência",
+)
+_DO_PAREADO = _Sinalizado(
+    metodo=WILCOXON_PAREADO,
+    estimativa="pseudomediana das diferenças",
+    valores="diferenças",
+    iguais="diferenças nulas",
+    nenhum="todas as diferenças são nulas",
+)
+
+
+def _posto_sinalizado(valores: Any, referencia: float, forma: _Sinalizado) -> Resultado:
+    """
+    O miolo dos dois Wilcoxon do posto sinalizado — o do `wilcox.test` do R depois de
+    ele ter o vetor e a referência: os valores da uma amostra e a referência dela, ou as
+    diferenças do pareado e o zero. Tira os iguais à referência, soma os postos dos que
+    ficam acima dela, escolhe o caminho do p e acha a estimativa e o intervalo. `forma`
+    dá os nomes que vão para o `Resultado` e para a frase do caminho do p.
+    """
+    import numpy as np
+    from scipy import stats
 
     diferencas = valores - referencia
     zeros = bool((diferencas == 0).any())
     diferencas = diferencas[diferencas != 0]
     n = int(diferencas.shape[0])
     if n == 0:
-        raise ValueError(
-            "todos os valores são iguais à referência: não há posto a somar, e o R "
-            "devolve NaN"
-        )
+        raise ValueError(f"{forma.nenhum}: não há posto a somar, e o R devolve NaN")
     postos = _postos(np.abs(diferencas))
     estatistica = float(postos[diferencas > 0].sum())
     empates = _soma_dos_empates(postos) > 0
@@ -722,9 +919,9 @@ def wilcoxon_uma_amostra(x: Sequence[float], mu: float) -> Resultado:
         motivos = [
             motivo
             for motivo, vale in (
-                (f"{LIMITE_DO_EXATO} valores ou mais", n >= LIMITE_DO_EXATO),
+                (f"{LIMITE_DO_EXATO} {forma.valores} ou mais", n >= LIMITE_DO_EXATO),
                 ("empates", empates),
-                ("valores iguais à referência", zeros),
+                (forma.iguais, zeros),
             )
             if vale
         ]
@@ -733,13 +930,13 @@ def wilcoxon_uma_amostra(x: Sequence[float], mu: float) -> Resultado:
     # Sem o `min(1.0, …)` dos outros testes: o teto de 1 já veio do `_p_exato`, como no
     # R, e a aproximação normal dobra uma cauda que não passa de ½.
     return Resultado(
-        metodo=WILCOXON,
+        metodo=forma.metodo,
         estatistica=estatistica,
         nome_da_estatistica="V",
         p=p,
         calculo_do_p=calculo,
         estimativa=estimativa,
-        nome_da_estimativa="pseudomediana",
+        nome_da_estimativa=forma.estimativa,
         ic=ic,
         referencia=referencia,
         exato=exato,
@@ -1451,7 +1648,9 @@ __all__ = [
     "MANN_WHITNEY",
     "T_DE_STUDENT",
     "T_DE_WELCH",
+    "T_PAREADO",
     "WILCOXON",
+    "WILCOXON_PAREADO",
     "Resultado",
     "anova_de_medidas_repetidas",
     "anova_de_um_fator",
@@ -1463,9 +1662,12 @@ __all__ = [
     "sem_variacao",
     "sem_variacao_em_duas",
     "sem_variacao_entre_medidas",
+    "sem_variacao_nas_diferencas",
     "sem_variacao_nos_grupos",
     "t_de_student",
     "t_de_welch",
+    "t_pareado",
     "t_uma_amostra",
+    "wilcoxon_pareado",
     "wilcoxon_uma_amostra",
 ]
