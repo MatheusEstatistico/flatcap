@@ -813,6 +813,19 @@ caminho é o que serve para o `cd`.
 
 **A saída do `xdg-open` vai para o nada, e não para um cano.** O gerenciador de arquivos que
 ele lança herda a saída, e um `subprocess.run` que a capturasse esperaria a janela fechar.
+
+## 1.22.0 — o painel com os finalizados
+
+**`flatcap status --todos` põe os finalizados no painel** (`painel.montar_painel` com o
+`com_finalizados`). A linha de cada um é a do painel de um projeto só: o status na cor do
+texto, e o prazo sem ATRASADO, porque o relatório dele já foi entregue. A contagem dos que
+ficaram fora é zero, e o resumo deixa de dizer "fora do painel". Com o `<id>`, o `--todos`
+não muda nada: o painel de um projeto só já mostra o finalizado.
+
+**O ATRASADO sai em `#ff0000`** (`cli.COR_DO_ATRASADO`), na coluna do prazo e na contagem do
+resumo, no lugar do vermelho do tema do terminal, que muda de um tema para outro. O
+`#ff0000` dá 5,3:1 contra o fundo preto e é uma das 256 cores do xterm, como o azul e o
+ciano dos status.
 """
 
-__version__ = "1.21.0"
+__version__ = "1.22.0"

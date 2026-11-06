@@ -136,7 +136,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 |---|---|
 | `flatcap doctor` | Testa a configuração, a conexão com o REDCap, o `FLATCAP_ROOT` e as bibliotecas. |
 | `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
-| `flatcap status` | Mostra os projetos que já têm pasta, com o status e o prazo de cada um. |
+| `flatcap status` | Mostra os projetos que já têm pasta, com o status e o prazo de cada um. `--todos` mostra também os finalizados. |
 | `flatcap status <id> --<status>` | Troca o status do projeto — `flatcap status 41 --finalizado`. |
 | `flatcap abrir <id>` | Abre a pasta do projeto no gerenciador de arquivos — `flatcap abrir 123` abre a `Projeto 123`. |
 | `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
@@ -211,6 +211,8 @@ e não escreve nada.
 6 projetos · 1 atrasado · 2 sem prazo · 1 finalizado fora do painel.
 ```
 
+Com `flatcap status --todos`, os finalizados entram na tabela também.
+
 O `status:` da ficha é um destes seis:
 
 | Status | Quem escreve | No painel |
@@ -220,7 +222,7 @@ O `status:` da ficha é um destes seis:
 | `aguardando banco de dados` | você, depois da reunião | amarelo |
 | `em andamento` | você | azul |
 | `pronto` | o `flatcap relatorio`, quando escreve o documento | verde |
-| `finalizado` | você, quando o atendimento termina | não aparece |
+| `finalizado` | você, quando o atendimento termina | não aparece; com `--todos`, na cor do texto |
 
 O `prazo:` é a data final, escrita à mão depois da reunião, como `2026-11-04` ou
 `04/11/2026`. Quando ela passa sem o projeto estar `pronto`, o painel mostra **ATRASADO**, em

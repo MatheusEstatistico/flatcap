@@ -552,8 +552,8 @@ def _resumo(
 
 # flatcap status
 
-# A cor de cada status no `flatcap status`. O `finalizado` não tem cor porque não
-# aparece no painel; no de um projeto só (`flatcap status <id>`), sai na cor do texto. A
+# A cor de cada status no `flatcap status`. O `finalizado` não tem cor porque só aparece
+# no `--todos` e no painel de um projeto só (`flatcap status <id>`), e sai na cor do texto. A
 # cor ajuda o olho a separar as linhas, e só: o nome do status vai sempre escrito,
 # porque quem recebe a saída sem cor — um e-mail, uma interface que a lê — precisa dele.
 #
@@ -575,6 +575,10 @@ CORES_DO_STATUS: dict[str, str] = {
 # até o amarelo passar a ser o do `aguardando banco de dados`: os dois se confundiriam
 # na mesma coluna.
 COR_DO_STATUS_FORA_DA_LISTA = "magenta"
+
+# O ATRASADO da coluna do prazo e a contagem dele no resumo. O #ff0000 dá 5,3:1 contra o
+# fundo preto, e é uma das 256 cores do xterm, como o azul e o ciano dos status.
+COR_DO_ATRASADO = "bold #ff0000"
 
 # A opção que troca para cada status: o nome dele sem acento, com hífen no lugar do
 # espaço. Mora num dicionário, e não só nos parâmetros do comando, porque as dicas do
@@ -638,6 +642,10 @@ def status_dos_projetos(
         help = "Passa para `finalizado`, e o projeto sai do painel.",
         rich_help_panel = _TROCAR_O_STATUS,
     ),
+    todos: bool = typer.Option(
+        False, "--todos",
+        help = "Mostra no painel também os projetos finalizados.",
+    ),
     env: str | None = typer.Option(
         None, "--env",
         help = "Caminho de um .env alternativo."
@@ -648,7 +656,7 @@ def status_dos_projetos(
 
     Sem <id>, o painel: lê o projeto.yaml de cada projeto do FLATCAP_ROOT, sem falar com o
     REDCap e sem escrever nada. O prazo que passou sem o projeto estar pronto sai como
-    ATRASADO, e os projetos finalizados não aparecem.
+    ATRASADO, e os projetos finalizados não aparecem — com --todos, aparecem.
 
     Com o <id> e uma das opções de status, troca o status: flatcap status 41 --finalizado.
     A troca é escrita na hora, sem --sim, e o historico.md a registra com o status de antes.
@@ -687,19 +695,20 @@ def status_dos_projetos(
     cfg = _configuracao(env)
 
     if identificador is None:
-        _mostrar_o_painel(cfg)
+        _mostrar_o_painel(cfg, com_finalizados = todos)
     elif not pedidos:
         _mostrar_o_projeto(cfg, identificador)
     else:
         _trocar_o_status(cfg, identificador, pedidos[0])
 
 
-def _mostrar_o_painel(cfg: Config) -> None:
+def _mostrar_o_painel(cfg: Config, com_finalizados: bool = False) -> None:
     """
-    `flatcap status`: a tabela de todos os projetos com pasta, o resumo e os avisos.
+    `flatcap status`: a tabela de todos os projetos com pasta, o resumo e os avisos. Com
+    `--todos`, os finalizados entram na tabela.
     """
     try:
-        painel = montar_painel(cfg.root)
+        painel = montar_painel(cfg.root, com_finalizados = com_finalizados)
     except FichaError as erro:
         raise _abortar("Projeto", str(erro)) from erro
     except OSError as erro:
@@ -865,7 +874,7 @@ def _celula_do_prazo(linha: LinhaDoPainel) -> Text:
     A data final, ou ATRASADO quando ela passou sem o projeto estar pronto.
     """
     if linha.atrasado:
-        return Text("ATRASADO", style = "bold red")
+        return Text("ATRASADO", style = COR_DO_ATRASADO)
     if linha.prazo is not None:
         return Text(f"{linha.prazo:%d/%m/%Y}")
     if linha.prazo_escrito:
@@ -893,7 +902,8 @@ def _resumo_do_status(painel: Painel) -> str:
     if painel.atrasados:
         atrasados = len(painel.atrasados)
         partes.append(
-            f"[bold red]{atrasados} {_plural(atrasados, 'atrasado', 'atrasados')}[/bold red]"
+            f"[{COR_DO_ATRASADO}]{atrasados} "
+            f"{_plural(atrasados, 'atrasado', 'atrasados')}[/{COR_DO_ATRASADO}]"
         )
     if painel.sem_prazo:
         partes.append(f"{len(painel.sem_prazo)} sem prazo")

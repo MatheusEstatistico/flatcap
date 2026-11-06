@@ -357,7 +357,8 @@ class TestStatus:
     def test_todo_status_que_aparece_tem_a_sua_cor(self):
         """
         O status novo que entrar no `projeto.STATUS` sem cor sairia sem cor nenhuma,
-        e em silêncio. O `finalizado` não tem, porque não aparece.
+        e em silêncio. O `finalizado` não tem: só aparece no `--todos` e no painel de
+        um projeto só, na cor do texto.
         """
         from flatcap.cli import CORES_DO_STATUS
         from flatcap.projeto import STATUS, STATUS_FINALIZADO
@@ -381,6 +382,20 @@ class TestStatus:
         assert "\x1b[38;2;95;135;255m" in saida  # #5f87ff
         assert "\x1b[38;2;28;202;39m" in saida  # #1cca27
         assert "\x1b[38;2;0;215;215m" in saida  # #00d7d7
+
+    def test_o_atrasado_sai_em_ff0000_na_tabela_e_no_resumo(self, rodar, root, monkeypatch):
+        from rich.console import Console
+
+        from flatcap.cli import COR_DO_ATRASADO
+
+        assert COR_DO_ATRASADO == "bold #ff0000"
+        terminal = Console(force_terminal=True, color_system="truecolor", width=120)
+        monkeypatch.setattr("flatcap.cli.console", terminal)
+        self.projeto(root, "6", prazo="2026-09-01")
+        saida = rodar("status").output
+        vermelho = "\x1b[1;38;2;255;0;0m"
+        assert f"{vermelho}ATRASADO" in saida
+        assert f"{vermelho} atrasado" in saida  # o Rich realça o número à parte
 
     def test_sem_nome_na_ficha(self, rodar, root):
         self.projeto(root, "6", nome="null")
@@ -407,6 +422,22 @@ class TestStatus:
         assert "Projeto 041" in saida
         assert "Projeto 006" not in saida
         assert "1 finalizado fora do painel" in saida
+
+    def test_com_todos_o_finalizado_aparece(self, rodar, root):
+        """
+        Sem ATRASADO, como no painel de um projeto só, e sem a contagem de fora: ninguém
+        ficou fora.
+        """
+        self.projeto(root, "6", status="finalizado", prazo="2026-09-01")
+        self.projeto(root, "41")
+        resultado = rodar("status", "--todos")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Projeto 006" in saida and "Projeto 041" in saida
+        assert "finalizado" in saida
+        assert "01/09/2026" in saida and "ATRASADO" not in saida
+        assert "2 projetos" in saida
+        assert "fora do painel" not in saida
 
     def test_o_resumo_conta_o_que_exige_atencao(self, rodar, root):
         self.projeto(root, "6", prazo="2026-09-01")
