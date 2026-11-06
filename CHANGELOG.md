@@ -7,6 +7,16 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.22.0] — o painel com os finalizados
+
+### Acrescentado
+- `flatcap status --todos` mostra no painel também os projetos finalizados, sem ATRASADO,
+  como no `flatcap status <id>`.
+
+### Mudado
+- O ATRASADO do `flatcap status`, e a contagem dele no resumo, saem em `#ff0000`
+  (`cli.COR_DO_ATRASADO`), no lugar do vermelho do tema do terminal.
+
 ## [1.21.0] — o abrir
 
 ### Acrescentado

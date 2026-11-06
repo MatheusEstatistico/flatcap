@@ -14,7 +14,8 @@ de ela existir.
 ## O que entra
 
 Toda pasta `Projeto NNN` do `FLATCAP_ROOT` com um `projeto.yaml` que abre, menos as
-`finalizado`: essas saem do painel e entram só na contagem. A ficha que não abre e a
+`finalizado`: essas saem do painel e entram só na contagem — a não ser com o
+`com_finalizados`, o do `flatcap status --todos`, que as põe nele. A ficha que não abre e a
 pasta de cliente no formato anterior à 1.1.0 também ficam de fora, mas não em
 silêncio — o painel as lista, para o terminal dizer o que fazer com elas. A ordem é a
 do `flatcap listar`, pelo `record_id`.
@@ -126,7 +127,7 @@ class Painel:
 
     hoje: date
     linhas: tuple[LinhaDoPainel, ...] = ()
-    finalizados: int = 0
+    finalizados: int = 0  # os que ficaram fora do painel
     ilegiveis: tuple[Path, ...] = ()  # as pastas de projeto cuja ficha não abre
     antigas: tuple[Path, ...] = ()  # as pastas de cliente no formato anterior à 1.1.0
 
@@ -147,13 +148,19 @@ class Painel:
         return tuple(linha for linha in self.linhas if linha.prazo_escrito)
 
 
-def montar_painel(root: Path, agora: datetime | None = None) -> Painel:
+def montar_painel(
+    root: Path,
+    agora: datetime | None = None,
+    com_finalizados: bool = False,
+) -> Painel:
     """
     Lê todas as fichas do `FLATCAP_ROOT` e monta o painel. Não escreve nada.
 
     Args:
         root: o `FLATCAP_ROOT`.
         agora: relógio injetável — é ele que diz o que está atrasado.
+        com_finalizados: os `finalizado` entram no painel, como no de um projeto só, em
+            vez de ficarem só na contagem — que aí é zero: nenhum ficou de fora.
     """
     hoje = (agora or datetime.now()).date()
     varredura = varrer(Path(root))
@@ -161,7 +168,7 @@ def montar_painel(root: Path, agora: datetime | None = None) -> Painel:
     linhas: list[LinhaDoPainel] = []
     finalizados = 0
     for ficha in varredura.projetos:
-        if status_reconhecido(ficha.status) == STATUS_FINALIZADO:
+        if not com_finalizados and status_reconhecido(ficha.status) == STATUS_FINALIZADO:
             finalizados += 1
             continue
         linhas.append(_linha(ficha, hoje))

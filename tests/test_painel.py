@@ -128,6 +128,20 @@ class TestQuemEntra:
         assert [linha.record_id for linha in painel.linhas] == ["137"]
         assert painel.finalizados == 2
 
+    def test_com_finalizados_eles_entram_no_painel_e_nao_atrasam(self, root):
+        """
+        O do `flatcap status --todos`: a linha do finalizado é a do painel de um projeto
+        só, e a contagem dos que ficaram fora é zero.
+        """
+        raiz = _projeto(root, "6", status="finalizado", prazo="2026-10-01")
+        _projeto(root, "137")
+
+        painel = montar_painel(root, agora=AGORA, com_finalizados=True)
+        assert [linha.record_id for linha in painel.linhas] == ["6", "137"]
+        assert painel.linhas[0] == painel_do_projeto(raiz, agora=AGORA).linhas[0]
+        assert not painel.linhas[0].atrasado
+        assert painel.finalizados == 0
+
     def test_a_ficha_que_nao_abre_fica_fora_e_e_listada(self, root):
         _projeto(root, "6")
         quebrada = root / PASTA / "Projeto 041"
