@@ -646,6 +646,69 @@ class TestStatus:
         assert rodar("status", "41", "--finalizado").exit_code == 0
 
 
+# ── abrir ───────────────────────────────────────────────────────────────────
+
+
+class TestAbrir:
+    """
+    O gerenciador de arquivos é trocado por uma lista que anota o que ele abriria: a
+    suíte não abre janela nenhuma.
+    """
+
+    @pytest.fixture
+    def abertas(self, monkeypatch):
+        pastas = []
+        monkeypatch.setattr("flatcap.cli._abrir_no_gerenciador", pastas.append)
+        return pastas
+
+    def test_abre_a_pasta_do_projeto_pelo_record_id(self, rodar, root, abertas):
+        raiz = TestStatus.projeto(root, "123")
+        resultado = rodar("abrir", "123")
+        assert resultado.exit_code == 0
+        assert abertas == [raiz]
+        assert raiz.name == "Projeto 123"
+        assert "Abrindo" in resultado.output
+        assert "Projeto 123" in resultado.output
+
+    def test_abre_pela_matricula_tambem(self, rodar, root, abertas):
+        raiz = TestStatus.projeto(root, "6")
+        assert rodar("abrir", MATRICULA).exit_code == 0
+        assert abertas == [raiz]
+
+    def test_projeto_que_nao_existe_vira_painel_e_nao_abre_nada(self, rodar, root, abertas):
+        TestStatus.projeto(root, "6")
+        resultado = rodar("abrir", "999")
+        assert resultado.exit_code == 1
+        assert abertas == []
+
+    def test_sem_gerenciador_de_arquivos_diz_onde_esta_a_pasta(
+        self, rodar, root, monkeypatch
+    ):
+        def sem_xdg_open(_pasta):
+            raise FileNotFoundError("xdg-open")
+
+        monkeypatch.setattr("flatcap.cli._abrir_no_gerenciador", sem_xdg_open)
+        raiz = TestStatus.projeto(root, "123")
+        resultado = rodar("abrir", "123")
+        assert resultado.exit_code == 1
+        assert "Não consegui abrir o gerenciador de arquivos" in _sem_moldura(resultado)
+        assert raiz.name in _sem_moldura(resultado)
+
+    @pytest.mark.parametrize(
+        ("plataforma", "programa"), [("linux", "xdg-open"), ("darwin", "open")]
+    )
+    def test_chama_o_programa_do_sistema(self, monkeypatch, tmp_path, plataforma, programa):
+        from flatcap.cli import _abrir_no_gerenciador
+
+        chamadas = []
+        monkeypatch.setattr("flatcap.cli.sys.platform", plataforma)
+        monkeypatch.setattr(
+            "flatcap.cli.subprocess.run", lambda args, **_k: chamadas.append(args)
+        )
+        _abrir_no_gerenciador(tmp_path)
+        assert chamadas == [[programa, str(tmp_path)]]
+
+
 # ── novo ────────────────────────────────────────────────────────────────────
 
 

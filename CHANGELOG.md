@@ -7,6 +7,14 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.21.0] — o abrir
+
+### Acrescentado
+- `flatcap abrir <id>` abre a pasta do projeto no gerenciador de arquivos — o Explorer, o
+  Finder ou o do Linux (`xdg-open`): `flatcap abrir 123` abre a `Projeto 123`. O `<id>` é o
+  `record_id` ou a matrícula, como no `flatcap status <id>`. Só lê, e o caminho sai na tela
+  também, para quando não há gerenciador de arquivos que o abra.
+
 ## [1.20.0] — o pareado
 
 ### Acrescentado

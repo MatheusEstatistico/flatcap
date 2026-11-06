@@ -138,6 +138,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap listar` | Lista as solicitações do REDCap e diz quais já viraram pasta local. |
 | `flatcap status` | Mostra os projetos que já têm pasta, com o status e o prazo de cada um. |
 | `flatcap status <id> --<status>` | Troca o status do projeto — `flatcap status 41 --finalizado`. |
+| `flatcap abrir <id>` | Abre a pasta do projeto no gerenciador de arquivos — `flatcap abrir 123` abre a `Projeto 123`. |
 | `flatcap novo <record_id>` | Cria a pasta do projeto a partir de uma solicitação, com o banco anexado. |
 | `flatcap amostragem <id>` | Calcula o tamanho da amostra a partir do `desenho.yaml` e escreve o relatório da amostra, em `4. Amostragem/`. |
 | `flatcap dados adicionar <id> <arquivo>` | Registra uma nova versão do banco. |

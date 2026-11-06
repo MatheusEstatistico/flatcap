@@ -798,6 +798,21 @@ escreveu variável de grupo nenhuma. A frase agora começa por "lido como a méd
 entre os grupos de `EKFC`, pelo t de Student", e escreve o item do pareado.
 
 O `relatorio.py` e o `documento.py` não mudaram uma linha.
+
+## 1.21.0 — o abrir
+
+**`flatcap abrir 123` abre a pasta `Projeto 123`** no gerenciador de arquivos: o Explorer no
+Windows (`os.startfile`), o Finder no macOS (`open`) e, no Linux, o que o `xdg-open` escolher.
+O `<id>` é o de sempre, o `record_id` ou a matrícula, achado pelo `ficha.localizar_projeto`
+do `flatcap status <id>`: a matrícula com mais de um projeto e o projeto que não existe saem no
+mesmo painel.
+
+**Só lê**, e sem rede: não escreve nada, e por isso não tem `--sim`. O caminho também sai na
+tela, e o painel da falha o repete — numa sessão por SSH não há gerenciador de arquivos, e o
+caminho é o que serve para o `cd`.
+
+**A saída do `xdg-open` vai para o nada, e não para um cano.** O gerenciador de arquivos que
+ele lança herda a saída, e um `subprocess.run` que a capturasse esperaria a janela fechar.
 """
 
-__version__ = "1.20.0"
+__version__ = "1.21.0"

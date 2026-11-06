@@ -10,6 +10,9 @@ Esta camada não contém regras de negócio:
 
 from __future__ import annotations
 
+import os
+import subprocess
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -969,6 +972,63 @@ def _avisos_do_status(painel: Painel) -> list[Text]:
         )
 
     return avisos
+
+
+@app.command()
+def abrir(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto: flatcap abrir 123 abre a pasta Projeto 123.",
+        show_default = False,
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Abre a pasta do projeto no gerenciador de arquivos: o Explorer, o Finder ou o do Linux.
+
+    Só lê: não escreve nada e não fala com o REDCap. O caminho também sai na tela, para
+    quando não há gerenciador de arquivos que o abra — numa sessão por SSH, por exemplo.
+    """
+    cfg = _configuracao(env)
+    try:
+        pasta = localizar_projeto(cfg.root, identificador)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    console.print(Text(f"Abrindo {pasta}"))
+    try:
+        _abrir_no_gerenciador(pasta)
+    except (OSError, subprocess.CalledProcessError) as erro:
+        raise _abortar(
+            "Abrir a pasta",
+            "Não consegui abrir o gerenciador de arquivos.\n"
+            f"Detalhe técnico: {erro}\n"
+            f"A pasta é: {pasta}",
+        ) from erro
+
+
+def _abrir_no_gerenciador(pasta: Path) -> None:
+    """
+    Entrega a pasta ao programa do sistema que abre pastas.
+
+    A saída do `xdg-open` vai para o nada, e não para um cano: o gerenciador de arquivos
+    que ele lança herda o cano, e o `subprocess.run` esperaria a janela fechar.
+    """
+    if sys.platform == "win32":
+        os.startfile(pasta)  # type: ignore[attr-defined]  # só existe no Windows
+        return
+    programa = "open" if sys.platform == "darwin" else "xdg-open"
+    subprocess.run(
+        [programa, str(pasta)],
+        check = True,
+        stdout = subprocess.DEVNULL,
+        stderr = subprocess.DEVNULL,
+    )
 
 
 @app.command()
