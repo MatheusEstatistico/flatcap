@@ -770,11 +770,15 @@ def shapiro(
 _shapiro = shapiro
 
 
-def _pontos_do_qq(
+def pontos_do_qq(
     valores: pd.Series, preenchidos: int
 ) -> tuple[tuple[float, ...], tuple[float, ...], tuple[float, float] | None]:
     """
     Os pontos do Q-Q e a reta de referência, calculados aqui e não no `graficos.py`.
+
+    Pública desde a 1.23.0, com o apelido privado que este módulo usa: a regressão
+    desenha o Q-Q dos resíduos, e uma segunda conta dos quantis é como as duas figuras
+    de Q-Q do mesmo documento passam a pôr a reta em lugares diferentes.
 
     É a mesma divisão que a Fase 5 fez com as classes do histograma, pela mesma
     razão: qual quantil teórico corresponde à i-ésima observação é decisão
@@ -816,6 +820,9 @@ def _pontos_do_qq(
         tuple(float(valor) for valor in ordenados),
         (intercepto, inclinacao),
     )
+
+
+_pontos_do_qq = pontos_do_qq
 
 
 def _grafico(variavel: VariavelTestada) -> Grafico:
@@ -1374,6 +1381,7 @@ __all__ = [
     "avaliar",
     "executar_normalidade",
     "montar_manifesto",
+    "pontos_do_qq",
     "preparar_normalidade",
     "shapiro",
     "valor_p",

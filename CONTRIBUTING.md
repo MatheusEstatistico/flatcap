@@ -28,7 +28,7 @@ pre-commit install
 Na ordem, antes de pedir a revisão:
 
 1. `git diff` — releia o que mudou, inteiro.
-2. `pytest` — a suíte offline. Leva alguns minutos: os gráficos são desenhados a 600 DPI.
+2. `pytest` — a suíte offline. Leva alguns minutos: os gráficos são desenhados a 300 DPI.
 3. `pytest -m e2e` — a ponta a ponta: o `flatcap` como subprocesso contra um REDCap falso.
 4. `ruff check src tests tools` e `python tools/gerar_doc.py --conferir` — sem nenhum achado.
 5. **Gere um relatório de um projeto de teste e abra o `.docx` no Word**, e os `.png` que a

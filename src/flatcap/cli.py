@@ -47,6 +47,7 @@ from .manifesto import (
     ANALISE_CRUZAMENTO,
     ANALISE_DESCRITIVA,
     ANALISE_NORMALIDADE,
+    ANALISE_REGRESSAO,
 )
 from .modelo import (
     ALUNO,
@@ -104,6 +105,7 @@ if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .descritiva import Descritiva, PlanoDescritiva
     from .normalidade import Normalidade, PlanoNormalidade
     from .perfil import Achado, Perfil, PlanoPerfil
+    from .regressao import PlanoRegressao, Regressao
     from .relatorio import PlanoRelatorio, Relatorio
 
 app = typer.Typer(
@@ -3685,6 +3687,299 @@ def _arvore_da_comparacao(plano: PlanoComparacao) -> Tree:
     return arvore
 
 
+# flatcap regressao
+
+@app.command()
+def regressao(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    sem_graficos: bool = typer.Option(
+        False, "--sem-graficos",
+        help = "Escreve só as tabelas. Mais rápido, e o matplotlib nem é carregado."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Ajusta modelos de regressão: linear simples, linear múltipla ou logística.
+
+    Para cada modelo da lista `regressao:` do projeto.yaml, o tipo do desfecho no
+    dicionário escolhe a regressão: desfecho numérico, a linear — simples com um
+    preditor, múltipla com dois ou mais —; categórico de duas categorias, a
+    logística. Os números são os do lm e do glm do R. Sai um resumo com uma linha
+    por modelo, uma tabela de coeficientes por modelo — o OR, na logística — e, nas
+    lineares, as figuras dos resíduos, em `3. Análises/regressao/`, com um
+    `manifesto.json`.
+
+    Os modelos se escrevem na ficha, o desfecho antes dos dois-pontos:
+
+        regressao:
+          - pas: \\[idade]
+          - pas: \\[idade, imc, sexo]
+          - obito: \\[idade, sexo]
+            evento: Sim
+
+    Uma categórica entre os preditores entra contra a primeira categoria do
+    dicionário. O evento da logística é a segunda categoria do desfecho no
+    dicionário, ou a da chave `evento:`.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    from .banco import BancoError
+    from .regressao import RegressaoError, executar_regressao, preparar_regressao
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_regressao(
+            raiz, aba = aba, conferir = not rapido, com_graficos = not sem_graficos
+        )
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except RegressaoError as erro:
+        raise _abortar("Regressão", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    _mostrar_regressao(plano)
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_regressao(plano)
+    except OSError as erro:
+        raise _falha_na_escrita(plano.pasta, erro) from erro
+
+    _rodada_escrita("Regressão escrita.", plano, resultado)
+
+
+def _mostrar_regressao(plano: PlanoRegressao) -> None:
+    """
+    O que a regressão mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_regressao(plano))
+    console.print(_tabela_da_regressao(plano.regressao))
+    for tabela in _tabelas_dos_coeficientes(plano.regressao):
+        console.print(tabela)
+    console.print(_nota_da_regressao(plano.regressao))
+    for aviso in plano.regressao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_regressao(plano))
+
+
+def _cabecalho_da_regressao(plano: PlanoRegressao) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantos modelos entram.
+    """
+    regressao = plano.regressao
+    ficha = regressao.ficha
+    banco = regressao.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantos = len(regressao.modelos)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantos} {_plural(quantos, 'modelo', 'modelos')}", ""),
+            (" da lista `regressao:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabela_da_regressao(regressao: Regressao) -> Table:
+    """
+    O resumo, uma linha por modelo, com as mesmas células do `regressao.csv`. O p
+    do modelo abaixo de 0,05 sai em negrito, e o modelo que não saiu, em amarelo.
+    """
+    from .normalidade import ALFA
+
+    tabela = Table(show_header = True, header_style = "bold")
+    for posicao, nome in enumerate(regressao.tabela.colunas):
+        if posicao in (3, 6):  # n e p-valor: números, à direita
+            tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+        else:
+            tabela.add_column(Text(nome), overflow = "fold")
+
+    for modelo, celulas in zip(regressao.modelos, regressao.tabela.linhas, strict=True):
+        ajuste = modelo.ajuste
+        estilo_teste = "" if ajuste is not None else "yellow"
+        estilo_p = "bold" if ajuste is not None and ajuste.p_do_teste < ALFA else ""
+        tabela.add_row(
+            *(Text(celula) for celula in celulas[:5]),
+            Text(celulas[5], style = estilo_teste),
+            Text(celulas[6], style = estilo_p),
+        )
+    return tabela
+
+
+def _tabelas_dos_coeficientes(regressao: Regressao) -> list[Table]:
+    """
+    Uma tabela por modelo ajustado, com as células do `coef_*.csv` dele e o título
+    dele em cima. A linha da categoria de referência sai apagada.
+    """
+    from .regressao import REFERENCIA
+
+    tabelas = []
+    for dados in regressao.coeficientes:
+        tabela = Table(
+            title = Text(dados.titulo, style = "bold"),
+            title_justify = "left",
+            show_header = True,
+            header_style = "bold",
+        )
+        for posicao, nome in enumerate(dados.colunas):
+            if posicao == 0:
+                tabela.add_column(Text(nome), overflow = "fold")
+            else:
+                tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+        for celulas in dados.linhas:
+            estilo = "dim" if celulas[1] == REFERENCIA else ""
+            tabela.add_row(*(Text(celula, style = estilo) for celula in celulas))
+        tabelas.append(tabela)
+    return tabelas
+
+
+def _nota_da_regressao(regressao: Regressao) -> Text:
+    """
+    Por que cada modelo é o que é — as mesmas frases das notas do `.csv` —, e
+    quantos saíram.
+    """
+    from .regressao import MODELOS
+
+    corpo = Text("\nModelos (pelo tipo do desfecho no dicionário):", style = "bold")
+    for modelo in regressao.modelos:
+        corpo.append("\n")
+        corpo.append(Text(modelo.justificativa, style = "dim" if modelo.ajustado else "yellow"))
+
+    ajustados = len(regressao.ajustados)
+    contagem = ", ".join(
+        f"{regressao.quantos(nome)} {nome.lower()}" for nome in MODELOS if regressao.quantos(nome)
+    )
+    corpo.append("\n\n")
+    corpo.append(
+        Text.assemble(
+            (f"{ajustados} {_plural(ajustados, 'modelo ajustado', 'modelos ajustados')}", "bold"),
+            (f" ({contagem})" if contagem else "", ""),
+            (
+                ". Cada modelo é ajustado à parte, sem correção para comparações múltiplas."
+                if ajustados > 1 else ".",
+                "dim",
+            ),
+        )
+    )
+    return corpo
+
+
+def _arvore_da_regressao(plano: PlanoRegressao) -> Tree:
+    """
+    Desenha o que `executar_regressao` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), (plano.tabela.nome, ""),
+            (f"   {len(plano.regressao.modelos)} modelo(s), um por linha", "dim"),
+        )
+    )
+    coeficientes = len(plano.regressao.coeficientes)
+    if coeficientes:
+        ramo.add(
+            Text.assemble(
+                ("+ ", "green"), (f"{coeficientes} tabela(s) de coeficientes .csv", ""),
+                ("   uma por modelo ajustado", "dim"),
+            )
+        )
+    if plano.com_graficos:
+        if plano.graficos:
+            ramo.add(
+                Text.assemble(
+                    ("+ ", "green"), (f"{len(plano.graficos)} figura(s) .png", ""),
+                    ("   resíduos e Q-Q de cada linear", "dim"),
+                )
+            )
+    else:
+        ramo.add(Text("(sem gráficos: --sem-graficos)", style = "yellow"))
+
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
 # flatcap analisar
 
 @dataclass(frozen=True)
@@ -3739,6 +4034,15 @@ def _resumo_da_correlacao(plano: PlanoCorrelacao) -> str:
     )
 
 
+def _resumo_da_regressao(plano: PlanoRegressao) -> str:
+    regressao = plano.regressao
+    quantos = len(regressao.modelos)
+    sem_modelo = quantos - len(regressao.ajustados)
+    return f"{quantos} {_plural(quantos, 'modelo', 'modelos')}" + (
+        f", {sem_modelo} sem modelo" if sem_modelo else ""
+    )
+
+
 def _resumo_da_comparacao(plano: PlanoComparacao) -> str:
     comparacao = plano.comparacao
     quantos = len(comparacao.variaveis)
@@ -3769,6 +4073,9 @@ _NA_TELA: dict[str, _Tela] = {
     ),
     ANALISE_COMPARACAO: _Tela(
         _mostrar_comparacao, "Comparação escrita.", _resumo_da_comparacao
+    ),
+    ANALISE_REGRESSAO: _Tela(
+        _mostrar_regressao, "Regressão escrita.", _resumo_da_regressao
     ),
 }
 
@@ -3817,9 +4124,9 @@ def analisar(
 
         analises: \\[descritiva, normalidade, correlacao, comparacao]
 
-    Os pares e os itens continuam nos blocos de cada análise — `correlacao:`,
-    `comparacao:`. Lista vazia faz o comando recusar: ele obedece à ficha, e não
-    escolhe análise nenhuma.
+    Os pares, os itens e os modelos continuam nos blocos de cada análise —
+    `correlacao:`, `comparacao:`, `regressao:`. Lista vazia faz o comando recusar:
+    ele obedece à ficha, e não escolhe análise nenhuma.
 
     Todas são preparadas antes de qualquer uma ser escrita. Se uma recusar, nada é
     escrito nem arquivado, e as recusas saem todas juntas. O relatório fica de
@@ -4027,7 +4334,7 @@ def _avisos_das_etapas(plano: PlanoAnalises) -> list[Text]:
     Os avisos de cada análise, para o `--resumo`, que não mostra a saída delas.
 
     Os do banco saem uma vez só: toda análise os repete no começo da lista dela, e
-    seis cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
+    sete cópias do mesmo aviso de leitura esconderiam o que é de cada uma.
     """
     do_banco = tuple(plano.banco.avisos)
     textos = [Text(f"\n{aviso}", style = "yellow") for aviso in do_banco]

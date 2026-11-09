@@ -1553,9 +1553,9 @@ def escrever_rodada(
     Escreve uma rodada de análise no disco, e a desfaz se falhar no meio. Devolve o
     que foi criado, o arquivamento feito e os avisos.
 
-    Uma função só para as seis análises desde a 1.18.2. Eram seis cópias do mesmo
-    bloco, e cada conserto tinha de cair nas seis — o desfazer para qualquer exceção,
-    da revisão 1.3.1, foi copiado à mão de uma em uma.
+    Uma função só para todas as análises desde a 1.18.2 — a regressão, a sétima, chegou
+    usando-a. Eram seis cópias do mesmo bloco, e cada conserto tinha de cair nas seis — o
+    desfazer para qualquer exceção, da revisão 1.3.1, foi copiado à mão de uma em uma.
 
     A ordem é a da Fase 5: arquiva a rodada anterior, cria a pasta, escreve as tabelas
     e os gráficos, e só então o `manifesto.json` — que é o índice, e um índice que

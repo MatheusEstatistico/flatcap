@@ -197,20 +197,21 @@ class TestMetodologia:
         import shutil
 
         raiz = projeto_com_rodada()
-        outra = raiz / "3. Análises" / "regressao"
+        outra = raiz / "3. Análises" / "sobrevivencia"
         shutil.copytree(pasta_da_rodada(raiz), outra)
         manifesto = outra / ARQUIVO_MANIFESTO
         manifesto.write_text(
             manifesto.read_text(encoding="utf-8").replace(
-                '"analise": "descritiva"', '"analise": "regressao"'
+                '"analise": "descritiva"', '"analise": "sobrevivencia"'
             ),
             encoding="utf-8",
         )
         plano = preparar_relatorio(raiz, agora=QUANDO)
         assert any(
-            "metodologia" in aviso and "`regressao`" in aviso for aviso in plano.relatorio.avisos
+            "metodologia" in aviso and "`sobrevivencia`" in aviso
+            for aviso in plano.relatorio.avisos
         )
-        assert "regressao" not in " ".join(plano.relatorio.metodologia)
+        assert "sobrevivencia" not in " ".join(plano.relatorio.metodologia)
 
 
 class TestLerTabela:

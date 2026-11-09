@@ -59,6 +59,7 @@ from .manifesto import (
     ANALISE_CRUZAMENTO,
     ANALISE_DESCRITIVA,
     ANALISE_NORMALIDADE,
+    ANALISE_REGRESSAO,
     Manifesto,
 )
 
@@ -88,6 +89,7 @@ ORDEM: tuple[str, ...] = (
     ANALISE_NORMALIDADE,
     ANALISE_CORRELACAO,
     ANALISE_COMPARACAO,
+    ANALISE_REGRESSAO,
 )
 
 # A descritiva: como cada tipo do dicionário foi resumido. Com mais de um tipo, o
@@ -195,6 +197,27 @@ FRASE_REGRA_DO_PAREADO = (
 )
 EXCECAO = "Exceto quando o teste foi definido de antemão, "
 
+# A regressão: os modelos que rodaram — as lineares juntas, «regressão linear simples e
+# múltipla», e a logística depois. As chaves são os nomes que o manifesto grava.
+FRASE_REGRESSAO = (
+    "Os desfechos foram modelados por {modelos}, com intervalos de confiança de 95%{razoes}."
+)
+REGRESSAO_LINEAR = "regressão linear {tipos}"
+LINEARES: dict[str, str] = {"Linear simples": "simples", "Linear múltipla": "múltipla"}
+REGRESSAO_LOGISTICA = "regressão logística"
+LOGISTICA = "Logística"
+# Sai quando a logística rodou: o leitor do artigo precisa saber que o número da tabela é
+# um OR, e que o intervalo é o de Wald, e não o de verossimilhança perfilada do R.
+RAZOES = (
+    "; os coeficientes da regressão logística são apresentados como razões de chances, "
+    "com intervalos de Wald"
+)
+# Sai quando alguma linear rodou. O Q-Q entra quando a rodada desenhou.
+FRASE_RESIDUOS = (
+    "Nos modelos lineares, a normalidade dos resíduos foi avaliada pelo teste de "
+    "Shapiro-Wilk{e_qq}."
+)
+
 FRASE_SIGNIFICANCIA = "Adotou-se o nível de significância de {alfa}%{multiplas}."
 SEM_CORRECAO = ", sem correção para comparações múltiplas"
 
@@ -208,7 +231,13 @@ VERSOES = " versões {python}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 # As análises que testam hipótese, e por isso pedem a frase do nível de significância.
-_TESTAM = (ANALISE_ASSOCIACAO, ANALISE_NORMALIDADE, ANALISE_CORRELACAO, ANALISE_COMPARACAO)
+_TESTAM = (
+    ANALISE_ASSOCIACAO,
+    ANALISE_NORMALIDADE,
+    ANALISE_CORRELACAO,
+    ANALISE_COMPARACAO,
+    ANALISE_REGRESSAO,
+)
 
 # O alfa de quem não o registra: a associação só relata o p. É o das outras análises.
 _ALFA_PADRAO = 0.05
@@ -395,6 +424,31 @@ def _comparacao(manifesto: Manifesto) -> str:
     return f"{frase} {_maiuscula(regra)}"
 
 
+def _regressao(manifesto: Manifesto) -> str:
+    modelos = [
+        modelo
+        for modelo in _linhas(manifesto, "modelos")
+        if (modelo.get("modelo") in LINEARES or modelo.get("modelo") == LOGISTICA)
+        and modelo.get("coeficientes")
+    ]
+    if not modelos:
+        return ""
+    rodaram = {modelo["modelo"] for modelo in modelos}
+    partes = []
+    tipos = [tipo for nome, tipo in LINEARES.items() if nome in rodaram]
+    if tipos:
+        partes.append(REGRESSAO_LINEAR.format(tipos=_lista(tipos)))
+    if LOGISTICA in rodaram:
+        partes.append(REGRESSAO_LOGISTICA)
+    frase = FRASE_REGRESSAO.format(
+        modelos=" e por ".join(partes), razoes=RAZOES if LOGISTICA in rodaram else ""
+    )
+    if tipos:
+        graficos = bool(manifesto.regras.get("graficos"))
+        frase += " " + FRASE_RESIDUOS.format(e_qq=E_QQ if graficos else "")
+    return frase
+
+
 _FRASES = {
     ANALISE_DESCRITIVA: _descritiva,
     ANALISE_CRUZAMENTO: _cruzamento,
@@ -402,6 +456,7 @@ _FRASES = {
     ANALISE_NORMALIDADE: _normalidade,
     ANALISE_CORRELACAO: _correlacao,
     ANALISE_COMPARACAO: _comparacao,
+    ANALISE_REGRESSAO: _regressao,
 }
 
 
@@ -530,6 +585,8 @@ __all__ = [
     "COMPARACOES",
     "CORRELACOES",
     "DELINEAMENTOS",
+    "LINEARES",
+    "LOGISTICA",
     "Metodologia",
     "ORDEM",
     "TITULO",

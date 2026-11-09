@@ -125,6 +125,12 @@ PASTA_CORRELACAO = "correlacao"
 # teste é escolhido dentro da análise, e não é uma análise por teste.
 PASTA_COMPARACAO = "comparacao"
 
+# A rodada da regressão. O mesmo nome nos três lugares, como as de cima: a pasta, o
+# campo `analise` do manifesto e a chave da ficha — a lista `analises:` e o bloco
+# `regressao:` com os modelos. Uma pasta só para os três modelos, pelo motivo da
+# comparação: o modelo é escolhido dentro da análise, pelo tipo do desfecho.
+PASTA_REGRESSAO = "regressao"
+
 # A pasta da amostragem, a quarta do projeto — e a única que o `novo` não cria.
 #
 # O projeto costuma começar com a amostragem e evoluir depois para a análise, e tudo
