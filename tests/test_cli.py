@@ -51,6 +51,7 @@ from flatcap.projeto import (
     PASTA_CORRELACAO,
     PASTA_CRUZAMENTO,
     PASTA_DESCRITIVA,
+    PASTA_REGRESSAO,
 )
 
 runner = CliRunner()
@@ -1331,6 +1332,71 @@ class TestCorrelacao:
         rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim")
         saida = _saida(rodar("correlacao", RECORD_ID, "--sem-graficos", "--sim"))
         assert PASTA_ANTIGAS in saida
+
+
+class TestRegressao:
+    BLOCO = "regressao:\n  - imc: [idade, sexo]\n"
+
+    def test_simula_por_padrao_e_mostra_o_resumo_e_os_coeficientes(
+        self, rodar, projeto_com_rodada
+    ):
+        """
+        A simulação mostra o resumo, a tabela de coeficientes de cada modelo **e** por
+        que cada modelo é o que é — é nela que a escolha se confere.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("regressao", RECORD_ID)
+        assert resultado.exit_code == 0
+        assert not (raiz / PASTA_ANALISES / PASTA_REGRESSAO).exists()
+        saida = _saida(resultado)
+        assert "F = 6,23;" in saida and "p-valor" in saida
+        assert "Regressão linear múltipla — imc ~ idade + sexo" in saida
+        assert "sexo: Feminino" in saida and "referência" in saida
+        assert "Modelos (pelo tipo do desfecho no dicionário)" in saida
+        assert "imc ~ idade + sexo: n = 24; desfecho numérico com 2 preditores" in saida
+        assert "2 figura(s) .png" in saida
+        assert "Simulação" in saida
+
+    def test_com_sim_escreve_a_pasta(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("regressao", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        assert "Regressão escrita." in _saida(resultado)
+        pasta = raiz / PASTA_ANALISES / PASTA_REGRESSAO
+        assert (pasta / "regressao.csv").is_file()
+        assert (pasta / "coef_imc_idade_sexo.csv").is_file()
+        assert (pasta / "residuos_imc_idade_sexo.png").is_file()
+        assert (pasta / "manifesto.json").is_file()
+
+    def test_sem_graficos_nao_desenha(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        assert rodar("regressao", RECORD_ID, "--sem-graficos", "--sim").exit_code == 0
+        assert not list((raiz / PASTA_ANALISES / PASTA_REGRESSAO).glob("*.png"))
+
+    def test_sem_a_lista_sai_com_um_e_ensina_a_forma(self, rodar, projeto_com_rodada):
+        projeto_com_rodada()
+        resultado = rodar("regressao", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Regressão" in saida
+        assert "- pas: [idade, imc, sexo]" in saida
+        assert "evento: Sim" in saida
+
+    def test_o_help_mostra_a_forma(self):
+        """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
+        saida = _saida(runner.invoke(app, ["regressao", "--help"]))
+        assert "- pas: [idade]" in saida
+        assert "- obito: [idade, sexo]" in saida
+
+    def test_o_modelo_sem_numeros_aparece_na_simulacao(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "regressao:\n  - sexo: [escolaridade, idade, imc]\n")
+        saida = _saida(rodar("regressao", RECORD_ID))
+        assert "Logística" in saida
+        assert "0 modelos ajustados" in saida or "modelo ajustado" in saida
 
 
 class TestComparacao:

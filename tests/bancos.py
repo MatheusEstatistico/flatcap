@@ -586,6 +586,86 @@ def para_comparar_repetidas() -> pd.DataFrame:
     )
 
 
+def para_regredir() -> pd.DataFrame:
+    """
+    Sessenta casos para os três modelos da regressão, cada coluna com um papel.
+
+    * `pas` — o desfecho numérico: uma soma da idade, do IMC, do sexo e da
+      escolaridade, mais um ruído, com **uma célula vazia** — a linear simples pela
+      idade roda sobre 59 casos;
+    * `idade` — escores normais, sem faltante: o preditor de todo modelo;
+    * `imc` — com **três células vazias**, em outras linhas que a da `pas`: a múltipla
+      com o IMC roda sobre 56 casos, os que responderam tudo;
+    * `sexo` — código `1`/`2`, categórica com rótulo: entra como **uma indicadora**,
+      com o `Feminino` de referência;
+    * `escolaridade` — categórica **em texto**, de três categorias: **duas
+      indicadoras**, com o `Fundamental` de referência — texto não precisa de ordem
+      para virar indicadora;
+    * `obito` — código `0`/`1`, categórica de duas categorias: o desfecho da
+      **logística**, com o `Sim` de evento — a segunda categoria do dicionário;
+    * `servico` — `1` em todas as linhas: **um valor só**, e o modelo não sai.
+
+    Nada é sorteado: os escores normais são os quantis da normal em posições
+    igualmente espaçadas, embaralhados por permutações fixas, como no
+    `para_correlacionar`. O óbito sai de uma probabilidade logística comparada a uma
+    "uniforme" que também é uma permutação fixa — e por isso há óbito nos dois sexos
+    e em toda faixa de idade, sem a separação que tornaria o OR infinito. Os números
+    dos testes são conferidos contra o `lm` e o `glm` do R sobre estes mesmos casos.
+    """
+    import math
+    from statistics import NormalDist
+
+    n = 60
+    normal = NormalDist()
+    escores = [normal.inv_cdf((i + 0.5) / n) for i in range(n)]
+
+    def z(passo: int, i: int) -> float:
+        return escores[(passo * i + 3) % n]
+
+    idade = [round(50 + 12 * z(7, i), 1) for i in range(n)]
+    imc: list[float | None] = [
+        round(26 + 2.4 * (0.5 * z(7, i) + 0.85 * z(11, i)), 2) for i in range(n)
+    ]
+    for posicao in (4, 31, 50):
+        imc[posicao] = None
+    sexo = [1 if (i * 17) % n < 31 else 2 for i in range(n)]
+    niveis = ["Fundamental", "Médio", "Superior"]
+    escolaridade = [niveis[((i * 13) % n) % 3] for i in range(n)]
+
+    pas: list[float | None] = [
+        round(
+            70
+            + 0.6 * idade[i]
+            + 1.1 * (imc[i] if imc[i] is not None else 26)
+            + 5 * (sexo[i] == 2)
+            - 3 * niveis.index(escolaridade[i])
+            + 7 * z(19, i),
+            1,
+        )
+        for i in range(n)
+    ]
+    pas[10] = None
+
+    obito = []
+    for i in range(n):
+        linear = -5.5 + 0.09 * idade[i] + 0.9 * (sexo[i] == 2) + 0.6 * z(23, i)
+        probabilidade = 1 / (1 + math.exp(-linear))
+        uniforme = ((i * 49) % n + 0.5) / n
+        obito.append(1 if uniforme < probabilidade else 0)
+
+    return pd.DataFrame(
+        {
+            "pas": pas,
+            "idade": idade,
+            "imc": imc,
+            "sexo": sexo,
+            "escolaridade": escolaridade,
+            "obito": obito,
+            "servico": [1] * n,
+        }
+    )
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

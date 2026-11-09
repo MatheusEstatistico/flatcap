@@ -28,7 +28,7 @@ from datetime import datetime
 import pytest
 
 from conftest import acrescentar_a_ficha
-from flatcap import analises, associacao, comparacao, correlacao
+from flatcap import analises, associacao, comparacao, correlacao, regressao
 from flatcap.manifesto import (
     ANALISE_ASSOCIACAO,
     ANALISE_COMPARACAO,
@@ -36,6 +36,7 @@ from flatcap.manifesto import (
     ANALISE_CRUZAMENTO,
     ANALISE_DESCRITIVA,
     ANALISE_NORMALIDADE,
+    ANALISE_REGRESSAO,
     ORDEM_PADRAO_DAS_ANALISES,
     ItemDoManifesto,
     Manifesto,
@@ -45,6 +46,8 @@ from flatcap.metodologia import (
     COMPARACOES,
     CORRELACOES,
     DELINEAMENTOS,
+    LINEARES,
+    LOGISTICA,
     ORDEM,
     TITULO,
     montar_metodologia,
@@ -153,6 +156,10 @@ class TestOsNomesSaoOsDasAnalises:
             associacao.TESTE_FISHER,
         }
         assert metodologia._YATES == associacao.TESTE_YATES
+
+    def test_os_modelos_da_regressao(self):
+        assert {*LINEARES, LOGISTICA} == set(regressao.MODELOS)
+        assert LOGISTICA == regressao.LOGISTICA
 
     def test_toda_analise_do_lote_tem_frase(self):
         """
@@ -668,11 +675,80 @@ class TestSemFrase:
         metodologia = montar_metodologia(
             [
                 _manifesto(ANALISE_DESCRITIVA, tipos=("categorica",)),
-                _manifesto("regressao", {"modelos": []}),
+                _manifesto("sobrevivencia", {"curvas": []}),
             ]
         )
         assert metodologia.paragrafos
-        assert metodologia.sem_frase == ("regressao",)
+        assert metodologia.sem_frase == ("sobrevivencia",)
+
+
+# ── A regressão ─────────────────────────────────────────────────────────────
+
+
+def _modelo(nome: str, ajustado: bool = True) -> dict:
+    """Um modelo como a regressão o grava: sem `coeficientes`, ele não saiu."""
+    modelo: dict = {"modelo": nome, "desfecho": "pas"}
+    if ajustado:
+        modelo["coeficientes"] = [{"termo": "(intercepto)"}]
+    return modelo
+
+
+class TestRegressao:
+    def _texto(self, *modelos: dict, graficos: bool = True) -> str:
+        manifesto = _manifesto(
+            ANALISE_REGRESSAO,
+            {"modelos": list(modelos), "testados": len(modelos)},
+            regras={"graficos": graficos, "alfa": 0.05},
+        )
+        return montar_metodologia([manifesto]).texto
+
+    def test_uma_linear_simples(self):
+        texto = self._texto(_modelo("Linear simples"))
+        assert (
+            "Os desfechos foram modelados por regressão linear simples, com intervalos de "
+            "confiança de 95%." in texto
+        )
+        assert (
+            "Nos modelos lineares, a normalidade dos resíduos foi avaliada pelo teste de "
+            "Shapiro-Wilk e pelo gráfico quantil-quantil." in texto
+        )
+        assert "razões de chances" not in texto
+
+    def test_as_duas_lineares_juntas_e_a_logistica_depois(self):
+        texto = self._texto(
+            _modelo("Linear múltipla"), _modelo("Logística"), _modelo("Linear simples")
+        )
+        assert (
+            "Os desfechos foram modelados por regressão linear simples e múltipla e por "
+            "regressão logística, com intervalos de confiança de 95%; os coeficientes da "
+            "regressão logística são apresentados como razões de chances, com intervalos "
+            "de Wald." in texto
+        )
+
+    def test_so_a_logistica_nao_fala_de_residuos(self):
+        texto = self._texto(_modelo("Logística"))
+        assert "por regressão logística, com intervalos" in texto
+        assert "resíduos" not in texto
+
+    def test_sem_graficos_nao_cita_o_q_q(self):
+        texto = self._texto(_modelo("Linear múltipla"), graficos=False)
+        assert "pelo teste de Shapiro-Wilk." in texto
+        assert "quantil-quantil" not in texto
+
+    def test_o_modelo_que_nao_saiu_nao_entra_na_frase(self):
+        texto = self._texto(_modelo("Linear simples"), _modelo("Logística", ajustado=False))
+        assert "regressão logística" not in texto
+        assert "regressão linear simples" in texto
+
+    def test_nenhum_modelo_ajustado_nao_da_frase_nem_aviso(self):
+        manifesto = _manifesto(
+            ANALISE_REGRESSAO,
+            {"modelos": [_modelo("Logística", ajustado=False)], "testados": 0},
+        )
+        metodologia = montar_metodologia([_manifesto(ANALISE_DESCRITIVA, tipos=("numerica",)),
+                                          manifesto])
+        assert "regressão" not in metodologia.texto
+        assert metodologia.sem_frase == ()
 
 
 # ── As rodadas de verdade ───────────────────────────────────────────────────
@@ -689,17 +765,20 @@ class TestComAsRodadasDeVerdade:
         from flatcap.associacao import executar_associacao, preparar_associacao
         from flatcap.comparacao import executar_comparacao, preparar_comparacao
         from flatcap.correlacao import executar_correlacao, preparar_correlacao
+        from flatcap.regressao import executar_regressao, preparar_regressao
 
         raiz = projeto_com_rodada()
         acrescentar_a_ficha(
             raiz,
             "associacao:\n  - [sexo, escolaridade]\n"
             "correlacao:\n  - [idade, imc]\n"
-            "comparacao:\n  - [imc, sexo]\n  - [idade, 40, t]\n",
+            "comparacao:\n  - [imc, sexo]\n  - [idade, 40, t]\n"
+            "regressao:\n  - imc: [idade, sexo]\n",
         )
         executar_associacao(preparar_associacao(raiz, agora=QUANDO))
         executar_correlacao(preparar_correlacao(raiz, com_graficos=False, agora=QUANDO))
         executar_comparacao(preparar_comparacao(raiz, agora=QUANDO))
+        executar_regressao(preparar_regressao(raiz, com_graficos=False, agora=QUANDO))
         pastas = sorted((raiz / PASTA_ANALISES).iterdir())
         return [ler_manifesto(pasta) for pasta in pastas]
 
@@ -722,6 +801,11 @@ class TestComAsRodadasDeVerdade:
         assert COMPARACOES["dois_grupos"][detalhes["dois_grupos"][0]["teste"]] in texto
         # O t da uma amostra foi escrito na ficha; o dos dois grupos, não.
         assert "Exceto quando o teste foi definido de antemão" in texto
+
+        modelos = por_analise[ANALISE_REGRESSAO].itens[0].detalhes["modelos"]
+        assert [modelo["modelo"] for modelo in modelos] == [regressao.LINEAR_MULTIPLA]
+        assert "por regressão linear múltipla, com intervalos de confiança de 95%." in texto
+        assert "pelo teste de Shapiro-Wilk." in texto  # rodada sem gráficos: sem o Q-Q
 
     def test_a_versao_e_a_do_python_que_rodou(self, rodadas):
         texto = montar_metodologia(rodadas).texto

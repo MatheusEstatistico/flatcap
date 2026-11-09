@@ -150,6 +150,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap associacao <id>` | Qui-quadrado ou Fisher, pela regra de Cochran, para os pares da lista `associacao:`. |
 | `flatcap correlacao <id>` | Pearson, Spearman ou Kendall, pelos pressupostos, para os pares da lista `correlacao:`. |
 | `flatcap comparacao <id>` | Testes t e ANOVAs, ou os de postos — Wilcoxon, Mann-Whitney, Kruskal-Wallis e Friedman —, pelos pressupostos: contra uma referência, entre grupos, entre duas medidas pareadas ou entre medidas repetidas. |
+| `flatcap regressao <id>` | Regressão linear simples, linear múltipla ou logística, pelo tipo do desfecho, para os modelos da lista `regressao:`. |
 | `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
 | `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
 | `flatcap template` | Escreve o modelo `.docx` que o relatório usa, para ajustar no Word. |
@@ -351,6 +352,7 @@ bibliotecas saiu cada arquivo. Rodar de novo arquiva a rodada anterior inteira e
 | `associacao` | `associacao:` com os pares — `- [sexo, desfecho]` ou `- desfecho: [sexo, escolaridade]` |
 | `correlacao` | `correlacao:` com os pares — `- [idade, imc]`, ou `- [dor, ansiedade, kendall]` com o método |
 | `comparacao` | `comparacao:` com os itens — `- [imc, 25]` (uma amostra), `- [imc, sexo]` (grupos), `- repetidas: [pas_0, pas_1]` (pareado), `- repetidas: [pas_0, pas_1, pas_2]` |
+| `regressao` | `regressao:` com os modelos — `- pas: [idade, imc, sexo]` (o desfecho antes dos dois-pontos), e `evento: Sim` na linha de baixo quando a logística pedir |
 
 Os pares e os itens se escrevem na ficha, na reunião: trinta variáveis dão 435 pares, e
 testar todos é *p-hacking* feito por máquina. Sem a lista, o comando recusa e diz o que
@@ -368,6 +370,11 @@ comparacao:
   - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
   - repetidas: [pas_0, pas_1]   # as mesmas pessoas, duas vezes: o t pareado ou o Wilcoxon pareado
   - repetidas: [pas_0, pas_1, pas_2]
+regressao:
+  - pas: [idade]                # desfecho numérico, um preditor: a linear simples
+  - pas: [idade, imc, sexo]     # dois ou mais: a linear múltipla
+  - obito: [idade, sexo]        # desfecho categórico de duas categorias: a logística, em OR
+    evento: Sim                 # a categoria que é o evento; sem ela, a segunda do dicionário
 ```
 
 ### `flatcap analisar <id>`

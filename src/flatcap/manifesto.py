@@ -106,6 +106,7 @@ ANALISE_CRUZAMENTO = "cruzamento"
 ANALISE_ASSOCIACAO = "associacao"
 ANALISE_CORRELACAO = "correlacao"
 ANALISE_COMPARACAO = "comparacao"
+ANALISE_REGRESSAO = "regressao"
 
 # A amostragem também escreve um manifesto, e se declara nele — mas não é uma análise
 # de `3. Análises/`. Ela mora em `4. Amostragem/` e tem o relatório dela, e por isso
@@ -142,6 +143,10 @@ ANALISE_AMOSTRAGEM = "amostragem"
 # escrito para nenhuma das outras — e a lista `analises:` da ficha manda de
 # qualquer jeito quando o cliente for ler as comparações primeiro.
 #
+# A regressão vem depois da comparação, no fim: ela junta num modelo os preditores
+# que as análises de antes olharam um a um, e se lê melhor depois delas. É também a
+# ordem de um artigo — a análise bivariada antes da multivariada.
+#
 # Uma análise nova acrescenta uma linha aqui e nada mais. É o mesmo tipo de
 # registro que o `_FORMAS` do `graficos.py`, e existe pelo mesmo motivo: com
 # `if/elif` espalhado, a análise nova aparece no documento em um lugar que
@@ -153,6 +158,7 @@ ORDEM_PADRAO_DAS_ANALISES: tuple[str, ...] = (
     ANALISE_NORMALIDADE,
     ANALISE_CORRELACAO,
     ANALISE_COMPARACAO,
+    ANALISE_REGRESSAO,
 )
 
 # A semente.
@@ -637,6 +643,7 @@ __all__ = [
     "ANALISE_CRUZAMENTO",
     "ANALISE_DESCRITIVA",
     "ANALISE_NORMALIDADE",
+    "ANALISE_REGRESSAO",
     "ARQUIVO_MANIFESTO",
     "FORMATO",
     "ORDEM_PADRAO_DAS_ANALISES",

@@ -7,6 +7,32 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.23.0] — a regressão
+
+### Acrescentado
+- `flatcap regressao <id>`: a regressão **linear simples**, a **linear múltipla** e a
+  **logística**, para os modelos da lista `regressao:` da ficha — `- pas: [idade, imc,
+  sexo]`, o desfecho antes dos dois-pontos. O tipo do desfecho no dicionário escolhe o
+  modelo: numérico, a linear; categórico de duas categorias, a logística, em razão de
+  chances (OR). Os números são os do `lm` e do `glm` do R.
+- As categóricas entre os preditores entram como indicadoras, contra a primeira categoria do
+  dicionário; o evento da logística é a segunda categoria do desfecho, ou a da chave
+  `evento:` ao lado do item.
+- Sai o `regressao.csv`, com uma linha por modelo — o R² e o F, ou os eventos, o AIC e a
+  razão de verossimilhança —, um `coef_<modelo>.csv` por modelo e, nas lineares, as figuras
+  dos resíduos contra os ajustados e o Q-Q dos resíduos.
+- Avisos: os resíduos que o Shapiro-Wilk rejeita, e menos de 10 eventos por coeficiente na
+  logística.
+- A separação na logística — um preditor que separa os eventos dos não eventos — tira o
+  modelo da tabela, com a categoria que separa no motivo. O `glm` do R ajustaria, às vezes
+  sem aviso, com um OR que não quer dizer nada.
+- A regressão entra no `flatcap analisar`, no fim da ordem padrão do relatório, e na
+  metodologia da primeira página.
+
+### Mudado
+- Os gráficos são desenhados a 300 DPI, e não mais a 600: é a resolução de impressão, e os
+  `.png` ficam quatro vezes menores.
+
 ## [1.22.0] — o painel com os finalizados
 
 ### Acrescentado

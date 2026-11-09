@@ -1138,7 +1138,6 @@ class TestManifesto:
     def test_a_ordem_padrao_poe_a_comparacao_depois_da_correlacao(self):
         posicao = ORDEM_PADRAO_DAS_ANALISES.index
         assert posicao(ANALISE_COMPARACAO) == posicao(ANALISE_CORRELACAO) + 1
-        assert ORDEM_PADRAO_DAS_ANALISES[-1] == ANALISE_COMPARACAO
 
 
 # ── Entre dois grupos: o R ──────────────────────────────────────────────────

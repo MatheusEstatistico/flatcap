@@ -55,7 +55,10 @@ from flatcap.ficha import ler as ler_ficha
 from flatcap.manifesto import ARQUIVO_MANIFESTO, ORDEM_PADRAO_DAS_ANALISES
 from flatcap.projeto import PASTA_ANALISES, PASTA_ANTIGAS
 
-TODAS = "analises: [descritiva, normalidade, cruzamento, associacao, correlacao, comparacao]"
+TODAS = (
+    "analises: [descritiva, normalidade, cruzamento, associacao, correlacao, comparacao, "
+    "regressao]"
+)
 
 # Um bloco por análise que tem bloco, com o que o banco do `conftest` aceita.
 BLOCOS = (
@@ -63,6 +66,7 @@ BLOCOS = (
     "associacao:\n  - [sexo, escolaridade]\n"
     "correlacao:\n  - [idade, imc]\n"
     "comparacao:\n  - [imc, 25]\n  - [imc, sexo]\n"
+    "regressao:\n  - imc: [idade, sexo]\n"
 )
 
 DEPOIS = AGORA.replace(hour=16)
@@ -144,7 +148,7 @@ class TestASomaDosComandos:
         self, projeto_para_o_lote, tmp_path
     ):
         """
-        O critério de pronto do módulo: as seis análises, e `3. Análises/` igual byte a
+        O critério de pronto do módulo: as sete análises, e `3. Análises/` igual byte a
         byte — as tabelas, as notas dos `.csv` e os manifestos, com a hora deles.
         """
         lote = projeto_para_o_lote()
@@ -162,7 +166,7 @@ class TestASomaDosComandos:
     def test_com_os_graficos_tambem(self, projeto_para_o_lote, tmp_path):
         """
         Os `.png` também saem iguais byte a byte: o `matplotlib` não carimba data na
-        figura. Só as duas análises de figura pequena — a 600 DPI, a descritiva
+        figura. Só as duas análises de figura pequena — a 300 DPI, a descritiva
         inteira custaria segundos que a suíte já não tem.
         """
         lote = projeto_para_o_lote("analises: [normalidade, correlacao]")
@@ -186,7 +190,15 @@ class TestASomaDosComandos:
         executar_analises(preparar_analises(lote, com_graficos=False, agora=AGORA))
         _um_por_um(
             um_por_um,
-            ("descritiva", "normalidade", "cruzamento", "associacao", "correlacao", "comparacao"),
+            (
+                "descritiva",
+                "normalidade",
+                "cruzamento",
+                "associacao",
+                "correlacao",
+                "comparacao",
+                "regressao",
+            ),
             com_graficos=False,
         )
 
@@ -194,8 +206,8 @@ class TestASomaDosComandos:
         assert linhas[:-1] == linhas_do_historico(um_por_um)
         assert f"`flatcap analisar {RECORD_ID}`" in linhas[-1]
         assert (
-            "6 análises da lista `analises:`, na ordem dela: `descritiva`, `normalidade`, "
-            "`cruzamento`, `associacao`, `correlacao` e `comparacao`" in linhas[-1]
+            "7 análises da lista `analises:`, na ordem dela: `descritiva`, `normalidade`, "
+            "`cruzamento`, `associacao`, `correlacao`, `comparacao` e `regressao`" in linhas[-1]
         )
         assert "Rodado com `--sem-graficos`." in linhas[-1]
 
@@ -388,6 +400,7 @@ class TestNomes:
             ("Descritiva", "escreva `descritiva`, em minúsculas"),
             ("associação", "escreva `associacao`, sem acento"),
             ("Comparação", "escreva `comparacao`, sem acento"),
+            ("Regressão", "escreva `regressao`, sem acento"),
             ("corelacao", "você quis dizer `correlacao`?"),
             ("normal", "você quis dizer `normalidade`?"),
             ("anova", "é um teste, e ele roda dentro da `comparacao`"),
@@ -398,7 +411,7 @@ class TestNomes:
             ("friedman", "é um teste, e ele roda dentro da `comparacao`"),
             ("Qui-quadrado", "é um teste, e ele roda dentro da `associacao`"),
             ("spearman", "é um teste, e ele roda dentro da `correlacao`"),
-            ("regressao", "não é uma análise do FlatCap"),
+            ("sobrevivencia", "não é uma análise do FlatCap"),
         ],
     )
     def test_o_nome_desconhecido_recusa_com_o_conserto(self, projeto_vazio, escrito, conserto):
@@ -465,7 +478,7 @@ class TestPreparar:
         raiz = projeto_para_o_lote()
         plano = preparar_analises(raiz, com_graficos=False, agora=AGORA)
         desenham = {etapa.nome for etapa in plano.etapas if etapa.analise.desenha}
-        assert desenham == {"descritiva", "normalidade", "correlacao"}
+        assert desenham == {"descritiva", "normalidade", "correlacao", "regressao"}
         for etapa in plano.etapas:
             if etapa.analise.desenha:
                 assert etapa.plano.com_graficos is False
@@ -473,7 +486,7 @@ class TestPreparar:
     def test_a_aba_e_a_conferencia_chegam_a_todas(self, projeto_para_o_lote, monkeypatch):
         """
         O que o comando de cada uma receberia: a mesma aba e a mesma conferência do
-        `sha256` para as seis. O espião registra e abre o `.csv` do projeto sem aba.
+        `sha256` para as sete. O espião registra e abre o `.csv` do projeto sem aba.
         """
         raiz = projeto_para_o_lote()
         pedidos = {}
@@ -541,7 +554,7 @@ class TestRecusas:
 
     def test_o_dicionario_ausente_para_na_primeira(self, projeto_para_o_lote, monkeypatch):
         """
-        O que vale para todas para na primeira: seis painéis dizendo que o dicionário
+        O que vale para todas para na primeira: sete painéis dizendo que o dicionário
         não existe não ensinam nada que o primeiro não tenha ensinado.
         """
         from flatcap.descritiva import DicionarioAusenteError

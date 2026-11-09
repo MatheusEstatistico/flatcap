@@ -146,7 +146,7 @@ SERIE = "#4b9b69"
 LARGURA_POLEGADAS = 6.3  # ~16 cm: a largura útil de uma página A4 com margens
 ALTURA_PADRAO = 3.4
 ALTURA_MAXIMA = 8.5
-DPI = 600
+DPI = 300  # a resolução de impressão; 600 dava arquivos quatro vezes maiores sem ganho no papel
 
 _ESPESSURA_BARRA = 0.58  # o resto da faixa é ar, que é o que separa as barras
 _ESPESSURA_COLUNA = 0.78  # a série no tempo é lida como um perfil, e pede menos ar

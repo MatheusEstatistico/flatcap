@@ -23,6 +23,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     correlacao.py  correlaciona pares de numéricas (Pearson, Spearman ou Kendall)
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
+    regressao.py   ajusta modelos: linear simples, linear múltipla e logística
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -826,6 +827,51 @@ não muda nada: o painel de um projeto só já mostra o finalizado.
 resumo, no lugar do vermelho do tema do terminal, que muda de um tema para outro. O
 `#ff0000` dá 5,3:1 contra o fundo preto e é uma das 256 cores do xterm, como o azul e o
 ciano dos status.
+
+## 1.23.0 — a regressão
+
+**`regressao.py`: um desfecho contra vários preditores juntos.** É a primeira análise de
+modelo, e abre uma família: as três primeiras são a **linear simples**, a **linear
+múltipla** e a **logística**. Os modelos vêm da lista `regressao:` da ficha, o desfecho
+antes dos dois-pontos — `- pas: [idade, imc, sexo]` —, e **o tipo do desfecho no
+dicionário escolhe o modelo**: numérico, a linear, simples com um preditor e múltipla com
+dois ou mais; categórico de duas categorias, a logística. Não há método a escrever, como na
+correlação: aqui não há um paramétrico e um de postos para escolher.
+
+**Os números são os do R.** A linear é o `lm`, pela QR, com o `summary.lm` e o `confint`; a
+logística é o `glm(family = binomial)`, pelo mesmo IRLS do `glm.fit` — o ponto de partida,
+as travas do logit em ±30, a convergência na deviance e as 25 iterações —, com o OR, o p do
+z de Wald e o IC de Wald do `confint.default`. Wald, e não o perfilado do `confint`, para o IC
+e o p da mesma linha dizerem a mesma coisa. O `test_regressao.py` confere coeficientes,
+erros-padrão, p, IC, R², F, deviance e AIC contra o R 4.5.0.
+
+**As categóricas entre os preditores** entram como indicadoras contra a primeira categoria
+do dicionário — o `factor` do R com os níveis nessa ordem —, e a tabela traz a linha da
+referência. **O evento da logística** é a segunda categoria do desfecho no dicionário, como
+o `glm`, e a chave `evento:` ao lado do item manda, pelo rótulo ou pelo código. **Os
+faltantes** são por modelo, os casos completos — o `na.omit`.
+
+**Uma barreira que o R não tem: a separação.** Quando um preditor separa os eventos dos não
+eventos, o OR é infinito, e o `glm` do R pode "convergir" com coeficientes enormes, erro-padrão
+de dezenas de milhares e p perto de 1, sem aviso nenhum. Aqui a separação é procurada antes
+do ajuste, pelo programa linear de Konis (2007), com o `linprog` do `scipy`, e o modelo sai
+sem números, com a categoria que separa no motivo.
+
+**Junto dos números:** o Shapiro-Wilk dos resíduos e as figuras de resíduos contra ajustados
+e o Q-Q, nas lineares; os eventos por coeficiente abaixo de 10 (Peduzzi, 1996), na
+logística — os dois como aviso. Sai um
+`regressao.csv` com uma linha por modelo e um `coef_<modelo>.csv` por modelo, e o manifesto
+tem um item de resumo e um item por modelo, para as figuras de cada modelo ficarem logo depois
+da tabela dele no documento. A metodologia ganha a frase da regressão.
+
+**`normalidade.pontos_do_qq` ficou pública**, com o apelido privado: o Q-Q dos resíduos é o
+mesmo Q-Q da normalidade. A regressão entra no fim da `ORDEM_PADRAO_DAS_ANALISES`, depois da
+comparação, e no lote.
+
+**Os gráficos passam a 300 DPI** (`graficos.DPI`), de 600: é a resolução de impressão, e os
+`.png` ficam quatro vezes menores — no disco, no `.docx` e no tempo da suíte.
+
+O `relatorio.py` e o `documento.py` não mudaram uma linha.
 """
 
-__version__ = "1.22.0"
+__version__ = "1.23.0"
