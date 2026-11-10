@@ -3429,14 +3429,14 @@ def comparacao(
     uma tabela por delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
 
     Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
-    variável e a de grupo; ou as medidas nos mesmos casos, com a marca — duas são o
-    pareado:
+    variável e a de grupo; ou as medidas nos mesmos casos, com a marca — `pareado:` para
+    duas, `repetidas:` para três ou mais:
 
         comparacao:
           - \\[imc, 25]
           - \\[pas, 120, t]
           - \\[imc, sexo]
-          - repetidas: \\[pas_0, pas_1]
+          - pareado: \\[pas_0, pas_1]
           - repetidas: \\[pas_0, pas_1, pas_2]
 
     O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra, e

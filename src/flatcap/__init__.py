@@ -872,6 +872,23 @@ comparação, e no lote.
 `.png` ficam quatro vezes menores — no disco, no `.docx` e no tempo da suíte.
 
 O `relatorio.py` e o `documento.py` não mudaram uma linha.
+
+## 1.24.0 — a marca do pareado
+
+**O pareado ganha a marca dele: `- pareado: [pas_0, pas_1]`.** Desde a 1.20.0 o pareado era
+o item `repetidas:` com duas medidas, a forma que a 1.12.0 tinha reservado para ele. Mas
+`repetidas:` diz "medidas repetidas", e quem lia a ficha esperava a ANOVA de medidas
+repetidas onde saía o t pareado. Agora a marca diz o delineamento: `pareado:` com duas
+medidas, `repetidas:` com três ou mais.
+
+**A marca e o número de medidas precisam concordar.** A que não concorda recusa e escreve o
+item certo: o `- repetidas: [a, b]` de uma ficha da 1.20.0 até a 1.23.0 ensina
+`- pareado: [a, b]`, e o `- pareado: [a, b, c]`, `- repetidas: [a, b, c]`. Aceitar as duas
+formas em silêncio deixaria a ficha antiga dizendo uma coisa e o relatório outra. As recusas
+que sugerem o pareado — duas numéricas entre colchetes, `[pas_0, pas_1]` — passam a
+escrever `pareado:`.
+
+Nada muda nos testes, nas tabelas nem no manifesto, além do texto da regra do pareado.
 """
 
-__version__ = "1.23.0"
+__version__ = "1.24.0"
