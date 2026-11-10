@@ -7,6 +7,14 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.0] — a marca do pareado
+
+### Mudado
+- O pareado na comparação ganha a marca dele: `- pareado: [antes, depois]`. A
+  `- repetidas: [...]` fica para três medidas ou mais. A marca que não concorda com o
+  número de medidas recusa e escreve o item certo — um `- repetidas: [a, b]` de uma ficha
+  antiga ensina `- pareado: [a, b]`.
+
 ## [1.23.0] — a regressão
 
 ### Acrescentado

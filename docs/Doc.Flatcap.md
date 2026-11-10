@@ -405,7 +405,7 @@ comparacao:
   - [imc, 25]                   # uma amostra, contra a referência
   - [imc, sexo]                 # dois grupos: o t de Welch ou, sem a normal, o Mann-Whitney
   - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
-  - repetidas: [pas_0, pas_1]                # as mesmas pessoas, duas vezes: o pareado
+  - pareado: [pas_0, pas_1]                  # as mesmas pessoas, duas vezes: o pareado
   - repetidas: [pas_0, pas_1, pas_2]         # a mesma medida, três vezes
     metodo: anova
 ```
@@ -744,7 +744,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*877 linhas.*
+*894 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1617,6 +1617,23 @@ comparação, e no lote.
 `.png` ficam quatro vezes menores — no disco, no `.docx` e no tempo da suíte.
 
 O `relatorio.py` e o `documento.py` não mudaram uma linha.
+
+### 1.24.0 — a marca do pareado
+
+**O pareado ganha a marca dele: `- pareado: [pas_0, pas_1]`.** Desde a 1.20.0 o pareado era
+o item `repetidas:` com duas medidas, a forma que a 1.12.0 tinha reservado para ele. Mas
+`repetidas:` diz "medidas repetidas", e quem lia a ficha esperava a ANOVA de medidas
+repetidas onde saía o t pareado. Agora a marca diz o delineamento: `pareado:` com duas
+medidas, `repetidas:` com três ou mais.
+
+**A marca e o número de medidas precisam concordar.** A que não concorda recusa e escreve o
+item certo: o `- repetidas: [a, b]` de uma ficha da 1.20.0 até a 1.23.0 ensina
+`- pareado: [a, b]`, e o `- pareado: [a, b, c]`, `- repetidas: [a, b, c]`. Aceitar as duas
+formas em silêncio deixaria a ficha antiga dizendo uma coisa e o relatório outra. As recusas
+que sugerem o pareado — duas numéricas entre colchetes, `[pas_0, pas_1]` — passam a
+escrever `pareado:`.
+
+Nada muda nos testes, nas tabelas nem no manifesto, além do texto da regra do pareado.
 
 ## `flatcap/config.py`
 
@@ -11672,7 +11689,7 @@ por variável —, e um `nan` que chegasse viraria um t `nan` sem aviso nenhum.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*4487 linhas.*
+*4510 linhas.*
 
 A comparação — uma variável contra um valor de referência, entre os grupos de outra,
 ou entre medidas feitas nos mesmos casos, duas (o pareado) ou mais (as repetidas) —, com
@@ -11752,7 +11769,7 @@ A forma do item e os tipos das variáveis dizem qual comparação é:
     [imc, 25]                  numérica, e um número       uma amostra
     [imc, sexo]                numérica, categórica        dois grupos
     [imc, escolaridade]        numérica, categórica        três grupos ou mais
-    repetidas: [pas_0, pas_1]          duas numéricas              pareado
+    pareado: [pas_0, pas_1]            duas numéricas              pareado
     repetidas: [pas_0, pas_1, pas_2]   três numéricas ou mais      medidas repetidas
 
 **O número de grupos sai do banco, e não do dicionário.** Os grupos são os rótulos
@@ -11769,11 +11786,11 @@ faltando sai inteiro — como no `complete.cases` do `t.test` pareado e no `lm` 
 
 **As medidas nos mesmos casos têm a marca na ficha.** Duas numéricas lado a lado,
 `[pas_0, pas_1]`, seriam um pareado — ou `[idade, imc]` escrito por engano,
-comparando médias de unidades diferentes sem erro nenhum. A marca `repetidas:` diz que
-são a mesma medida, feita mais de uma vez nas mesmas pessoas: com duas medidas — antes
-e depois, ou dois métodos na mesma pessoa —, o item é o **pareado**; com três ou mais,
-as **medidas repetidas**. O número de medidas escolhe o delineamento como o número de
-grupos escolhe entre a tabela dos dois e a dos k, só que aqui ele está escrito na ficha.
+comparando médias de unidades diferentes sem erro nenhum. A marca diz que são a mesma
+medida, feita mais de uma vez nas mesmas pessoas, e diz qual delineamento: `pareado:`,
+com duas medidas — antes e depois, ou dois métodos na mesma pessoa —, é o **pareado**;
+`repetidas:`, com três ou mais, as **medidas repetidas**. A marca e o número de medidas
+precisam concordar, e a que não concorda recusa ensinando a outra.
 
 ### A regra dos pressupostos
 
@@ -11874,7 +11891,7 @@ medianas ao lado. Uma tabela só de paramétricos sai com os cabeçalhos de ante
       - [imc, sexo]              # o IMC difere entre os sexos?
       - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
-      - repetidas: [pas_0, pas_1]          # a PAS mudou entre as duas medidas? o pareado
+      - pareado: [pas_0, pas_1]            # a PAS mudou entre as duas medidas? o pareado
       - repetidas: [pas_0, pas_1, pas_2]   # e entre as três? as medidas repetidas
       - repetidas: [pad_0, pad_1, pad_2]
         metodo: anova                      # a ANOVA, mesmo que a regra discorde
@@ -11925,7 +11942,7 @@ escrito nas notas e no terminal.
 > ordem põe lado a lado os de grupos independentes e os de medidas nos mesmos casos:
 > dois grupos e k grupos, duas medidas e k medidas.
 
-### `CHAVE_REPETIDAS`
+### `CHAVE_PAREADO`
 
 *linha 351*
 
@@ -11935,11 +11952,11 @@ escrito nas notas e no terminal.
 >     - repetidas: [pas_0, pas_1, pas_2]
 >       metodo: anova
 >
-> A marca é a mesma no pareado, que é o item com duas medidas.
+> A marca diz o delineamento: `pareado:` com duas medidas, `repetidas:` com três ou mais.
 
 ### `MEDIDAS_DO_PAREADO`
 
-*linha 361*
+*linha 363*
 
 > Quantas medidas o item tem diz o delineamento: duas são o pareado — o t pareado ou o
 > Wilcoxon pareado —, e três ou mais, as medidas repetidas — a ANOVA ou o Friedman, que
@@ -11947,14 +11964,14 @@ escrito nas notas e no terminal.
 
 ### `GRUPOS`
 
-*linha 367*
+*linha 369*
 
 > A forma do item entre grupos, antes de o banco dizer quantos são. A `Pergunta` sai
 > da ficha com ela, e a `VariavelComparada` sai do banco com o delineamento de fato.
 
 ### `REGRA`
 
-*linha 385*
+*linha 387*
 
 > A regra: para cada delineamento, o teste quando a normal se sustenta e o teste
 > quando não — o de postos. Entre grupos o paramétrico é o de Welch — o padrão do
@@ -11962,7 +11979,7 @@ escrito nas notas e no terminal.
 
 ### `_CALCULO`
 
-*linha 396*
+*linha 398*
 
 > O que já tem aritmética. Um teste da `REGRA` que não está aqui é escolhido pela
 > regra e sai sem teste, com o motivo. O t de Student e a ANOVA clássica estão aqui
@@ -11970,14 +11987,14 @@ escrito nas notas e no terminal.
 
 ### `TESTES_DE_POSTOS`
 
-*linha 414*
+*linha 416*
 
 > Os testes de postos: os que dispensam a normal, e cujas linhas resumem a variável
 > pela mediana e pelos quartis, e não pela média e pelo desvio.
 
 ### `METODOS`
 
-*linha 420*
+*linha 422*
 
 > Como cada método se escreve no item — o terceiro nome —, e o teste que ele quer
 > dizer em cada delineamento. Sem acento, minúsculo e sem hífen, que é como `_chave`
@@ -11995,14 +12012,14 @@ escrito nas notas e no terminal.
 
 ### `_POR_EXTENSO`
 
-*linha 446*
+*linha 448*
 
 > Os nomes por extenso, que valem na leitura e não se ensinam, e o nome curto que as
 > mensagens ensinam no lugar de cada um.
 
 ### `PREVISTOS`
 
-*linha 450*
+*linha 452*
 
 > Os nomes que a regra ainda não conhece em delineamento nenhum desta versão. Escritos
 > na ficha, recusam com a frase certa, em vez de "não é um método". Vazio nesta versão:
@@ -12010,7 +12027,7 @@ escrito nas notas e no terminal.
 
 ### `_EQUIVALENTES`
 
-*linha 455*
+*linha 457*
 
 > O método de um número de grupos escrito para outro — ou de um número de medidas: o
 > que se escreve no lugar dele, e por quê. Entre grupos, o banco é que diz quantos
@@ -12018,12 +12035,12 @@ escrito nas notas e no terminal.
 
 ### `_SINONIMOS`
 
-*linha 497*
+*linha 499*
 
 > Outras grafias do mesmo método. `welsh` é a troca mais comum de letra no nome do
 > Welch, e ninguém a escreve querendo outra coisa.
 
-*No módulo, linha 518:*
+*No módulo, linha 520:*
 
 > O `signed rank` fica de fora de propósito: o `wilcoxon` entre dois grupos é o
 > Mann-Whitney, e um sinônimo dele levaria quem escreveu o posto sinalizado — o teste
@@ -12032,7 +12049,7 @@ escrito nas notas e no terminal.
 
 ### `_VARIANCIAS_IGUAIS`
 
-*linha 523*
+*linha 525*
 
 > Os testes que supõem a mesma variância nos grupos. Quando um deles roda, o aviso diz
 > quanto o maior desvio padrão passa do menor — acima de duas vezes, a regra de bolso
@@ -12040,7 +12057,7 @@ escrito nas notas e no terminal.
 
 ### `CASAS_IC`
 
-*linha 531*
+*linha 533*
 
 > O intervalo sai com casas fixas: ele não existe na descritiva, e uma célula com
 > `25,8 a 27,02` — um limite com uma casa, outro com duas — não se lê de relance. A
@@ -12050,7 +12067,7 @@ escrito nas notas e no terminal.
 
 ### `COLUNA_DA_MEDIA`
 
-*linha 538*
+*linha 540*
 
 > O cabeçalho da coluna do resumo, conforme o que ela tem: a média e o desvio nas
 > linhas do t e da ANOVA, a mediana e os quartis nas dos testes de postos — e as duas
@@ -12059,14 +12076,14 @@ escrito nas notas e no terminal.
 
 ### `COLUNA_DO_IC_DA_MEDIA`
 
-*linha 546*
+*linha 548*
 
 > O cabeçalho do intervalo da uma amostra, pela mesma regra: o da média no t, o da
 > pseudomediana no Wilcoxon, e só o nível quando a tabela tem os dois.
 
 ### `COLUNA_DA_DIFERENCA`
 
-*linha 552*
+*linha 554*
 
 > O cabeçalho da diferença entre dois grupos, pela mesma regra: o de sempre no t, a de
 > locação no Mann-Whitney — que não é a diferença das medianas, e que a célula ao lado
@@ -12074,7 +12091,7 @@ escrito nas notas e no terminal.
 
 ### `COLUNA_DA_PSEUDOMEDIANA_DAS_DIFERENCAS`
 
-*linha 559*
+*linha 561*
 
 > E a do pareado: a diferença média no t pareado, com o cabeçalho de sempre; a
 > pseudomediana das diferenças no Wilcoxon pareado, que não é a diferença das medianas
@@ -12082,28 +12099,28 @@ escrito nas notas e no terminal.
 
 ### `CASAS_REFERENCIA`
 
-*linha 565*
+*linha 567*
 
 > A referência sai como foi escrita, sem arredondar para duas casas: um `0,125` da
 > ficha impresso `0,12` seria uma hipótese que ninguém testou.
 
 ### `_PARECE_NUMERO`
 
-*linha 571*
+*linha 573*
 
 > Um texto que quer ser número e não é um que se leia sem ambiguidade: `"2.500,00"`.
 > Só algarismos, pontos, vírgulas e espaços — `pas_0` tem algarismo e é um nome.
 
 ### `EXEMPLO_DA_FICHA`
 
-*linha 575*
+*linha 577*
 
 > O exemplo que as mensagens escrevem. Um lugar só, para a recusa e o `--help` nunca
 > ensinarem duas formas diferentes de escrever a mesma lista.
 
 ### `class ComparacaoError(RuntimeError)`
 
-*linha 585*
+*linha 587*
 
 Falha ao gerar a comparação, já traduzida para o usuário.
 
@@ -12113,19 +12130,19 @@ verdade e deve subir com o traceback inteiro.
 
 ### `class DicionarioAusenteError(ComparacaoError)`
 
-*linha 595*
+*linha 597*
 
 O projeto não tem `dicionario.csv`. Não há o que obedecer.
 
 ### `class DicionarioDesatualizadoError(ComparacaoError)`
 
-*linha 601*
+*linha 603*
 
 O banco tem colunas que o dicionário desconhece.
 
 ### `class VariavelIncompativelError(ComparacaoError)`
 
-*linha 607*
+*linha 609*
 
 O dicionário promete `numerica` e a coluna chegou como texto, ou declara uma
 variável que o banco não tem.
@@ -12135,13 +12152,13 @@ como na correlação.
 
 ### `class SemItensError(ComparacaoError)`
 
-*linha 617*
+*linha 619*
 
 A ficha não diz o que comparar.
 
 ### `class ItemInvalidoError(ComparacaoError)`
 
-*linha 623*
+*linha 625*
 
 A lista `comparacao:` da ficha tem item que não serve.
 
@@ -12155,7 +12172,7 @@ uma variável de grupo com mais grupos do que esta versão compara. A mensagem l
 
 ### `class Pedido`
 
-*linha 639*
+*linha 641*
 
 Um item como a ficha o escreve: a variável e, conforme a forma, a referência ou a
 variável de grupo — e, quando houver, o método.
@@ -12169,22 +12186,22 @@ variáveis, na ordem da ficha, e `variavel` é a primeira delas.
 
 #### `def escrito(self)`
 
-*linha 659*
+*linha 661*
 
-O item de volta na forma da ficha, para as mensagens. O de medidas repetidas com
-método sai na forma de uma linha só, `{repetidas: [...], metodo: anova}`, que o
-YAML lê igual à de duas linhas.
+O item de volta na forma da ficha, para as mensagens. O de medidas nos mesmos
+casos com método sai na forma de uma linha só, `{repetidas: [...], metodo:
+anova}`, que o YAML lê igual à de duas linhas.
 
 #### `def chave(self)`
 
-*linha 675*
+*linha 677*
 
 O que faz dois itens serem a mesma comparação: o método não entra — o mesmo
 item com outro método é a mesma pergunta feita duas vezes.
 
 ### `class Pergunta`
 
-*linha 688*
+*linha 690*
 
 Um item da ficha, já conferido contra o dicionário. É a pergunta da reunião — "a
 média desta variável difere desta referência?", "difere entre estes grupos?" —
@@ -12197,11 +12214,11 @@ nome escrito na ficha, como no `Pedido`. No pareado e nas medidas repetidas,
 
 #### `def linhas(self)`
 
-*linha 708*
+*linha 710*
 
 ### `class Normal`
 
-*linha 715*
+*linha 717*
 
 O Shapiro-Wilk do vetor do delineamento.
 
@@ -12211,22 +12228,22 @@ houve um.
 
 #### `def testada(self)`
 
-*linha 730*
+*linha 732*
 
 #### `def rejeita(self)`
 
-*linha 734*
+*linha 736*
 
 ### `class Grupo`
 
-*linha 739*
+*linha 741*
 
 Um grupo de uma comparação entre grupos: o rótulo, quantos casos, a média e o
 desvio, e o Shapiro-Wilk dos valores dele.
 
 ### `class Escolha`
 
-*linha 752*
+*linha 754*
 
 Qual teste rodou, e de onde ele veio.
 
@@ -12237,11 +12254,11 @@ a regra escolheu um que ainda não tem aritmética, e a ficha não mandou outro.
 
 #### `def contra_a_regra(self)`
 
-*linha 768*
+*linha 770*
 
 ### `class VariavelComparada`
 
-*linha 773*
+*linha 775*
 
 Uma pergunta respondida. Na uma amostra é uma linha da tabela; entre grupos, um
 bloco — a linha da comparação e uma linha por grupo.
@@ -12257,44 +12274,44 @@ pareado, `resumo` e `normal` são os **das diferenças** — o vetor que o teste
 resumo de cada medida está em cada `Grupo`, como nas medidas repetidas, e
 `distintos` conta os valores distintos das diferenças.
 
-*linha 807*
+*linha 809*
 
 > As casas decimais da variável, as do `resumo_<variável>.csv` da descritiva: as
 > duas de sempre, ou mais numa variável de escala pequena. Ver `_casas_da_coluna`.
 
 #### `def faltantes(self)`
 
-*linha 812*
+*linha 814*
 
 #### `def testada(self)`
 
-*linha 816*
+*linha 818*
 
 #### `def entre_grupos(self)`
 
-*linha 820*
+*linha 822*
 
 #### `def pareado(self)`
 
-*linha 824*
+*linha 826*
 
 #### `def repetidas(self)`
 
-*linha 828*
+*linha 830*
 
 #### `def metodo(self)`
 
-*linha 832*
+*linha 834*
 
 #### `def colunas(self)`
 
-*linha 836*
+*linha 838*
 
 As colunas do banco que esta comparação usou.
 
 #### `def cabeca(self)`
 
-*linha 845*
+*linha 847*
 
 Como a comparação se chama nas frases: `IMC (kg/m²) por Sexo`; no pareado e nas
 medidas repetidas, os rótulos delas — `PAS basal e PAS 30 dias`,
@@ -12302,21 +12319,21 @@ medidas repetidas, os rótulos delas — `PAS basal e PAS 30 dias`,
 
 #### `def n_na_frase(self)`
 
-*linha 858*
+*linha 860*
 
 `n = 57`, e entre grupos `n = 57 (29 em Feminino e 28 em Masculino)`. No pareado e
 nas medidas repetidas o n é um só — os casos com todas as medidas.
 
 #### `def celula_do_teste(self)`
 
-*linha 873*
+*linha 875*
 
 O que vai para a coluna `teste`: o nome do teste, ou o motivo no lugar dele —
 como a coluna `método` da correlação e a `teste` da associação.
 
 #### `def justificativa(self)`
 
-*linha 883*
+*linha 885*
 
 A frase que explica a comparação — a nota do `.csv` e a linha do terminal.
 
@@ -12325,7 +12342,7 @@ com as mesmas casas.
 
 #### `def como_detalhe(self)`
 
-*linha 929*
+*linha 931*
 
 Os números desta comparação, para o manifesto — o que responde "de onde saiu
 esse teste, e esse p?" sem reabrir o banco.
@@ -12334,7 +12351,7 @@ O intervalo vai em `ic_95` quando é o de 95% que a tabela imprime; quando o
 teste de postos não o alcança, o de nível menor que o R devolve vai em
 `ic_alcancavel`, com o nível — fora da tabela, e não perdido.
 
-*linha 978*
+*linha 980*
 
 > O resumo e o Shapiro-Wilk das diferenças — o vetor do teste — vão juntos,
 > como os de uma medida: a média delas é a estimativa do t pareado, e a
@@ -12342,7 +12359,7 @@ teste de postos não o alcança, o de nível menor que o R devolve vai em
 
 ### `def _casas_da_coluna(*colunas)`
 
-*linha 1052*
+*linha 1054*
 
 As casas decimais da variável, decididas como a descritiva as decide: pela coluna
 inteira, e não pelos casos da comparação — a média da uma amostra sai, letra por
@@ -12352,7 +12369,7 @@ misturar — e a diferença do pareado sai com elas também.
 
 ### `def _resumo_no_manifesto(resumo)`
 
-*linha 1068*
+*linha 1070*
 
 As duas formas do resumo, sempre — a média e o desvio, a mediana e os quartis: a
 tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
@@ -12360,13 +12377,13 @@ um grupo, que a descritiva não tem, não morar só na célula.
 
 ### `class ForaDaComparacao`
 
-*linha 1082*
+*linha 1084*
 
 Uma variável do dicionário que não está em item nenhum, e por quê.
 
 ### `class Comparacao`
 
-*linha 1093*
+*linha 1095*
 
 A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
@@ -12375,43 +12392,43 @@ A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
 #### `def raiz(self)`
 
-*linha 1110*
+*linha 1112*
 
 #### `def linhas(self)`
 
-*linha 1114*
+*linha 1116*
 
 #### `def colunas_usadas(self)`
 
-*linha 1118*
+*linha 1120*
 
 #### `def testadas(self)`
 
-*linha 1127*
+*linha 1129*
 
 #### `def sem_teste(self)`
 
-*linha 1131*
+*linha 1133*
 
 #### `def pela_ficha(self)`
 
-*linha 1135*
+*linha 1137*
 
 #### `def quantos(self, metodo)`
 
-*linha 1138*
+*linha 1140*
 
 #### `def do_delineamento(self, delineamento)`
 
-*linha 1141*
+*linha 1143*
 
 #### `def tabela_de(self, delineamento)`
 
-*linha 1144*
+*linha 1146*
 
 ### `class PlanoComparacao`
 
-*linha 1149*
+*linha 1151*
 
 Tudo o que a `comparacao` faria, decidido e ainda não escrito.
 
@@ -12420,19 +12437,19 @@ a execução ninguém altera um caminho em trânsito.
 
 #### `def raiz(self)`
 
-*linha 1164*
+*linha 1166*
 
 #### `def tabelas(self)`
 
-*linha 1168*
+*linha 1170*
 
 #### `def arquivos(self)`
 
-*linha 1172*
+*linha 1174*
 
 ### `class ResultadoComparacao`
 
-*linha 1177*
+*linha 1179*
 
 O que a execução de fato escreveu.
 
@@ -12440,7 +12457,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_comparacao(raiz, aba, conferir, agora)`
 
-*linha 1190*
+*linha 1192*
 
 Lê os itens da ficha, abre o banco, compara cada item e monta o plano. Não
 escreve nada.
@@ -12464,14 +12481,14 @@ Raises:
 
 ### `def executar_comparacao(plano)`
 
-*linha 1243*
+*linha 1245*
 
 Escreve o plano no disco. Não decide mais nada: quem escreve, na ordem, e desfaz
 o que escreveu se falhar no meio, é o `descritiva.escrever_rodada`.
 
 ### `def comparar(banco, ficha, linhas_do_dicionario, pedidos, quando)`
 
-*linha 1261*
+*linha 1263*
 
 Compara cada item pedido, obedecendo ao dicionário. Função pura.
 
@@ -12494,7 +12511,7 @@ Raises:
 
     SemItensError, ItemInvalidoError, VariavelIncompativelError
 
-*linha 1298*
+*linha 1300*
 
 > Só as variáveis da lista vão para a recusa: a conferência é a da Fase 5, e o
 > escopo é deste comando.
@@ -12503,7 +12520,7 @@ Raises:
 
 ### `def _comparar_uma_amostra(quadro, pergunta, total)`
 
-*linha 1357*
+*linha 1359*
 
 Mede o pressuposto, aplica a regra (ou obedece à ficha) e calcula.
 
@@ -12518,11 +12535,11 @@ um valor só, e valores que não variam. Valem para o Wilcoxon também, que o R
 calcularia com um valor só, ou com todos iguais: um valor não é uma amostra, e uma
 variável que não varia não tem o que comparar.
 
-- *linha 1376* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
+- *linha 1378* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
 
 ### `def _impedimento(valores, validos, distintos)`
 
-*linha 1431*
+*linha 1433*
 
 O motivo de não haver teste nenhum, ou vazio.
 
@@ -12531,13 +12548,13 @@ terceira usa o critério do R, e não "todos iguais": ver `hipoteses.sem_variaca
 
 ### `def _normal(variavel, valores)`
 
-*linha 1449*
+*linha 1451*
 
 O Shapiro-Wilk da normalidade, pela mesma função, sobre os valores preenchidos.
 
 ### `def _motivo_sem_teste(normal, validos)`
 
-*linha 1457*
+*linha 1459*
 
 O motivo curto, para a célula da coluna `teste`, quando a regra escolheu um teste
 que ainda não existe. A frase inteira, com o p do Shapiro-Wilk, vai para as notas.
@@ -12548,7 +12565,7 @@ para repetir o que a tabela de normalidade do mesmo documento já imprime.
 
 ### `def _avisos_da_linha(nome, pergunta, escolha, normal, validos, distintos)`
 
-*linha 1471*
+*linha 1473*
 
 O que a escolha precisa levar junto para o terminal e para o manifesto.
 
@@ -12567,15 +12584,15 @@ Cinco casos, e cada um é um engano conhecido ou uma decisão que precisa de ras
 
 ### `def _aviso_contra_a_regra(nome, escolha, faltou)`
 
-*linha 1526*
+*linha 1528*
 
 ### `def _aviso_de_discreta(nome, distintos, validos)`
 
-*linha 1535*
+*linha 1537*
 
 ### `def _avisos_do_resultado(nome, resultado, tamanhos, valores)`
 
-*linha 1544*
+*linha 1546*
 
 O que o Wilcoxon — o de uma amostra e o pareado — e o Mann-Whitney devolvem e
 precisa de rastro — os três casos são de amostra pequena, ou de amostra sem
@@ -12598,7 +12615,7 @@ variação, e nenhum deles é erro:
 
 ### `def _menor_p_exato(metodo, tamanhos)`
 
-*linha 1616*
+*linha 1618*
 
 O menor p bilateral que o caminho exato dá: as duas caudas mais extremas da
 distribuição, com uma combinação cada — 2/2ⁿ nos dois Wilcoxon, 2/C(n₁ + n₂, n₁) no
@@ -12608,7 +12625,7 @@ Mann-Whitney —, e nunca acima de 1.
 
 ### `def _comparar_grupos(quadro, pergunta, total)`
 
-*linha 1631*
+*linha 1633*
 
 Separa os grupos, mede o pressuposto em cada um, aplica a regra (ou obedece à
 ficha) e calcula. Devolve a comparação, ou `None` e a frase do que este banco não
@@ -12625,11 +12642,11 @@ Três barreiras vêm antes da regra — nenhum caso com as duas respostas, um gr
 só, um valor só em todas as linhas —, e as do teste escolhido vêm depois dela:
 cada teste tem o seu mínimo no R.
 
-- *linha 1655* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
+- *linha 1657* — `if serie is None or coluna_do_grupo is None:` — pragma: no cover - a recusa já barrou
 
 ### `def _delineamento_dos_grupos(quantos, de_grupo)`
 
-*linha 1758*
+*linha 1760*
 
 O delineamento pelo número de grupos com resposta: dois, ou três ou mais.
 
@@ -12639,14 +12656,14 @@ outros casos: a pergunta foi feita sobre aqueles grupos, e o banco não os tem.
 
 ### `def _impedimento_dos_grupos(validos, quantos, distintos)`
 
-*linha 1774*
+*linha 1776*
 
 O motivo de não haver teste nenhum entre grupos, ou vazio. Vale para qualquer
 teste, escrito na ficha ou não.
 
 ### `def _impedimento_do_teste(metodo, amostras, grupos)`
 
-*linha 1788*
+*linha 1790*
 
 O motivo de o teste escolhido não rodar, ou vazio — as barreiras do R para ele,
 que mudam de teste para teste.
@@ -12670,11 +12687,11 @@ por zero.
 
 ### `def _sem_variacao_nos_grupos(amostras)`
 
-*linha 1861*
+*linha 1863*
 
 ### `def _normal_do_grupo(variavel, rotulo, valores, onde)`
 
-*linha 1867*
+*linha 1869*
 
 O Shapiro-Wilk de um grupo — ou de uma medida, nas repetidas —, pela mesma função
 da normalidade.
@@ -12686,7 +12703,7 @@ completos.
 
 ### `def _motivo_sem_teste_dos_grupos(escolha, grupos, delineamento)`
 
-*linha 1887*
+*linha 1889*
 
 O motivo curto, para a célula, quando a regra escolheu um teste que ainda não
 existe. Sem o p, pela mesma razão da uma amostra; a frase inteira vai para as
@@ -12694,7 +12711,7 @@ notas.
 
 ### `def _avisos_dos_grupos(nome, pergunta, escolha, grupos, delineamento, validos, distintos)`
 
-*linha 1905*
+*linha 1907*
 
 Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
@@ -12712,7 +12729,7 @@ Os avisos da uma amostra, na forma dos grupos, e um a mais.
 
 ### `def _aviso_de_variancias(nome, metodo, grupos, delineamento)`
 
-*linha 1974*
+*linha 1976*
 
 O maior desvio padrão contra o menor, quando o teste supõe variâncias iguais e
 eles passam de `RAZAO_DE_DESVIOS` — ou quando um grupo não varia.
@@ -12722,7 +12739,7 @@ Só os grupos com dois valores ou mais: o desvio de um valor só sai zero no
 
 ### `def _metodo_sugerido(delineamento)`
 
-*linha 2011*
+*linha 2013*
 
 O método para o aviso ensinar a escrever: o paramétrico da regra, quando ele
 existe, e senão o primeiro paramétrico que existe — o nome como se escreve e o
@@ -12730,7 +12747,7 @@ teste.
 
 ### `def _problema_do_metodo(chave, teste, delineamento, de_grupo, quantos)`
 
-*linha 2029*
+*linha 2031*
 
 O método escrito que não serve para o número de grupos que o banco trouxe, ou
 vazio. A ficha é conferida antes de abrir o banco, mas só o banco diz quantos
@@ -12740,7 +12757,7 @@ grupos há — e um método de dois grupos numa variável de três é recusado a
 
 ### `def _comparar_pareado(quadro, pergunta, total)`
 
-*linha 2055*
+*linha 2057*
 
 As mesmas pessoas, medidas duas vezes — antes e depois, ou por dois métodos —: as
 diferenças caso a caso, o pressuposto nelas, a regra (ou a ficha) e o teste.
@@ -12762,11 +12779,11 @@ esse resto e rejeita: a normalidade de diferenças que não variam não se verif
 regra fica com o Wilcoxon pareado, que olha o sinal de cada uma. O t só chega na
 barreira dele escrito no item, e o aviso ensina a trocar.
 
-- *linha 2081* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
+- *linha 2083* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
 
 ### `_MEDIDAS_IGUAIS`
 
-*linha 2179*
+*linha 2181*
 
 > A barreira das duas medidas iguais em todos os casos, que o aviso completa; a
 > normalidade que não se verifica quando cada caso muda o mesmo tanto; e o que se confere
@@ -12774,7 +12791,7 @@ barreira dele escrito no item, e o aviso ensina a trocar.
 
 ### `def _impedimento_do_pareado(validos, diferencas)`
 
-*linha 2187*
+*linha 2189*
 
 O motivo de não haver teste nenhum no pareado, ou vazio — vale para os dois testes,
 escritos na ficha ou não. As duas primeiras são as da uma amostra, contadas em
@@ -12782,7 +12799,7 @@ casos; a terceira é a do Wilcoxon sem diferença nenhuma, que o t também não 
 
 ### `def _avisos_do_pareado(nome, pergunta, escolha, normal, validos, distintos, constantes)`
 
-*linha 2202*
+*linha 2204*
 
 Os avisos da uma amostra, na forma do pareado — o vetor são as diferenças:
 
@@ -12805,7 +12822,7 @@ Os avisos da uma amostra, na forma do pareado — o vetor são as diferenças:
 
 ### `def _comparar_repetidas(quadro, pergunta, total)`
 
-*linha 2277*
+*linha 2279*
 
 As mesmas pessoas, medidas k vezes: mede o pressuposto em cada medida, aplica a
 regra (ou obedece à ficha) e calcula.
@@ -12822,11 +12839,11 @@ variam dentro dos casos, em que o F é uma divisão por zero; no Friedman, cada 
 com o mesmo valor em todas as medidas, em que não há o que ordenar. Ver
 `_impedimento_das_medidas`.
 
-- *linha 2298* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
+- *linha 2300* — `if any(coluna is None for coluna in colunas):` — pragma: no cover - a recusa já barrou
 
 ### `def _impedimento_das_medidas(metodo, vetores, pergunta)`
 
-*linha 2371*
+*linha 2373*
 
 A barreira do teste das medidas repetidas — o motivo curto e o aviso —, ou dois
 vazios. Cada teste tem a sua, e uma não é a outra:
@@ -12840,11 +12857,11 @@ vazios. Cada teste tem a sua, e uma não é a outra:
 
 ### `def _impedimento_das_repetidas(validos, distintos)`
 
-*linha 2403*
+*linha 2405*
 
 ### `def _avisos_das_repetidas(nome, pergunta, escolha, grupos, validos, distintos)`
 
-*linha 2413*
+*linha 2415*
 
 Os avisos dos grupos, na forma das medidas: a linha sem teste ensina a escrever o
 método no item — `metodo: anova`, na linha de baixo —; a ficha contra a regra; o
@@ -12857,7 +12874,7 @@ justamente para quando a covariância foge da esfericidade.
 
 ### `def regra(delineamento, normal)`
 
-*linha 2462*
+*linha 2464*
 
 A regra dos pressupostos: o teste que ela escolhe, e o motivo.
 
@@ -12877,24 +12894,24 @@ escolhido.
 
 ### `def _pela_regra(delineamento, teste, motivo)`
 
-*linha 2528*
+*linha 2530*
 
 ### `def _disponivel(delineamento, teste)`
 
-*linha 2533*
+*linha 2535*
 
 ### As tabelas
 
 ### `def _tabelas(variaveis, total)`
 
-*linha 2540*
+*linha 2542*
 
 Uma tabela por delineamento que apareceu na ficha, na ordem de `DELINEAMENTOS`, e
 os itens de cada uma na ordem da ficha.
 
 ### `def linhas_da_tabela(variavel)`
 
-*linha 2560*
+*linha 2562*
 
 As linhas de uma comparação na tabela do delineamento dela.
 
@@ -12913,7 +12930,7 @@ quartis —, e o intervalo só entra quando é o de 95% que o cabeçalho promete
 
 ### `def _teste_da_linha(variavel)`
 
-*linha 2642*
+*linha 2644*
 
 O teste que a linha mostra, ou que teria mostrado: o que rodou; o escolhido, quando
 uma barreira dele o impediu de rodar; o da regra, quando ela escolheu um que ainda
@@ -12921,11 +12938,11 @@ não tem aritmética. Vazio quando nenhum teste chegou a ser escolhido.
 
 ### `def _de_postos(variavel)`
 
-*linha 2654*
+*linha 2656*
 
 ### `def _resumo_da_linha(variavel, resumo)`
 
-*linha 2658*
+*linha 2660*
 
 O resumo de um grupo, de uma medida ou da variável, na medida que o teste da linha
 usa: a mediana e os quartis nos testes de postos, a média e o desvio nos outros — e
@@ -12933,14 +12950,14 @@ quando não há teste nenhum, que é como a tabela sempre resumiu.
 
 ### `def _coluna_do_resumo(variaveis)`
 
-*linha 2669*
+*linha 2671*
 
 O cabeçalho da coluna do resumo, pelo que ela tem: as linhas sem resumo nenhum — o
 traço de quem não tem valor — não contam.
 
 ### `def _coluna_do_intervalo(variaveis)`
 
-*linha 2686*
+*linha 2688*
 
 O cabeçalho do intervalo da uma amostra, pelo teste de cada linha — o que rodou, ou
 o que a regra escolheu —, como o do resumo: o traço de um intervalo que não chega a
@@ -12949,7 +12966,7 @@ teste nenhum não contam, e uma tabela só delas fica com o da média, de sempre
 
 ### `def _coluna_da_diferenca(variaveis)`
 
-*linha 2701*
+*linha 2703*
 
 O cabeçalho da diferença entre dois grupos, pelo teste de cada linha, como o do
 intervalo da uma amostra: as linhas sem teste nenhum não contam, e uma tabela só do
@@ -12957,7 +12974,7 @@ t — ou sem teste nenhum — fica com o de sempre.
 
 ### `def _coluna_da_diferenca_do_pareado(variaveis)`
 
-*linha 2715*
+*linha 2717*
 
 O cabeçalho da diferença do pareado, pela mesma régua: o de sempre no t pareado, a
 pseudomediana das diferenças no Wilcoxon pareado — que, ao lado da mediana de cada
@@ -12965,7 +12982,7 @@ medida, seria lida como a diferença das duas —, e as duas quando a tabela mis
 
 ### `def _ic_da_tabela(resultado)`
 
-*linha 2731*
+*linha 2733*
 
 O intervalo que vai para a tabela: o de 95%, e só ele. Quando o R não o alcança —
 poucos valores num teste de postos —, ele devolve um de nível menor, que fica no
@@ -12973,7 +12990,7 @@ manifesto e no aviso, e não numa coluna que promete 95%.
 
 ### `def _tabela_uma_amostra(variaveis, total)`
 
-*linha 2744*
+*linha 2746*
 
 Uma linha por item, na ordem da ficha.
 
@@ -12984,13 +13001,13 @@ são do t, e os do Wilcoxon quando ele aparece. O que decidiu cada teste — o p
 Shapiro-Wilk, a estatística, os graus de liberdade, o caminho do p — vai para as
 notas do `.csv`, uma frase por linha, e para o manifesto.
 
-*linha 2786*
+*linha 2788*
 
 > Vazia de propósito: esta tabela fala de várias variáveis.
 
 ### `def _tabela_dois_grupos(variaveis, total)`
 
-*linha 2803*
+*linha 2805*
 
 Um bloco por item, na ordem da ficha: a linha da comparação e uma linha por grupo.
 
@@ -13005,7 +13022,7 @@ sempre foi, `diferença de locação (IC 95%)` quando são do Mann-Whitney.
 
 ### `def _tabela_k_grupos(variaveis, total)`
 
-*linha 2871*
+*linha 2873*
 
 Um bloco por item, como a dos dois grupos, sem a coluna da diferença: com três
 grupos ou mais não há uma diferença só. Seis colunas — `variável`, `grupo`, `n`, o
@@ -13014,7 +13031,7 @@ as notas, com o resto do que decidiu cada teste.
 
 ### `def _tabela_pareado(variaveis, total)`
 
-*linha 2926*
+*linha 2928*
 
 Um bloco por item: as duas medidas, uma por linha, na ordem da ficha, com a
 diferença, o teste e o p na primeira. Seis colunas — `medida`, `n`, o resumo, a
@@ -13030,7 +13047,7 @@ linhas, e o resumo de cada medida é o desses casos.
 
 ### `def _tabela_repetidas(variaveis, total)`
 
-*linha 2992*
+*linha 2994*
 
 Um bloco por item: uma linha por medida, na ordem da ficha, e o teste e o p na
 primeira. Cinco colunas — `medida`, `n`, o resumo, `teste` e `p-valor`.
@@ -13041,7 +13058,7 @@ em alguma medida, ele difere do `resumo` da descritiva, e a nota diz isso.
 
 ### `def _ainda_nao(delineamento)`
 
-*linha 3043*
+*linha 3045*
 
 A frase das notas sobre os testes da regra que ainda não têm aritmética — com o
 espaço do fim, para entrar entre duas frases —, ou vazio, que é o caso de todos os
@@ -13051,7 +13068,7 @@ delineamentos desde a 1.14.0.
 
 ### `def itens_da_ficha(raiz)`
 
-*linha 3064*
+*linha 3066*
 
 A lista `comparacao:` do `projeto.yaml`, conferida na forma e desdobrada.
 
@@ -13063,7 +13080,7 @@ Quatro formas de item, e todas podem conviver:
     - repetidas: [pas_0, pas_1, pas_2]   # a mesma medida, três vezes nos mesmos casos
       metodo: anova                      # o método, quando vier, na chave ao lado
 
-Na quarta, duas medidas são o pareado, e três ou mais, as medidas repetidas.
+Na quarta, a marca é `pareado:` com duas medidas, e `repetidas:` com três ou mais.
 
 A terceira devolve um item por nome da lista, na ordem em que foram escritos. O
 método não se escreve nela: ficaria misturado aos nomes, como na correlação. Na
@@ -13083,54 +13100,60 @@ Raises:
 
 ### `def _ler_item(item)`
 
-*linha 3131*
+*linha 3133*
 
 Um item da lista: os `Pedido` que ele escreve, ou a frase do que está errado nele.
 
 ### `def _ler_grupos(item, escrito, nome, grupo)`
 
-*linha 3219*
+*linha 3221*
 
 O item entre grupos: `[imc, sexo]`, ou `[imc, sexo, student]`.
 
-*linha 3243*
+*linha 3245*
 
 > O `t pareado` escrito no item entre colchetes: a pessoa quer o pareado, e o
 > item que ela escreveu compara grupos.
 
-### `def _ler_repetidas(item)`
+### `def _ler_medidas(item)`
 
-*linha 3261*
+*linha 3263*
 
-O item das medidas feitas nos mesmos casos — a marca `repetidas:` e a lista das
-medidas, na ordem em que foram feitas, e o método numa chave ao lado, quando vier:
+O item das medidas feitas nos mesmos casos — a marca e a lista das medidas, na ordem
+em que foram feitas, e o método numa chave ao lado, quando vier:
 
+    - pareado: [pas_0, pas_1]
     - repetidas: [pas_0, pas_1, pas_2]
       metodo: anova
 
-Duas medidas são o pareado — o t pareado, ou o Wilcoxon pareado —, e três ou mais,
-as medidas repetidas — a ANOVA, ou o Friedman. É a mesma pergunta, a mesma medida nas
-mesmas pessoas, e por isso a mesma forma de item; o número de medidas escolhe o
-delineamento, e o método escrito é conferido contra ele: a `anova` com duas medidas
-recusa ensinando o `t`, porque o F dela seria o t pareado ao quadrado, e o `t` com
-três recusa ensinando a `anova`.
+`pareado:` são duas medidas — o t pareado, ou o Wilcoxon pareado —, e `repetidas:`,
+três ou mais — a ANOVA, ou o Friedman. A marca e o número de medidas precisam
+concordar: a que não concorda recusa ensinando a outra. O método escrito é conferido
+contra o delineamento: a `anova` com duas medidas recusa ensinando o `t`, porque o F
+dela seria o t pareado ao quadrado, e o `t` com três recusa ensinando a `anova`.
 
 ### `def _das_medidas(quantas)`
 
-*linha 3312*
+*linha 3325*
 
 O delineamento de um item com `quantas` medidas: o pareado, ou as repetidas.
 
+### `def _marca(quantas)`
+
+*linha 3330*
+
+A marca de um item com `quantas` medidas na ficha: `pareado:`, ou `repetidas:`.
+
 ### `def _ler_uma_contra_varias(item)`
 
-*linha 3317*
+*linha 3335*
 
 A forma com dois-pontos: `sexo: [imc, idade]` — cada variável da lista entre os
 grupos da que vem antes dos dois-pontos.
 
 ### `def _metodo_na_ficha(escrito, texto, familia)`
 
-*linha 3351*
+*linha 3369*
 
 O método escrito no item, conferido contra a forma dele: devolve o nome na forma
 de `_chave`, ou a frase do que está errado.
@@ -13140,7 +13163,7 @@ método precisa querer dizer um teste que existe em algum deles. Entre grupos, s
 ele serve para o número de grupos que o banco tem só se sabe depois: ver
 `_problema_do_metodo`.
 
-*linha 3369*
+*linha 3387*
 
 > Nas medidas a ficha já diz quantas são, e o método de um número de medidas
 > escrito para o outro recusa aqui mesmo, ensinando a troca — como o de um
@@ -13148,22 +13171,22 @@ ele serve para o número de grupos que o banco tem só se sabe depois: ver
 
 ### `def _metodos_de(familia)`
 
-*linha 3437*
+*linha 3455*
 
 Os nomes que se escrevem no item e têm teste com aritmética na família — sem os
 nomes por extenso, que valem na leitura e não se ensinam.
 
 ### `def _e_metodo(texto)`
 
-*linha 3451*
+*linha 3469*
 
 ### `def _teste_da_chave(chave, delineamento)`
 
-*linha 3456*
+*linha 3474*
 
 ### `def metodo_escrito(texto, delineamento)`
 
-*linha 3460*
+*linha 3478*
 
 O teste que o método escrito na ficha quer dizer no delineamento, como a tabela o
 escreve; vazio quando o texto não é um método dele, ou quando o teste ainda não
@@ -13175,7 +13198,7 @@ Student contra uma referência, e o de Welch entre dois grupos.
 
 ### `def referencia_escrita(valor)`
 
-*linha 3474*
+*linha 3492*
 
 O valor de referência, a partir de como a ficha o trouxe; `None` quando não é um
 número.
@@ -13191,7 +13214,7 @@ pergunta — "qual é a referência?".
 
 ### `def _numero_partido(item)`
 
-*linha 3491*
+*linha 3509*
 
 O `[imc, 24,9]` que o YAML leu como `[imc, 24, 9]`: o número de volta, com ponto
 — `24.9` —, e se o sinal dele se perdeu; `None` quando o item não tem essa forma.
@@ -13205,7 +13228,7 @@ mesmo inteiro.
 
 ### `def _digitos(valor)`
 
-*linha 3514*
+*linha 3532*
 
 Os algarismos de um inteiro sem sinal como foram digitados — `05`, e não `5` —, ou
 vazio quando o valor não é um.
@@ -13219,23 +13242,23 @@ também serve: é como outra biblioteca de YAML leria o `09`.
 
 ### `def _inteiro(valor)`
 
-*linha 3540*
+*linha 3558*
 
 ### `def _como_pedido(item)`
 
-*linha 3544*
+*linha 3562*
 
 ### `def _metodos_da_chave(chave, familia)`
 
-*linha 3575*
+*linha 3597*
 
 ### `def _pedido_de(pergunta)`
 
-*linha 3581*
+*linha 3603*
 
 ### `def _conferir_itens(pedidos, linhas)`
 
-*linha 3592*
+*linha 3614*
 
 Confere cada item contra o dicionário, e recusa listando todos os problemas.
 
@@ -13252,15 +13275,15 @@ numéricas, um pareado ou uma correlação —, ou diz que os dois nomes estão 
 
 ### `def _motivo_de_recusa(nome, linha)`
 
-*linha 3682*
+*linha 3704*
 
 ### `def _motivo_de_ausencia(nome, linha)`
 
-*linha 3696*
+*linha 3718*
 
 ### `def _motivo_de_recusa_das_medidas(nomes, por_nome)`
 
-*linha 3706*
+*linha 3728*
 
 O que impede as medidas repetidas, pelo dicionário — ou vazio. As medidas com o
 mesmo problema saem numa frase só: três medidas marcadas `categorica` são uma
@@ -13268,19 +13291,19 @@ decisão do dicionário, e não três.
 
 ### `def _crases(nomes)`
 
-*linha 3753*
+*linha 3775*
 
 ### `def _verbo(nomes, singular, plural)`
 
-*linha 3757*
+*linha 3779*
 
 ### `def _motivo_de_recusa_entre_grupos(pedido, por_nome)`
 
-*linha 3761*
+*linha 3783*
 
 O que impede o item entre grupos, pelo dicionário — ou vazio.
 
-*linha 3788*
+*linha 3810*
 
 > A frase diz como o item foi lido: com as duas marcadas `numerica`, quem o
 > escreveu quase sempre quis comparar uma com a outra, e lê «a variável de grupo»
@@ -13291,7 +13314,7 @@ O que impede o item entre grupos, pelo dicionário — ou vazio.
 
 ### `def montar_manifesto(comparacao, linhas)`
 
-*linha 3829*
+*linha 3851*
 
 Traduz a rodada para o índice que o relatório vai ler.
 
@@ -13303,18 +13326,18 @@ variável. O que decidiu cada teste vai em `detalhes`, sob o nome do delineament
 
 ### `def _regras()`
 
-*linha 3922*
+*linha 3944*
 
 As regras desta versão, escritas por extenso no manifesto — as mesmas das notas
 das tabelas, sem os números de uma rodada.
 
 #### `def escolha(delineamento, onde, depois)`
 
-*linha 3927*
+*linha 3949*
 
 ### `def _ambiente()`
 
-*linha 4088*
+*linha 4110*
 
 As versões que produziram estes números.
 
@@ -13324,38 +13347,38 @@ bloco ter a forma dos outros.
 
 ### `def _shapiro_no_manifesto(normal)`
 
-*linha 4110*
+*linha 4132*
 
 ### Mensagens
 
 ### `def _mensagem_sem_itens(linhas)`
 
-*linha 4124*
+*linha 4146*
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 4161*
+*linha 4183*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 4169*
+*linha 4191*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 4197*
+*linha 4219*
 
 A coluna do banco pelo nome, ou `None` — pela posição, como nas outras análises:
 nome repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _rotulo(linha)`
 
-*linha 4208*
+*linha 4230*
 
 ### `def _nome(valor)`
 
-*linha 4212*
+*linha 4234*
 
 Um nome, como a ficha o trouxe; vazio quando não é um nome.
 
@@ -13364,11 +13387,11 @@ da lista também não — é o `[[imc, 25]]` digitado com um colchete a mais.
 
 ### `def _simplificado(texto)`
 
-*linha 4224*
+*linha 4246*
 
 ### `def _chave(texto)`
 
-*linha 4229*
+*linha 4251*
 
 O método como ele se procura no `METODOS`: sem acento, minúsculo, e só letras e
 algarismos — `Mann-Whitney`, `mann whitney` e `MANN_WHITNEY` são o mesmo —, com as
@@ -13376,49 +13399,49 @@ outras grafias do `_SINONIMOS` trocadas pela da casa.
 
 ### `def _concorda(teste, participio)`
 
-*linha 4239*
+*linha 4261*
 
 `t de Welch escrito`, `ANOVA escrita`: o participio no gênero do teste.
 
 ### `def _com_artigo(teste, maiuscula)`
 
-*linha 4244*
+*linha 4266*
 
 `o t de Welch`, `a ANOVA` — e, no começo da frase, `O t de Welch`, `A ANOVA`.
 
 ### `def _em_frase(itens)`
 
-*linha 4250*
+*linha 4272*
 
 `A`, `A e B`, `A, B e C`.
 
 ### `def _ou(nomes)`
 
-*linha 4258*
+*linha 4280*
 
 `` `t` ``, `` `t` ou `student` ``, com as crases.
 
 ### `def _unidades(delineamento)`
 
-*linha 4266*
+*linha 4288*
 
 O que se compara no delineamento, no singular e no plural.
 
 ### `def _nenhum(delineamento, quantos)`
 
-*linha 4273*
+*linha 4295*
 
 `nenhum dos dois grupos`, `nenhum dos 3 grupos`, `nenhuma das 3 medidas`.
 
 ### `def _p_na_frase(p)`
 
-*linha 4280*
+*linha 4302*
 
 O p dentro de uma frase: `p = 0,412`, ou `p < 0,001` — nunca `p = < 0,001`.
 
 ### `def _estatistica_em_texto(resultado)`
 
-*linha 4288*
+*linha 4310*
 
 `t = 2,16; 56 gl`, `F = 6,39; 2 e 57 gl` — e, nas medidas repetidas, o ε de
 Greenhouse-Geisser que corrigiu os gl: `F = 35,44; 1,62 e 14,55 gl; ε = 0,808`. No
@@ -13427,14 +13450,14 @@ Wilcoxon e no Mann-Whitney, o caminho do p, que muda com o n e com os empates:
 
 ### `def _media_e_desvio(resumo, casas)`
 
-*linha 4303*
+*linha 4325*
 
 `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
 pelo mesmo `numero()` e com as mesmas casas.
 
 ### `def _mediana_e_quartis(resumo, casas)`
 
-*linha 4313*
+*linha 4335*
 
 `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
 escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
@@ -13442,11 +13465,11 @@ colchetes e o `a` do intervalo.
 
 ### `def _intervalo(intervalo, casas)`
 
-*linha 4325*
+*linha 4347*
 
 ### `def _diferenca(resultado, casas)`
 
-*linha 4332*
+*linha 4354*
 
 `-1,52 (-3,21 a 0,17)` — a estimativa do teste e o intervalo dela, com as casas
 fixas do intervalo da uma amostra: a diferença das médias no t, a diferença de
@@ -13454,7 +13477,7 @@ locação no Mann-Whitney. Sem o intervalo de 95%, o traço na célula inteira.
 
 ### `def _fixo(valor, casas)`
 
-*linha 4344*
+*linha 4366*
 
 Casas fixas — as duas de sempre, ou as da variável quando a escala dela é pequena
 —, o hífen do teclado no negativo, e nunca `-0,00` — o formato do coeficiente da
@@ -13463,7 +13486,7 @@ direção.
 
 ### `def _referencia_em_texto(valor, ponto)`
 
-*linha 4357*
+*linha 4379*
 
 A referência como foi escrita, sem os zeros do fim: `25`, `24,9`, `0,125`.
 
@@ -13472,28 +13495,28 @@ o que funciona.
 
 ### `def _descrever_valor(valor)`
 
-*linha 4368*
+*linha 4390*
 
 ### `def _descrever_solto(valor)`
 
-*linha 4380*
+*linha 4402*
 
 Um valor como ele apareceria dentro dos colchetes da ficha.
 
 ### `def _arredondar(valor)`
 
-*linha 4389*
+*linha 4411*
 
 ### `def _significativos(valor)`
 
-*linha 4396*
+*linha 4418*
 
 O p no manifesto, com seis algarismos significativos, e não seis casas — o da
 correlação. Com seis casas, um p de 2,5e-08 seria gravado como `0.0`.
 
 ### `def _integridade(confere)`
 
-*linha 4407*
+*linha 4429*
 
 ## `flatcap/regressao.py`
 
@@ -18632,14 +18655,14 @@ os calcula; os dois Wilcoxon e o Mann-Whitney com o intervalo de Hodges-Lehmann.
 uma tabela por delineamento em `3. Análises/comparacao/`, com um `manifesto.json`.
 
 Os itens se escrevem na ficha — a variável e a referência, com ponto decimal; a
-variável e a de grupo; ou as medidas nos mesmos casos, com a marca — duas são o
-pareado:
+variável e a de grupo; ou as medidas nos mesmos casos, com a marca — `pareado:` para
+duas, `repetidas:` para três ou mais:
 
     comparacao:
       - \[imc, 25]
       - \[pas, 120, t]
       - \[imc, sexo]
-      - repetidas: \[pas_0, pas_1]
+      - pareado: \[pas_0, pas_1]
       - repetidas: \[pas_0, pas_1, pas_2]
 
 O terceiro nome, quando vem, manda no teste: `t` roda o t mesmo contra a regra, e

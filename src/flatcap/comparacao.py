@@ -79,7 +79,7 @@ A forma do item e os tipos das variáveis dizem qual comparação é:
     [imc, 25]                  numérica, e um número       uma amostra
     [imc, sexo]                numérica, categórica        dois grupos
     [imc, escolaridade]        numérica, categórica        três grupos ou mais
-    repetidas: [pas_0, pas_1]          duas numéricas              pareado
+    pareado: [pas_0, pas_1]            duas numéricas              pareado
     repetidas: [pas_0, pas_1, pas_2]   três numéricas ou mais      medidas repetidas
 
 **O número de grupos sai do banco, e não do dicionário.** Os grupos são os rótulos
@@ -96,11 +96,11 @@ faltando sai inteiro — como no `complete.cases` do `t.test` pareado e no `lm` 
 
 **As medidas nos mesmos casos têm a marca na ficha.** Duas numéricas lado a lado,
 `[pas_0, pas_1]`, seriam um pareado — ou `[idade, imc]` escrito por engano,
-comparando médias de unidades diferentes sem erro nenhum. A marca `repetidas:` diz que
-são a mesma medida, feita mais de uma vez nas mesmas pessoas: com duas medidas — antes
-e depois, ou dois métodos na mesma pessoa —, o item é o **pareado**; com três ou mais,
-as **medidas repetidas**. O número de medidas escolhe o delineamento como o número de
-grupos escolhe entre a tabela dos dois e a dos k, só que aqui ele está escrito na ficha.
+comparando médias de unidades diferentes sem erro nenhum. A marca diz que são a mesma
+medida, feita mais de uma vez nas mesmas pessoas, e diz qual delineamento: `pareado:`,
+com duas medidas — antes e depois, ou dois métodos na mesma pessoa —, é o **pareado**;
+`repetidas:`, com três ou mais, as **medidas repetidas**. A marca e o número de medidas
+precisam concordar, e a que não concorda recusa ensinando a outra.
 
 ## A regra dos pressupostos
 
@@ -201,7 +201,7 @@ medianas ao lado. Uma tabela só de paramétricos sai com os cabeçalhos de ante
       - [imc, sexo]              # o IMC difere entre os sexos?
       - [pas, sexo, student]     # pelo t de Student, que supõe variâncias iguais
       - sexo: [imc, idade]       # uma contra várias: imc e idade, entre os sexos
-      - repetidas: [pas_0, pas_1]          # a PAS mudou entre as duas medidas? o pareado
+      - pareado: [pas_0, pas_1]            # a PAS mudou entre as duas medidas? o pareado
       - repetidas: [pas_0, pas_1, pas_2]   # e entre as três? as medidas repetidas
       - repetidas: [pad_0, pad_1, pad_2]
         metodo: anova                      # a ANOVA, mesmo que a regra discorde
@@ -354,8 +354,10 @@ DELINEAMENTOS = (UMA_AMOSTRA, DOIS_GRUPOS, K_GRUPOS, PAREADO, REPETIDAS)
 #     - repetidas: [pas_0, pas_1, pas_2]
 #       metodo: anova
 #
-# A marca é a mesma no pareado, que é o item com duas medidas.
+# A marca diz o delineamento: `pareado:` com duas medidas, `repetidas:` com três ou mais.
+CHAVE_PAREADO = "pareado"
 CHAVE_REPETIDAS = "repetidas"
+_MARCAS = (CHAVE_PAREADO, CHAVE_REPETIDAS)
 CHAVE_METODO = "metodo"
 
 # Quantas medidas o item tem diz o delineamento: duas são o pareado — o t pareado ou o
@@ -578,7 +580,7 @@ EXEMPLO_DA_FICHA = f"""  {PASTA_COMPARACAO}:
     - [imc, 25]
     - [pas, 120, t]
     - [imc, sexo]
-    - {CHAVE_REPETIDAS}: [pas_0, pas_1]
+    - {CHAVE_PAREADO}: [pas_0, pas_1]
     - {CHAVE_REPETIDAS}: [pas_0, pas_1, pas_2]"""
 
 
@@ -658,12 +660,12 @@ class Pedido:
     @property
     def escrito(self) -> str:
         """
-        O item de volta na forma da ficha, para as mensagens. O de medidas repetidas com
-        método sai na forma de uma linha só, `{repetidas: [...], metodo: anova}`, que o
-        YAML lê igual à de duas linhas.
+        O item de volta na forma da ficha, para as mensagens. O de medidas nos mesmos
+        casos com método sai na forma de uma linha só, `{repetidas: [...], metodo:
+        anova}`, que o YAML lê igual à de duas linhas.
         """
         if self.medidas:
-            lista = f"{CHAVE_REPETIDAS}: [{', '.join(self.medidas)}]"
+            lista = f"{_marca(len(self.medidas))}: [{', '.join(self.medidas)}]"
             return f"{{{lista}, {CHAVE_METODO}: {self.metodo}}}" if self.metodo else lista
         metodo = f", {self.metodo}" if self.metodo else ""
         if self.grupos:
@@ -3073,7 +3075,7 @@ def itens_da_ficha(raiz: Path) -> tuple[Pedido, ...]:
         - repetidas: [pas_0, pas_1, pas_2]   # a mesma medida, três vezes nos mesmos casos
           metodo: anova                      # o método, quando vier, na chave ao lado
 
-    Na quarta, duas medidas são o pareado, e três ou mais, as medidas repetidas.
+    Na quarta, a marca é `pareado:` com duas medidas, e `repetidas:` com três ou mais.
 
     A terceira devolve um item por nome da lista, na ordem em que foram escritos. O
     método não se escreve nela: ficaria misturado aos nomes, como na correlação. Na
@@ -3121,9 +3123,9 @@ def itens_da_ficha(raiz: Path) -> tuple[Pedido, ...]:
             f"{_ou(_metodos_de((UMA_AMOSTRA,)))} contra uma referência, "
             f"{_ou(_metodos_de(_DOS_GRUPOS))} entre grupos. Sem ele, a regra dos "
             f"pressupostos escolhe. Nas medidas feitas nos mesmos casos, "
-            f"`{CHAVE_REPETIDAS}:` e a lista das medidas — duas são o pareado; três ou "
-            f"mais, as medidas repetidas —, e o método, quando vier, na chave "
-            f"`{CHAVE_METODO}:` ao lado."
+            f"`{CHAVE_PAREADO}:` e a lista das duas medidas, ou `{CHAVE_REPETIDAS}:` e a "
+            f"lista de três ou mais, e o método, quando vier, na chave `{CHAVE_METODO}:` "
+            "ao lado."
         )
     return tuple(pedidos)
 
@@ -3133,8 +3135,8 @@ def _ler_item(item: Any) -> tuple[tuple[Pedido, ...], str]:
     Um item da lista: os `Pedido` que ele escreve, ou a frase do que está errado nele.
     """
     if isinstance(item, dict) and item:
-        if any(_simplificado(str(chave)) == CHAVE_REPETIDAS for chave in item):
-            return _ler_repetidas(item)
+        if any(_simplificado(str(chave)) in _MARCAS for chave in item):
+            return _ler_medidas(item)
         return _ler_uma_contra_varias(item)
     if not isinstance(item, list):
         return (), (
@@ -3246,7 +3248,7 @@ def _ler_grupos(
         return (), (
             f"{escrito} — `{terceiro}` é o teste de duas medidas nos mesmos casos, e o item "
             f"entre colchetes compara os grupos de `{grupo}`. Se `{nome}` e `{grupo}` são "
-            f"duas medidas das mesmas pessoas, o item é `- {CHAVE_REPETIDAS}: [{nome}, "
+            f"duas medidas das mesmas pessoas, o item é `- {CHAVE_PAREADO}: [{nome}, "
             f"{grupo}]`, com `{CHAVE_METODO}: {curto}` na linha de baixo para escolher o "
             "teste."
         )
@@ -3258,47 +3260,58 @@ def _ler_grupos(
     return (Pedido(nome, grupos=grupo, metodo=chave),), ""
 
 
-def _ler_repetidas(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
+def _ler_medidas(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
     """
-    O item das medidas feitas nos mesmos casos — a marca `repetidas:` e a lista das
-    medidas, na ordem em que foram feitas, e o método numa chave ao lado, quando vier:
+    O item das medidas feitas nos mesmos casos — a marca e a lista das medidas, na ordem
+    em que foram feitas, e o método numa chave ao lado, quando vier:
 
+        - pareado: [pas_0, pas_1]
         - repetidas: [pas_0, pas_1, pas_2]
           metodo: anova
 
-    Duas medidas são o pareado — o t pareado, ou o Wilcoxon pareado —, e três ou mais,
-    as medidas repetidas — a ANOVA, ou o Friedman. É a mesma pergunta, a mesma medida nas
-    mesmas pessoas, e por isso a mesma forma de item; o número de medidas escolhe o
-    delineamento, e o método escrito é conferido contra ele: a `anova` com duas medidas
-    recusa ensinando o `t`, porque o F dela seria o t pareado ao quadrado, e o `t` com
-    três recusa ensinando a `anova`.
+    `pareado:` são duas medidas — o t pareado, ou o Wilcoxon pareado —, e `repetidas:`,
+    três ou mais — a ANOVA, ou o Friedman. A marca e o número de medidas precisam
+    concordar: a que não concorda recusa ensinando a outra. O método escrito é conferido
+    contra o delineamento: a `anova` com duas medidas recusa ensinando o `t`, porque o F
+    dela seria o t pareado ao quadrado, e o `t` com três recusa ensinando a `anova`.
     """
     chaves = {_simplificado(str(chave)): valor for chave, valor in item.items()}
-    medidas = chaves.get(CHAVE_REPETIDAS)
-    escrito = f"`{CHAVE_REPETIDAS}: {_descrever_solto(medidas)}`"
+    marca = CHAVE_PAREADO if CHAVE_PAREADO in chaves else CHAVE_REPETIDAS
+    medidas = chaves.get(marca)
+    escrito = f"`{marca}: {_descrever_solto(medidas)}`"
     outras = [str(chave) for chave in item if _simplificado(str(chave)) not in (
-        CHAVE_REPETIDAS, CHAVE_METODO
+        marca, CHAVE_METODO
     )]
     if outras:
         return (), (
-            f"{escrito} — `{outras[0]}` não é uma chave do item de medidas repetidas; ao "
-            f"lado de `{CHAVE_REPETIDAS}:` só vem `{CHAVE_METODO}:`."
+            f"{escrito} — `{outras[0]}` não é uma chave deste item; ao lado de "
+            f"`{marca}:` só vem `{CHAVE_METODO}:`."
         )
     lista = medidas if isinstance(medidas, list) else [medidas]
     nomes = [_nome(nome) for nome in lista]
     if not nomes or not all(nomes):
+        exemplo = "pas_0, pas_1" if marca == CHAVE_PAREADO else "pas_0, pas_1, pas_2"
         return (), (
-            f"{escrito} — depois de `{CHAVE_REPETIDAS}:` vem a lista das medidas, na ordem "
-            f"em que foram feitas: `{CHAVE_REPETIDAS}: [pas_0, pas_1, pas_2]`."
+            f"{escrito} — depois de `{marca}:` vem a lista das medidas, na ordem "
+            f"em que foram feitas: `{marca}: [{exemplo}]`."
         )
     repetidas = sorted({nome for nome in nomes if nomes.count(nome) > 1})
     if repetidas:
         return (), f"{escrito} — `{repetidas[0]}` duas vezes; cada medida entra uma vez."
     if len(nomes) < MEDIDAS_DO_PAREADO:
         return (), (
-            f"{escrito} — uma medida só; a comparação é entre duas medidas, no pareado, ou "
-            "entre três ou mais, nas medidas repetidas."
+            f"{escrito} — uma medida só; a comparação é entre duas medidas, no "
+            f"`{CHAVE_PAREADO}:`, ou entre três ou mais, no `{CHAVE_REPETIDAS}:`."
         )
+    certa = _marca(len(nomes))
+    if marca != certa:
+        porque = (
+            "duas medidas nos mesmos casos são um pareado"
+            if certa == CHAVE_PAREADO
+            else f"{len(nomes)} medidas; o pareado compara duas, e três ou mais são as "
+            "medidas repetidas"
+        )
+        return (), f"{escrito} — {porque}: escreva `- {certa}: [{', '.join(nomes)}]`."
 
     chave = ""
     if CHAVE_METODO in chaves:
@@ -3312,6 +3325,11 @@ def _ler_repetidas(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
 def _das_medidas(quantas: int) -> str:
     """O delineamento de um item com `quantas` medidas: o pareado, ou as repetidas."""
     return PAREADO if quantas == MEDIDAS_DO_PAREADO else REPETIDAS
+
+
+def _marca(quantas: int) -> str:
+    """A marca de um item com `quantas` medidas na ficha: `pareado:`, ou `repetidas:`."""
+    return CHAVE_PAREADO if quantas == MEDIDAS_DO_PAREADO else CHAVE_REPETIDAS
 
 
 def _ler_uma_contra_varias(item: dict[Any, Any]) -> tuple[tuple[Pedido, ...], str]:
@@ -3545,8 +3563,12 @@ def _como_pedido(item: Pedido | tuple[Any, ...]) -> Pedido:
     if isinstance(item, Pedido):
         return item
     variavel, segundo, *resto = item
-    if variavel == CHAVE_REPETIDAS and isinstance(segundo, list | tuple):
+    if variavel in _MARCAS and isinstance(segundo, list | tuple):
         nomes = tuple(str(nome) for nome in segundo)
+        if variavel != _marca(len(nomes)):
+            raise ItemInvalidoError(
+                f"`{variavel}:` com {len(nomes)} medidas; escreva `{_marca(len(nomes))}:`."
+            )
         chave = _chave(str(resto[0])) if resto else ""
         if resto and not _metodos_da_chave(chave, (_das_medidas(len(nomes)),)):
             raise ItemInvalidoError(
@@ -3803,7 +3825,7 @@ def _motivo_de_recusa_entre_grupos(pedido: Pedido, por_nome: dict[str, Linha]) -
             "segundo nome é o da variável de grupo, que precisa ser `categorica`, e "
             f"`{grupo}` está marcada `numerica` no {ARQUIVO_DICIONARIO}. As mesmas pessoas "
             "medidas duas vezes — antes e depois, ou por dois métodos — são um pareado: o "
-            f"item `- {CHAVE_REPETIDAS}: [{nome}, {grupo}]`{metodo}. A relação entre duas "
+            f"item `- {CHAVE_PAREADO}: [{nome}, {grupo}]`{metodo}. A relação entre duas "
             "numéricas é uma correlação: a lista `correlacao:`"
         )
     if tipo == CATEGORICA and tipo_do_grupo == CATEGORICA:
@@ -3945,7 +3967,7 @@ def _regras() -> dict[str, Any]:
             ),
             PAREADO: (
                 "a média de duas medidas numéricas feitas nos mesmos casos, pela diferença "
-                f"caso a caso — o item `{CHAVE_REPETIDAS}:` da lista, com duas medidas"
+                f"caso a caso — o item `{CHAVE_PAREADO}:` da lista"
             ),
             REPETIDAS: (
                 "a média de três medidas numéricas ou mais, feitas nos mesmos casos — o "
@@ -4425,6 +4447,7 @@ __all__ = [
     "CASAS_IC",
     "CASAS_REFERENCIA",
     "CHAVE_METODO",
+    "CHAVE_PAREADO",
     "CHAVE_REPETIDAS",
     "COLUNA_DAS_DUAS",
     "COLUNA_DAS_DUAS_DIFERENCAS",

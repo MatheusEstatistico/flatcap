@@ -561,9 +561,9 @@ class TestFluxoCompleto:
             raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
             acrescentar_a_ficha(
                 raiz,
-                "comparacao:\n  - repetidas: [pas_0, pas_1]\n"
-                "  - repetidas: [dor_0, dor_1]\n"
-                "  - {repetidas: [peso_0, peso_1], metodo: t}\n",
+                "comparacao:\n  - pareado: [pas_0, pas_1]\n"
+                "  - pareado: [dor_0, dor_1]\n"
+                "  - {pareado: [peso_0, peso_1], metodo: t}\n",
             )
             resultado = flatcap("perfil", "40", "--sim", env=env)
             assert resultado.returncode == 0, resultado.stdout + resultado.stderr

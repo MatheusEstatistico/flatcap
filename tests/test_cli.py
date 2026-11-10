@@ -1435,7 +1435,7 @@ class TestComparacao:
         assert "Comparação" in saida
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
-        assert "- repetidas: [pas_0, pas_1]" in saida
+        assert "- pareado: [pas_0, pas_1]" in saida
 
     def test_o_help_mostra_a_forma(self):
         """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
@@ -1443,7 +1443,7 @@ class TestComparacao:
         assert "- [imc, 25]" in saida
         assert "- [pas, 120, t]" in saida
         assert "- [imc, sexo]" in saida
-        assert "- repetidas: [pas_0, pas_1]" in saida
+        assert "- pareado: [pas_0, pas_1]" in saida
         assert "- repetidas: [pas_0, pas_1, pas_2]" in saida
 
     def test_a_virgula_decimal_sai_com_um_e_ensina_o_numero(self, rodar, projeto_com_rodada):
@@ -1587,7 +1587,7 @@ class TestComparacao:
         escolha, e o `.csv` dela com `--sim`.
         """
         raiz = projeto_com_rodada(bancos.para_comparar_repetidas())
-        acrescentar_a_ficha(raiz, "comparacao:\n  - repetidas: [pas_0, pas_1]\n")
+        acrescentar_a_ficha(raiz, "comparacao:\n  - pareado: [pas_0, pas_1]\n")
         resultado = rodar("comparacao", RECORD_ID)
         assert resultado.exit_code == 0
         saida = _saida(resultado)
@@ -1623,7 +1623,7 @@ class TestComparacao:
             "precisa ser `categorica`, e `EKFC` está marcada `numerica`"
         ) in saida
         assert (
-            "são um pareado: o item `- repetidas: [CKD EPI, EKFC]`, com o método, quando "
+            "são um pareado: o item `- pareado: [CKD EPI, EKFC]`, com o método, quando "
             "quiser escolhê-lo, na chave `metodo:` ao lado"
         ) in saida
         assert "ainda não está no FlatCap" not in saida
@@ -1631,7 +1631,7 @@ class TestComparacao:
         ficha = raiz / ARQUIVO_PROJETO
         texto = ficha.read_text(encoding="utf-8")
         ficha.write_text(
-            texto.replace("- [CKD EPI, EKFC, student]", "- repetidas: [CKD EPI, EKFC]"),
+            texto.replace("- [CKD EPI, EKFC, student]", "- pareado: [CKD EPI, EKFC]"),
             encoding="utf-8",
         )
         resultado = rodar("comparacao", RECORD_ID)

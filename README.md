@@ -351,7 +351,7 @@ bibliotecas saiu cada arquivo. Rodar de novo arquiva a rodada anterior inteira e
 | `cruzamento` | `cruzamento:` com os pares — `- [sexo, escolaridade]` |
 | `associacao` | `associacao:` com os pares — `- [sexo, desfecho]` ou `- desfecho: [sexo, escolaridade]` |
 | `correlacao` | `correlacao:` com os pares — `- [idade, imc]`, ou `- [dor, ansiedade, kendall]` com o método |
-| `comparacao` | `comparacao:` com os itens — `- [imc, 25]` (uma amostra), `- [imc, sexo]` (grupos), `- repetidas: [pas_0, pas_1]` (pareado), `- repetidas: [pas_0, pas_1, pas_2]` |
+| `comparacao` | `comparacao:` com os itens — `- [imc, 25]` (uma amostra), `- [imc, sexo]` (grupos), `- pareado: [pas_0, pas_1]` (pareado), `- repetidas: [pas_0, pas_1, pas_2]` (medidas repetidas) |
 | `regressao` | `regressao:` com os modelos — `- pas: [idade, imc, sexo]` (o desfecho antes dos dois-pontos), e `evento: Sim` na linha de baixo quando a logística pedir |
 
 Os pares e os itens se escrevem na ficha, na reunião: trinta variáveis dão 435 pares, e
@@ -368,8 +368,8 @@ comparacao:
   - [imc, 25]                   # uma amostra, contra a referência
   - [imc, sexo]                 # dois grupos: o t de Welch ou, sem a normal, o Mann-Whitney
   - [pas, escolaridade, anova]  # três grupos ou mais: a ANOVA clássica, escrita
-  - repetidas: [pas_0, pas_1]   # as mesmas pessoas, duas vezes: o t pareado ou o Wilcoxon pareado
-  - repetidas: [pas_0, pas_1, pas_2]
+  - pareado: [pas_0, pas_1]     # as mesmas pessoas, duas vezes: o t pareado ou o Wilcoxon pareado
+  - repetidas: [pas_0, pas_1, pas_2]   # três vezes ou mais: a ANOVA de medidas repetidas ou o Friedman
 regressao:
   - pas: [idade]                # desfecho numérico, um preditor: a linear simples
   - pas: [idade, imc, sexo]     # dois ou mais: a linear múltipla
