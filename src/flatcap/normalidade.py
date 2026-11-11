@@ -94,6 +94,7 @@ import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import ROUND_DOWN, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -1335,12 +1336,19 @@ def valor_p(valor: float | None) -> str:
     Pública desde a 1.5.0, com o apelido privado que este módulo usa: a associação
     imprime p-valor na mesma página, e dois formatadores para o mesmo p é como um
     documento sai com `< 0,001` numa tabela e `0,000` na seguinte.
+
+    Logo abaixo do α, quatro casas truncadas: 0,0495 arredondado a três casas sai
+    `0,050`, ao lado de «o teste rejeita a normal». Truncado, o número nunca cruza
+    o α que decidiu a conclusão ao lado dele.
     """
     if valor is None:
         return _AUSENTE
     if valor < MENOR_P:
         return f"< {numero(MENOR_P, CASAS_P)}"
-    return f"{valor:.{CASAS_P}f}".replace(".", ",")
+    texto = f"{valor:.{CASAS_P}f}"
+    if valor < ALFA <= float(texto):
+        texto = str(Decimal(repr(valor)).quantize(Decimal("0.0001"), rounding=ROUND_DOWN))
+    return texto.replace(".", ",")
 
 
 _valor_p = valor_p
