@@ -427,6 +427,48 @@ class TestAlertas:
         caminho.write_text(texto, encoding="utf-8", newline="\n")
         assert "dicionario_mudou" in _codigos(preparar_relatorio(raiz, agora=QUANDO))
 
+    def test_rotulos_de_categoria_acrescentados_depois_da_rodada(self, projeto_com_rodada):
+        """
+        `1|2` na rodada e `1=Masculino|2=Feminino` hoje: o documento sairia com
+        os códigos, e o alerta é o que diz que falta rodar de novo.
+        """
+        raiz = projeto_com_rodada()
+        caminho = raiz / "dicionario.csv"
+        texto = caminho.read_text(encoding="utf-8-sig").replace(
+            "Feminino|Masculino;", "Feminino=F|Masculino=M;"
+        )
+        caminho.write_text(texto, encoding="utf-8", newline="\n")
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        detalhe = next(
+            a for a in plano.relatorio.alertas if a.codigo == "dicionario_mudou"
+        ).detalhe
+        assert "`sexo` está com outros rótulos de categoria" in detalhe
+
+    def test_ordem_de_categoria_mudada_depois_da_rodada(self, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        caminho = raiz / "dicionario.csv"
+        texto = caminho.read_text(encoding="utf-8-sig").replace(
+            "Feminino|Masculino;", "Masculino|Feminino;"
+        )
+        caminho.write_text(texto, encoding="utf-8", newline="\n")
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        detalhe = next(
+            a for a in plano.relatorio.alertas if a.codigo == "dicionario_mudou"
+        ).detalhe
+        assert "`sexo` está com outra ordem de categorias" in detalhe
+
+    def test_rotulos_de_categoria_iguais_nao_acusam_diferenca(self, projeto_com_rodada):
+        from flatcap.descritiva import executar_descritiva, preparar_descritiva
+
+        raiz = projeto_com_rodada()
+        caminho = raiz / "dicionario.csv"
+        texto = caminho.read_text(encoding="utf-8-sig").replace(
+            "Feminino|Masculino;", "Feminino=F|Masculino=M;"
+        )
+        caminho.write_text(texto, encoding="utf-8", newline="\n")
+        executar_descritiva(preparar_descritiva(raiz, agora=QUANDO))
+        assert "dicionario_mudou" not in _codigos(preparar_relatorio(raiz, agora=QUANDO))
+
     def test_faixas_iguais_nao_acusam_diferenca(self, projeto_com_rodada):
         """
         O dicionário guarda `0|30|120` como texto e o manifesto `[0, 30, 120]`
