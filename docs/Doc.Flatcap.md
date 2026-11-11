@@ -7657,7 +7657,7 @@ O `usados` é por rodada — o desempate vale dentro de uma pasta, não entre el
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1388 linhas.*
+*1396 linhas.*
 
 A normalidade — a primeira análise da Fase 7.
 
@@ -7743,21 +7743,21 @@ Ele é importado **dentro** da função que calcula, como o `matplotlib` no
 `graficos.py` e o `python-docx` no `documento.py`, e pelo mesmo motivo: nenhum
 comando que não faz teste de normalidade deve pagar o import.
 
-*No módulo, linha 132:*
+*No módulo, linha 133:*
 
 > Os limites do teste. Todos com nome, aqui em cima, pelo mesmo motivo das Fases 4
 > e 5: número solto no meio de uma função é decisão que ninguém consegue rever.
 
 ### `MINIMO_SHAPIRO`
 
-*linha 135*
+*linha 136*
 
 > O Shapiro-Wilk não existe abaixo de três observações: com duas, quaisquer dois
 > pontos estão perfeitamente sobre uma reta.
 
 ### `MINIMO_CONFIAVEL`
 
-*linha 139*
+*linha 140*
 
 > Abaixo disto o teste roda e quase não rejeita. Não é recusa — é aviso, porque o
 > resultado continua sendo verdadeiro sobre o que ele mede; o que muda é o que ele
@@ -7766,7 +7766,7 @@ comando que não faz teste de normalidade deve pagar o import.
 
 ### `MAXIMO_CONFIAVEL`
 
-*linha 145*
+*linha 146*
 
 > Acima disto o próprio `scipy` avisa que o valor-p deixa de ser exato. O aviso
 > dele vai para `stderr`, onde ninguém lê; aqui ele é capturado e vira aviso do
@@ -7775,24 +7775,24 @@ comando que não faz teste de normalidade deve pagar o import.
 
 ### `MENOR_P`
 
-*linha 153*
+*linha 154*
 
 > O menor valor-p que se imprime como número. Abaixo dele sai `< 0,001`, e nunca
 > `0,000`: um valor-p é sempre maior que zero, e imprimi-lo como zero é escrever no
 > relatório um número que não existe.
 
-- *linha 160* — `CASAS_FORMA = 2` — assimetria e curtose
+- *linha 161* — `CASAS_FORMA = 2` — assimetria e curtose
 
 ### `ASSIMETRIA_LEVE`
 
-*linha 162*
+*linha 163*
 
 > Os cortes da leitura em palavras. São convenções de leitura, não fronteiras da
 > natureza — daí estarem nomeadas aqui, onde se discute se mudam.
 
 ### `POUCOS_DISTINTOS`
 
-*linha 168*
+*linha 169*
 
 > Até este número de valores distintos, a variável é avisada como discreta.
 >
@@ -7809,7 +7809,7 @@ comando que não faz teste de normalidade deve pagar o import.
 
 ### `class NormalidadeError(RuntimeError)`
 
-*linha 185*
+*linha 186*
 
 Falha ao gerar a análise de normalidade, já traduzida para o usuário.
 
@@ -7824,19 +7824,19 @@ isso. Ver `descritiva.conferir_dicionario`.
 
 ### `class DicionarioAusenteError(NormalidadeError)`
 
-*linha 200*
+*linha 201*
 
 O projeto não tem `dicionario.csv`. Não há o que obedecer.
 
 ### `class DicionarioDesatualizadoError(NormalidadeError)`
 
-*linha 206*
+*linha 207*
 
 O banco tem colunas que o dicionário desconhece.
 
 ### `class VariavelIncompativelError(NormalidadeError)`
 
-*linha 212*
+*linha 213*
 
 O dicionário promete `numerica` e a coluna chegou como texto.
 
@@ -7847,7 +7847,7 @@ que nenhuma tabela do documento descreve.
 
 ### `class NadaParaAnalisarError(NormalidadeError)`
 
-*linha 223*
+*linha 224*
 
 Nenhuma variável do dicionário é `numerica`.
 
@@ -7857,7 +7857,7 @@ seção para, e imprimir vazia no documento do cliente.
 
 ### `class VariavelPedidaInexistenteError(NormalidadeError)`
 
-*linha 233*
+*linha 234*
 
 A lista `normalidade:` da ficha nomeia uma variável que não serve.
 
@@ -7869,7 +7869,7 @@ nada na saída diria que a variável que você escreveu na ficha não entrou.
 
 ### `class VariavelTestada`
 
-*linha 247*
+*linha 248*
 
 Uma variável numérica, medida. É a linha da tabela.
 
@@ -7881,11 +7881,11 @@ variável que ninguém repara que faltou, e essa distinção é a mesma que a li
 
 #### `def testada(self)`
 
-*linha 275*
+*linha 276*
 
 #### `def rejeita(self)`
 
-*linha 279*
+*linha 280*
 
 O teste rejeitou a normal neste nível?
 
@@ -7894,13 +7894,13 @@ coisas diferentes, e quem precisa distinguir olha `testada`.
 
 #### `def como_detalhe(self)`
 
-*linha 288*
+*linha 289*
 
 Os números desta variável, para o manifesto.
 
 ### `class ForaDaNormalidade`
 
-*linha 306*
+*linha 307*
 
 Uma variável do dicionário que não entra, e por quê.
 
@@ -7911,35 +7911,35 @@ diferentes, e só a primeira é uma decisão.
 
 ### `class Normalidade`
 
-*linha 322*
+*linha 323*
 
 A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
-- *linha 335* — `pedidas: tuple[str, ...] = ()` — a lista da ficha, quando houver
+- *linha 336* — `pedidas: tuple[str, ...] = ()` — a lista da ficha, quando houver
 
 #### `def raiz(self)`
 
-*linha 338*
+*linha 339*
 
 #### `def linhas(self)`
 
-*linha 342*
+*linha 343*
 
 #### `def colunas_usadas(self)`
 
-*linha 346*
+*linha 347*
 
 #### `def rejeitadas(self)`
 
-*linha 350*
+*linha 351*
 
 #### `def nao_testadas(self)`
 
-*linha 354*
+*linha 355*
 
 ### `class PlanoNormalidade`
 
-*linha 359*
+*linha 360*
 
 Tudo o que o `normalidade` faria, decidido e ainda não escrito.
 
@@ -7949,23 +7949,23 @@ terminal é lida deste objeto.
 
 #### `def raiz(self)`
 
-*linha 376*
+*linha 377*
 
 #### `def tabela(self)`
 
-*linha 380*
+*linha 381*
 
 #### `def graficos(self)`
 
-*linha 384*
+*linha 385*
 
 #### `def arquivos(self)`
 
-*linha 388*
+*linha 389*
 
 ### `class ResultadoNormalidade`
 
-*linha 394*
+*linha 395*
 
 O que a execução de fato escreveu.
 
@@ -7973,7 +7973,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_normalidade(raiz, aba, conferir, com_graficos, agora)`
 
-*linha 407*
+*linha 408*
 
 Abre o banco, testa cada numérica e monta o plano. Não escreve nada.
 
@@ -7993,14 +7993,14 @@ Raises:
 
 ### `def executar_normalidade(plano)`
 
-*linha 458*
+*linha 459*
 
 Escreve o plano no disco. Não decide mais nada: quem escreve, na ordem, e desfaz
 o que escreveu se falhar no meio, é o `descritiva.escrever_rodada`.
 
 ### `def avaliar(banco, ficha, linhas_do_dicionario, pedidas, quando, com_graficos)`
 
-*linha 476*
+*linha 477*
 
 Avalia a normalidade das numéricas do dicionário. Função pura.
 
@@ -8029,27 +8029,27 @@ Raises:
     VariavelIncompativelError, NadaParaAnalisarError,
     VariavelPedidaInexistenteError
 
-*linha 517*
+*linha 518*
 
 > Só as numéricas vão para a recusa, e não `analisaveis` inteiro. A conferência
 > é a mesma da Fase 5; o escopo é desta análise. Uma coluna `data` com dois
 > formatos misturados recusa a descritiva e não tem por que bloquear um teste
 > que nunca a abriria. Ver `descritiva.recusar_incompativeis`.
 
-*linha 523*
+*linha 524*
 
 > Por nome, e não `if linha not in numericas`: a comparação de `Linha` é por
 > valor e a busca é linear, o que dava O(n²) — e, com duas linhas idênticas,
 > a segunda seria dada como numérica sem ser. A variável é a chave do
 > dicionário, e o `ler_arquivo` já recusa duas linhas com o mesmo nome.
 
-- *linha 557* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
+- *linha 558* — `if serie is None:` — pragma: no cover - `recusar_incompativeis` já barrou
 
 ### Uma variável
 
 ### `def _testar_variavel(linha, serie, slug, total, com_graficos)`
 
-*linha 590*
+*linha 591*
 
 Mede uma coluna: forma, teste, e os pontos do Q-Q.
 
@@ -8061,7 +8061,7 @@ de `idade` depender de quem respondeu `imc`. A coluna `n` está na tabela
 justamente porque ele varia; escondê-la seria deixar o leitor supor que é o
 mesmo denominador em todas.
 
-*linha 614*
+*linha 615*
 
 > `nunique() >= 2` antes de pedir a forma, e não é precaução: em uma coluna
 > constante a assimetria é 0/0, e o `pandas` devolve **0,0** para ela em vez de
@@ -8069,7 +8069,7 @@ mesmo denominador em todas.
 > sobre uma coluna que não tem forma nenhuma — e é indistinguível do zero de
 > uma variável que é mesmo simétrica. O traço é a resposta certa.
 
-*linha 651*
+*linha 652*
 
 > Sem figura, sem pontos. Eles só existem para o Q-Q, e calculá-los custa
 > ordenar a coluna e uma chamada ao `scipy` por variável — para guardar N
@@ -8077,7 +8077,7 @@ mesmo denominador em todas.
 
 ### `def shapiro(variavel, valores, preenchidos)`
 
-*linha 678*
+*linha 679*
 
 O Shapiro-Wilk, com os dois casos em que ele não existe barrados antes.
 
@@ -8112,11 +8112,11 @@ recibo da rodada é pior do que aviso nenhum.
 Quando o `scipy` avisa de outra coisa, o texto dele vai junto, como ele
 escreveu. O FlatCap repassa o recado; ele não inventa o motivo.
 
-- *linha 741* — `except (ValueError, TypeError) as erro:` — pragma: no cover - as duas barreiras acima
+- *linha 742* — `except (ValueError, TypeError) as erro:` — pragma: no cover - as duas barreiras acima
 
 ### `def pontos_do_qq(valores, preenchidos)`
 
-*linha 773*
+*linha 774*
 
 Os pontos do Q-Q e a reta de referência, calculados aqui e não no `graficos.py`.
 
@@ -8142,7 +8142,7 @@ a Fase 5 tomou com os quartis que coincidem.
 
 ### `def _grafico(variavel)`
 
-*linha 828*
+*linha 829*
 
 O Q-Q de uma variável.
 
@@ -8156,7 +8156,7 @@ categórica saiu sem eixo de valores.
 
 ### `def _leitura(assimetria, curtose, p)`
 
-*linha 855*
+*linha 856*
 
 O que os números dizem, em português, na última coluna da tabela.
 
@@ -8173,7 +8173,7 @@ depois o veredito do teste, que não vale.
 
 ### `def _tabela(variaveis, total)`
 
-*linha 898*
+*linha 899*
 
 Uma tabela só, com uma linha por variável.
 
@@ -8190,7 +8190,7 @@ A primeira coluna é o **rótulo**, e não o nome da coluna do banco: é o que o
 cliente lê, e é o mesmo texto que encabeça a seção da variável na descritiva.
 O nome técnico está no manifesto, que é quem liga arquivo a variável.
 
-*linha 932*
+*linha 933*
 
 > Vazia de propósito: esta tabela não é de uma variável. É o campo que a
 > linha `# variável:` do cabeçalho do `.csv` usa, e escrever ali a primeira
@@ -8200,7 +8200,7 @@ O nome técnico está no manifesto, que é quem liga arquivo a variável.
 
 ### `def montar_manifesto(normalidade, linhas, com_graficos)`
 
-*linha 969*
+*linha 970*
 
 Traduz a rodada para o índice que o relatório vai ler.
 
@@ -8217,11 +8217,11 @@ banco inteiro; o `n` que varia é o de cada variável, e ele está na tabela e n
 
 ### `def _artefatos(normalidade, com_graficos)`
 
-*linha 1066*
+*linha 1067*
 
 ### `def _ambiente(com_graficos)`
 
-*linha 1088*
+*linha 1089*
 
 As versões que produziram estes números.
 
@@ -8240,7 +8240,7 @@ matplotlib resolveu, que pode não ser a que o `graficos.py` pediu.
 
 ### `def _variaveis_pedidas(raiz)`
 
-*linha 1126*
+*linha 1127*
 
 A lista `normalidade:` do `projeto.yaml`, quando ela existir.
 
@@ -8259,7 +8259,7 @@ e não valeu.
 
 ### `def _conferir_pedidas(pedidas, numericas, linhas)`
 
-*linha 1163*
+*linha 1164*
 
 Recusa a rodada quando a lista da ficha nomeia algo que não serve.
 
@@ -8271,21 +8271,21 @@ banco) ou existe e não é `numerica` (o tipo está errado em um dos dois lugare
 
 ### `def _motivo_de_fora(linha)`
 
-*linha 1216*
+*linha 1217*
 
 ### `def _mensagem_nada_a_analisar(linhas)`
 
-*linha 1224*
+*linha 1225*
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1246*
+*linha 1247*
 
 ### Leitura da série e formatação
 
 ### `def _coluna(quadro, nome)`
 
-*linha 1272*
+*linha 1273*
 
 A coluna do banco pelo nome, ou `None`.
 
@@ -8294,7 +8294,7 @@ repetido devolveria um `DataFrame` no lugar de uma coluna.
 
 ### `def _finito(valor)`
 
-*linha 1285*
+*linha 1286*
 
 O número, ou `None` quando ele não é um número.
 
@@ -8304,11 +8304,11 @@ dentro de uma célula do Word.
 
 ### `def _arredondar(valor)`
 
-*linha 1300*
+*linha 1301*
 
 ### `def _forma(valor)`
 
-*linha 1306*
+*linha 1307*
 
 Assimetria e curtose com sinal, sempre com as mesmas casas.
 
@@ -8319,11 +8319,11 @@ alinha. É o mesmo argumento dos percentuais da Fase 5.
 
 ### `def _estatistica(valor)`
 
-*linha 1320*
+*linha 1321*
 
 ### `def valor_p(valor)`
 
-*linha 1326*
+*linha 1327*
 
 O valor-p, com três casas e nunca como zero.
 
@@ -8336,13 +8336,17 @@ Pública desde a 1.5.0, com o apelido privado que este módulo usa: a associaç�
 imprime p-valor na mesma página, e dois formatadores para o mesmo p é como um
 documento sai com `< 0,001` numa tabela e `0,000` na seguinte.
 
+Logo abaixo do α, quatro casas truncadas: 0,0495 arredondado a três casas sai
+`0,050`, ao lado de «o teste rejeita a normal». Truncado, o número nunca cruza
+o α que decidiu a conclusão ao lado dele.
+
 ### `def _integridade(confere)`
 
-*linha 1349*
+*linha 1357*
 
 ### `def _subtitulo(preenchidos, faltantes)`
 
-*linha 1357*
+*linha 1365*
 
 ## `flatcap/cruzamento.py`
 

@@ -297,6 +297,25 @@ def test_valor_p_nunca_sai_como_zero():
     assert celula_p == "< 0,001"
 
 
+@pytest.mark.parametrize(
+    ("p", "texto"),
+    [
+        (0.0495, "0,0495"),
+        (0.04996, "0,0499"),
+        (0.0494, "0,049"),
+        (0.05, "0,050"),
+        (0.0505, "0,051"),
+    ],
+)
+def test_valor_p_logo_abaixo_do_alfa_nao_arredonda_para_o_alfa(p, texto):
+    """
+    0,0495 rejeita, e `0,050` ao lado de «rejeita» desmente a conclusão.
+    """
+    from flatcap.normalidade import valor_p
+
+    assert valor_p(p) == texto
+
+
 def test_os_numeros_saem_com_virgula_decimal():
     quadro = pd.DataFrame({"idade": _normal(120)})
     resultado = _rodar(quadro, [_linha("idade")])
