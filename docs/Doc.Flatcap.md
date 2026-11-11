@@ -15287,7 +15287,7 @@ manifesto que não registra o que rodou, que vira aviso.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1558 linhas.*
+*1582 linhas.*
 
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -16104,13 +16104,13 @@ um alerta dentro do documento do cliente, sobre nada.
 
 *linha 1389*
 
-> Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
+> Os itens que **são** uma variável. O tipo, o rótulo, as faixas e as categorias só existem
 > para eles: uma seção que fala de doze colunas não tem um tipo do
 > dicionário para comparar, e a de normalidade se chama «Normalidade».
 
 ### `def _faixas_mudaram(faixas, detalhes)`
 
-*linha 1464*
+*linha 1467*
 
 Compara os cortes do dicionário com os que a rodada usou.
 
@@ -16118,19 +16118,30 @@ O manifesto guarda `origem` (`dicionario` ou `quartis`) e os `cortes` já
 arredondados. As três formas de divergir são: faixas preenchidas depois de a
 rodada ter usado quartis, faixas apagadas, e cortes diferentes.
 
-- *linha 1488* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+- *linha 1491* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+
+### `def _categorias_mudaram(linha, detalhes)`
+
+*linha 1502*
+
+Compara o `categorias_ordem` do dicionário com o que a rodada usou.
+
+O manifesto da descritiva guarda os códigos (`declaradas`) e o rótulo de cada
+um (`rotulos`). Sem esta conferência, escrever `1=Masculino|2=Feminino` depois
+da rodada deixava o documento com `1` e `2` e nenhum alerta. Manifesto de
+antes de a chave existir não é comparado: ausência ali não é «sem rótulo».
 
 ### Mensagens
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 1502*
+*linha 1526*
 
 ### `def _acao_do_historico(plano, status_trocado)`
 
-*linha 1513*
+*linha 1537*
 
-*linha 1530*
+*linha 1554*
 
 > A mesma frase do `flatcap status <id> --pronto`: quem lê o histórico procura uma.
 

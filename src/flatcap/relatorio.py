@@ -129,7 +129,7 @@ from pathlib import Path
 from typing import Any
 
 from .dados import linha_do_tempo
-from .dicionario import ARQUIVO_DICIONARIO, linhas_de_comentario
+from .dicionario import ARQUIVO_DICIONARIO, Linha, linhas_de_comentario
 from .dicionario import ler as ler_dicionario
 from .ficha import (
     Ficha,
@@ -1386,7 +1386,7 @@ def _conferir_dicionario(
         for coluna in rodada.manifesto.colunas_usadas:
             usadas.setdefault(coluna, rodada.analise)
 
-    # Os itens que **são** uma variável. O tipo, o rótulo e as faixas só existem
+    # Os itens que **são** uma variável. O tipo, o rótulo, as faixas e as categorias só existem
     # para eles: uma seção que fala de doze colunas não tem um tipo do
     # dicionário para comparar, e a de normalidade se chama «Normalidade».
     conhecidas: dict[str, ItemDoManifesto] = {}
@@ -1434,9 +1434,12 @@ def _conferir_dicionario(
             mudancas.append(
                 f"`{nome}` mudou de rótulo: «{item.rotulo}» → «{rotulo}»"
             )
-        diferenca = _faixas_mudaram(linha.faixas, item.detalhes)
-        if diferenca:
-            mudancas.append(f"`{nome}` {diferenca}")
+        for diferenca in (
+            _faixas_mudaram(linha.faixas, item.detalhes),
+            _categorias_mudaram(linha, item.detalhes),
+        ):
+            if diferenca:
+                mudancas.append(f"`{nome}` {diferenca}")
 
     if not mudancas:
         return None, ""
@@ -1494,6 +1497,27 @@ def _faixas_mudaram(faixas: tuple[str, ...], detalhes: dict[str, Any]) -> str:
     ):
         return "está com outros cortes de faixa do que os usados na rodada"
     return ""
+
+
+def _categorias_mudaram(linha: Linha, detalhes: dict[str, Any]) -> str:
+    """
+    Compara o `categorias_ordem` do dicionário com o que a rodada usou.
+
+    O manifesto da descritiva guarda os códigos (`declaradas`) e o rótulo de cada
+    um (`rotulos`). Sem esta conferência, escrever `1=Masculino|2=Feminino` depois
+    da rodada deixava o documento com `1` e `2` e nenhum alerta. Manifesto de
+    antes de a chave existir não é comparado: ausência ali não é «sem rótulo».
+    """
+    partes = []
+    declaradas = detalhes.get("declaradas")
+    if isinstance(declaradas, list) and declaradas != list(linha.categorias_ordem):
+        partes.append("outra ordem de categorias")
+    rotulos = detalhes.get("rotulos")
+    if isinstance(rotulos, dict) and rotulos != dict(linha.rotulos_das_categorias):
+        partes.append("outros rótulos de categoria")
+    if not partes:
+        return ""
+    return f"está com {' e '.join(partes)} do que a rodada usou"
 
 
 # Mensagens
