@@ -147,6 +147,20 @@ class TestDesenho:
         _, altura = Image.open(caminho).size
         assert altura <= ALTURA_MAXIMA * DPI * 1.15
 
+    @pytest.mark.filterwarnings("error")
+    def test_caractere_de_controle_nao_vira_glifo_faltando(self, tmp_path):
+        """
+        `Pronto\\x1fSocorro` saía com um quadrado e o aviso `Glyph 31 missing`.
+        """
+        from dataclasses import replace
+
+        grafico = replace(
+            BARRAS, titulo="Se\x00xo", subtitulo="n\t= 24",
+            categorias=("Pronto\x1fSocorro", "Masculino\x85"),
+            rotulos=("12\x7f", "12"),
+        )
+        desenhar(grafico, tmp_path / "g.png")
+
     def test_nao_deixa_figura_aberta(self, tmp_path):
         """
         Uma figura que não fecha vaza memória, e a descritiva de um banco com

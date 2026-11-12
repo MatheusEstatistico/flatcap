@@ -74,7 +74,9 @@ por que este módulo continua sem erro próprio.
 
 from __future__ import annotations
 
+import re
 import textwrap
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -169,6 +171,9 @@ _PONTO_DISPERSAO = 12
 _AREA_MAXIMA_DISPERSAO = 320
 _ALTURA_DISPERSAO = 3.6
 
+# Todo controle C0 e C1, menos o `\n`: é com ele que o `textwrap` quebra o rótulo.
+_CONTROLE = re.compile(r"[\x00-\x09\x0b-\x1f\x7f-\x9f]")
+
 
 def versao_do_matplotlib() -> str:
     """
@@ -224,6 +229,8 @@ def desenhar(grafico: Grafico, caminho: Path) -> Path:
             f"{', '.join(sorted(_FORMAS))}."
         )
 
+    grafico = _sem_controle(grafico)
+
     # Montar e salvar dentro do mesmo contexto. A aparência vale para esta figura
     # e não fica no processo depois dela — ver `APARENCIA`.
     with plt.rc_context(APARENCIA):
@@ -239,6 +246,28 @@ def desenhar(grafico: Grafico, caminho: Path) -> Path:
         finally:
             plt.close(figura)
     return caminho
+
+
+def _sem_controle(grafico: Grafico) -> Grafico:
+    """
+    O texto do gráfico sem caractere de controle.
+
+    Nenhuma fonte tem glifo para eles: `Pronto\\x1fSocorro` saía com um quadrado no
+    meio e o aviso `Glyph 31 missing`. O perfil já os acusa; aqui só não se desenha.
+    """
+
+    def limpo(texto: object) -> str:
+        return _CONTROLE.sub("", str(texto))
+
+    return replace(
+        grafico,
+        titulo=limpo(grafico.titulo),
+        subtitulo=limpo(grafico.subtitulo),
+        rotulo_categoria=limpo(grafico.rotulo_categoria),
+        rotulo_valor=limpo(grafico.rotulo_valor),
+        categorias=tuple(map(limpo, grafico.categorias)),
+        rotulos=tuple(map(limpo, grafico.rotulos)),
+    )
 
 
 # Uma forma por espécie
