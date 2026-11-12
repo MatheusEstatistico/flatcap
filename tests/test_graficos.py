@@ -237,6 +237,33 @@ class TestDesenho:
         assert decisoes, "nenhum texto com `$` chegou a ser desenhado"
         assert all(e_formula is False for _, e_formula in decisoes), decisoes
 
+    def test_o_eixo_numerico_sai_com_virgula_e_a_categoria_fica_intacta(
+        self, tmp_path, monkeypatch
+    ):
+        """
+        As marcas do eixo saíam `0.5`, ao lado da tabela que dizia `0,5`. E a troca
+        não pode alcançar o rótulo de categoria: `R$ 1.000` continua com ponto.
+        """
+        import re
+        from dataclasses import replace
+
+        from matplotlib.text import Text
+
+        desenhados: list[str] = []
+        original = Text.draw
+
+        def espiar(texto, renderer):
+            desenhados.append(texto.get_text())
+            return original(texto, renderer)
+
+        monkeypatch.setattr(Text, "draw", espiar)
+        desenhar(replace(DISPERSAO, pontos_x=(0.1, 0.7, 1.3, 2.9)), tmp_path / "d.png")
+        desenhar(replace(BARRAS, categorias=("Até R$ 1.000", "Mais")), tmp_path / "b.png")
+
+        assert any(re.fullmatch(r"\d+,\d+", t) for t in desenhados), desenhados
+        assert not any(re.fullmatch(r"[−-]?\d+\.\d+", t) for t in desenhados), desenhados
+        assert "Até R$ 1.000" in desenhados
+
     def test_a_versao_e_informavel(self):
         assert versao_do_matplotlib()[0].isdigit()
 
