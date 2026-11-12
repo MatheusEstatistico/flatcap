@@ -889,6 +889,27 @@ que sugerem o pareado — duas numéricas entre colchetes, `[pas_0, pas_1]` — 
 escrever `pareado:`.
 
 Nada muda nos testes, nas tabelas nem no manifesto, além do texto da regra do pareado.
+
+## 1.24.1 — a vírgula nos eixos
+
+**Os eixos dos gráficos falam como as tabelas.** As marcas numéricas saíam `1.52` ao lado
+da tabela que dizia `1,52`: o formatador padrão do matplotlib usa ponto. O
+`graficos._VirgulaDecimal` troca o ponto pela vírgula, e é posto em `_figura`, então vale
+para a dispersão, o Q-Q e o histograma. Não é o `axes.formatter.use_locale`, que segue o
+locale da máquina: o mesmo banco sairia com ponto num Windows em inglês. O eixo de
+categorias troca o formatador pelos próprios rótulos, e `Até R$ 1.000` continua com ponto.
+
+**O valor-p logo abaixo do α não arredonda para o α.** Um p de 0,0495 saía `0,050` ao lado
+de «o teste rejeita a normal». Quando p < α e as três casas dariam 0,050, o
+`normalidade.valor_p` escreve quatro casas truncadas — `0,0495`, e `0,0499` para 0,04996 —,
+com `Decimal` sobre o `repr`, porque o truncamento em `float` erra justamente em 0,0495.
+Fora disso nada muda, e como o formatador é o mesmo em todas as análises, a correção também.
+
+**O alerta de dicionário mudado confere as categorias.** Escrever `1=Masculino|2=Feminino`
+no dicionário depois da descritiva deixava o documento com `1` e `2` e nenhum alerta: o
+`dicionario_mudou` olhava o tipo, o rótulo e as faixas, e não as categorias, embora o
+manifesto guarde os códigos e os rótulos. O `relatorio._categorias_mudaram` os compara com o
+dicionário de hoje; o manifesto de antes de as chaves existirem não é comparado.
 """
 
-__version__ = "1.24.0"
+__version__ = "1.24.1"
