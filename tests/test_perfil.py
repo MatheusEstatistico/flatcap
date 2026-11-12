@@ -224,6 +224,19 @@ class TestDetectoresCorrigir:
         quadro["Unnamed: 7"] = [None] * len(quadro)
         assert "cabecalho_vazio" in _codigos(perfilado(quadro))
 
+    def test_caractere_de_controle(self, perfilado):
+        """
+        `Pronto\\x1fSocorro` passava calado pelo perfil e derrubava o relatório.
+        """
+        quadro = bancos.completo()
+        quadro["local"] = ["Pronto\x1fSocorro", "Enfermaria"] * (len(quadro) // 2)
+        achado = next(
+            a for a in perfilado(quadro).achados if a.codigo == "caractere_de_controle"
+        )
+        assert achado.gravidade == CORRIGIR
+        assert achado.exemplos == (repr("Pronto\x1fSocorro"),)
+        assert "caractere_de_controle" not in _codigos(perfilado(bancos.completo()))
+
 
 class TestDetectoresConfirmar:
     """

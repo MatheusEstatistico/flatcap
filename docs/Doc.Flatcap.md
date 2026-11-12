@@ -5399,7 +5399,7 @@ listas são separadas por `|`.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1726 linhas.*
+*1745 linhas.*
 
 O perfil do banco — o que você leva para a reunião.
 
@@ -5559,9 +5559,15 @@ coluna que ele denuncia.
 
 > `1,234.56` e `1234.56` — o jeito que sai de ferramenta em inglês.
 
+### `_CONTROLE`
+
+*linha 240*
+
+> Controle C0 e DEL; tabulação e quebra de linha ficam de fora, são texto legível.
+
 ### `class Achado`
 
-*linha 245*
+*linha 247*
 
 Uma coisa observada no banco que exige atenção.
 
@@ -5570,67 +5576,67 @@ procurar; "a coluna sexo tem F, f, Feminino e feminino " faz ele achar.
 
 #### `def peso(self)`
 
-*linha 261*
+*linha 263*
 
 ### `class Coluna`
 
-*linha 266*
+*linha 268*
 
 Uma variável do banco, já medida.
 
 #### `def preenchidos(self)`
 
-*linha 287*
+*linha 289*
 
 #### `def proporcao_faltante(self)`
 
-*linha 291*
+*linha 293*
 
 #### `def resumo_numerico(self)`
 
-*linha 295*
+*linha 297*
 
 #### `def como_sugestao(self)`
 
-*linha 298*
+*linha 300*
 
 ### `class Perfil`
 
-*linha 308*
+*linha 310*
 
 O banco inteiro, medido. É daqui que saem o `perfil.md` e o terminal.
 
 #### `def raiz(self)`
 
-*linha 326*
+*linha 328*
 
 #### `def total_colunas(self)`
 
-*linha 330*
+*linha 332*
 
 #### `def tamanho_legivel(self)`
 
-*linha 334*
+*linha 336*
 
 #### `def por_gravidade(self, gravidade)`
 
-*linha 337*
+*linha 339*
 
 #### `def a_corrigir(self)`
 
-*linha 341*
+*linha 343*
 
 #### `def a_confirmar(self)`
 
-*linha 345*
+*linha 347*
 
 #### `def limpo(self)`
 
-*linha 349*
+*linha 351*
 
 ### `class PlanoPerfil`
 
-*linha 354*
+*linha 356*
 
 Tudo o que o `perfil` faria, decidido e ainda não escrito.
 
@@ -5640,15 +5646,15 @@ exatamente o que seria gravado, e não uma aproximação.
 
 #### `def raiz(self)`
 
-*linha 372*
+*linha 374*
 
 #### `def dicionario_existia(self)`
 
-*linha 376*
+*linha 378*
 
 ### `class ResultadoPerfil`
 
-*linha 381*
+*linha 383*
 
 O que a execução de fato escreveu.
 
@@ -5656,7 +5662,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_perfil(raiz, aba, conferir, agora)`
 
-*linha 393*
+*linha 395*
 
 Abre a versão vigente do banco, diagnostica e monta os dois arquivos.
 
@@ -5676,7 +5682,7 @@ Raises:
 
 ### `def executar_perfil(plano)`
 
-*linha 437*
+*linha 439*
 
 Escreve o `dicionario.csv` e o `perfil.md`. Não decide mais nada.
 
@@ -5688,7 +5694,7 @@ de uma falha no meio resolve, em vez de agravar.
 
 ### `def perfilar(banco, ficha, quando)`
 
-*linha 466*
+*linha 468*
 
 Mede o banco. Função pura: recebe o quadro aberto, devolve o diagnóstico.
 
@@ -5696,7 +5702,7 @@ Separada de `preparar_perfil` porque é o miolo testável — dá para jogar um
 `DataFrame` montado à mão aqui dentro e afirmar sobre os achados, sem pasta de
 projeto, sem ficha e sem disco.
 
-*linha 477*
+*linha 479*
 
 > `quadro.iloc[:, i]` e não `quadro[nome]`: nome repetido devolveria um
 > `DataFrame` no lugar de uma coluna, e o perfil quebraria justamente no banco
@@ -5706,9 +5712,9 @@ projeto, sem ficha e sem disco.
 
 ### `def _perfilar_coluna(serie, nome, posicao, linhas)`
 
-*linha 509*
+*linha 511*
 
-*linha 535*
+*linha 537*
 
 > A coluna que precisa de rótulo, e o momento em que se descobre que ela
 > precisa.
@@ -5738,7 +5744,7 @@ projeto, sem ficha e sem disco.
 
 ### `def _achados_gerais(quadro, colunas, duplicadas, linhas, ajustados)`
 
-*linha 618*
+*linha 620*
 
 O que se vê olhando o banco inteiro, e não uma coluna de cada vez.
 
@@ -5746,25 +5752,25 @@ O que se vê olhando o banco inteiro, e não uma coluna de cada vez.
 o quadro já chega com o nome novo, e é por aqui que o antigo continua aparecendo
 no checklist.
 
-*linha 685*
+*linha 687*
 
 > Os que o leitor limpou, com o nome de antes e o de agora; e os que ficaram como
 > vieram porque a limpeza os faria colidir com outra coluna.
 
 ### `def _achados_numericos(nome, preenchidos)`
 
-*linha 753*
+*linha 755*
 
 O código de faltante disfarçado de número — 99, 999 — é o achado clássico.
 
 ### `def _achados_textuais(nome, textos)`
 
-*linha 786*
+*linha 788*
 
 Os detectores do roteiro que se aplicam a coluna de texto, mais os que
 aparecem sempre junto com eles.
 
-*linha 801*
+*linha 803*
 
 > Num `.csv` separado por `;` a vírgula já é lida como decimal (`banco.py`),
 > coluna inteira ou nada. Se a coluna chegou aqui como texto, o motivo
@@ -5772,11 +5778,11 @@ aparecem sempre junto com eles.
 
 ### `def _achados_de_preenchimento(nome, faltantes, linhas, unicos)`
 
-*linha 916*
+*linha 935*
 
 ### `def _achados_mistos(nome, serie)`
 
-*linha 969*
+*linha 988*
 
 Tipos misturados na mesma coluna: número e texto convivendo.
 
@@ -5790,7 +5796,7 @@ das duas versões e erra na outra, em silêncio.
 
 ### `def _sugerir(nome, serie, textos, unicos, faltantes, linhas)`
 
-*linha 1027*
+*linha 1046*
 
 A sugestão que vai para o `dicionario.csv`, e o motivo dela.
 
@@ -5798,7 +5804,7 @@ A ordem das regras é a decisão: a primeira que casa vence. O motivo viaja
 junto porque uma sugestão sem justificativa não dá para conferir — e conferir
 é literalmente o que se pede que você faça com este arquivo.
 
-*linha 1054*
+*linha 1073*
 
 > Três testes, e os dois últimos são o que segura o palpite. Só "poucos
 > valores distintos" classificaria como código toda coluna numérica de um
@@ -5808,7 +5814,7 @@ junto porque uma sugestão sem justificativa não dá para conferir — e confer
 
 ### `def _categorias_sugeridas(tipo, categorias, unicos, achados)`
 
-*linha 1101*
+*linha 1120*
 
 A ordem proposta para `categorias_ordem`: da mais frequente para a menos.
 
@@ -5836,34 +5842,34 @@ Fica em branco quando algum valor contém `|`, que é o separador da lista.
 
 ### `def _e_numerica(serie)`
 
-*linha 1145*
+*linha 1164*
 
 ### `def _e_data(serie)`
 
-*linha 1151*
+*linha 1170*
 
 ### `def _e_booleana(serie)`
 
-*linha 1155*
+*linha 1174*
 
 ### `def _tipos_de(serie)`
 
-*linha 1159*
+*linha 1178*
 
 Quantos tipos de Python convivem na coluna. Um só, quase sempre.
 
 ### `def _tipo_lido(serie)`
 
-*linha 1168*
+*linha 1187*
 
 Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
-*linha 1173*
+*linha 1192*
 
 > Coluna sem nenhum valor chega como `float64` por convenção do pandas, e
 > anunciá-la como "decimal" seria descrever a convenção, não o banco.
 
-*linha 1182*
+*linha 1201*
 
 > `_tipos_de` e não `serie.dtype == object`: o dtype responde "como o pandas
 > guardou isto", e a pergunta é "quantas naturezas convivem aqui". No pandas
@@ -5874,17 +5880,17 @@ Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
 ### `def _so_inteiros(preenchidos)`
 
-*linha 1193*
+*linha 1212*
 
 ### `def _textos(preenchidos)`
 
-*linha 1204*
+*linha 1223*
 
 Os valores como texto, sem tirar espaço: o espaço sobrando é um dos achados.
 
 ### `def _exemplos(preenchidos)`
 
-*linha 1213*
+*linha 1232*
 
 Alguns valores para reconhecer a coluna.
 
@@ -5895,7 +5901,7 @@ documento que vai para a mesa da reunião custa uma pergunta.
 
 ### `def _contagem(preenchidos)`
 
-*linha 1234*
+*linha 1253*
 
 Valores e quantas vezes cada um aparece, do mais frequente para o menos.
 
@@ -5912,35 +5918,35 @@ tabela nunca encontrava.
 
 ### `def _resumo_numerico(preenchidos)`
 
-*linha 1254*
+*linha 1273*
 
-- *linha 1259* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
+- *linha 1278* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
 
 ### Auxiliares de texto
 
 ### `def _e_numero(texto)`
 
-*linha 1275*
+*linha 1294*
 
 ### `def _variacoes_de_grafia(textos)`
 
-*linha 1282*
+*linha 1301*
 
 Agrupa valores que só diferem em acento, caixa ou espaço.
 
 ### `def _chave(texto)`
 
-*linha 1298*
+*linha 1317*
 
 A forma canônica de um texto: sem acento, sem caixa, sem espaço sobrando.
 
 ### `def _parece_identificador(nome)`
 
-*linha 1307*
+*linha 1326*
 
 ### `def _nomes_repetidos(nomes)`
 
-*linha 1312*
+*linha 1331*
 
 Nomes de coluna que colidem, das duas formas em que isso acontece.
 
@@ -5951,15 +5957,15 @@ são nomes diferentes para o `pandas` e a mesma variável para o cliente.
 
 ### `def _encurtar(texto, limite)`
 
-*linha 1342*
+*linha 1361*
 
 ### `def _porcentagem(fracao)`
 
-*linha 1347*
+*linha 1366*
 
 ### `def _numero(valor, casas)`
 
-*linha 1351*
+*linha 1370*
 
 Número no formato brasileiro, sem zero à toa: `52,5` e não `52,50`.
 
@@ -5971,15 +5977,15 @@ dela é pequena. Até a 1.14.0 eram sempre duas, e uma concentração na casa de
 
 ### `def texto_do_perfil(perfil, fusao)`
 
-*linha 1373*
+*linha 1392*
 
 Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_cabecalho(perfil)`
 
-*linha 1389*
+*linha 1408*
 
-*linha 1391*
+*linha 1410*
 
 > `rotulo_do_projeto` e não `raiz.name`: desde a 1.1.0 o nome da pasta é
 > `Projeto 006`, que não identifica ninguém — e este título encabeça o
@@ -5987,18 +5993,18 @@ Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_avisos(perfil)`
 
-*linha 1435*
+*linha 1454*
 
 ### `def _md_checklist(perfil)`
 
-*linha 1445*
+*linha 1464*
 
 A parte que existe para ser lida em voz alta na reunião.
 
 Vem antes das tabelas de propósito: é o que exige decisão. As tabelas são
 consulta, e consulta se procura quando precisa.
 
-*linha 1475*
+*linha 1494*
 
 > Mais folgado do que na tabela: aqui o exemplo é o que faz o
 > cliente encontrar o valor na planilha, e cortado pela metade
@@ -6006,11 +6012,11 @@ consulta, e consulta se procura quando precisa.
 
 ### `def _md_variaveis(perfil)`
 
-*linha 1485*
+*linha 1504*
 
 ### `def _md_categoricas(perfil, fusao)`
 
-*linha 1523*
+*linha 1542*
 
 Os valores observados de cada categórica, que é o que se olha para preencher
 `categorias_ordem`.
@@ -6023,17 +6029,17 @@ vira ler a tabela em voz alta. Enquanto ele não responde, a coluna não existe
 
 ### `def _md_numericas(perfil)`
 
-*linha 1592*
+*linha 1611*
 
 O resumo de cada numérica, que é o que se olha para decidir as faixas.
 
 ### `def _md_dicionario(perfil, fusao)`
 
-*linha 1625*
+*linha 1644*
 
 ### `def _celula(texto)`
 
-*linha 1675*
+*linha 1694*
 
 Um valor do banco dentro de uma célula de tabela markdown.
 
@@ -6043,7 +6049,7 @@ toma com colchete e o `rich`.
 
 ### `def _geracao_anterior(caminho)`
 
-*linha 1686*
+*linha 1705*
 
 Quando o `perfil.md` que está no disco foi gerado.
 
@@ -6053,7 +6059,7 @@ com as suas anotações da reunião, é outra.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1711*
+*linha 1730*
 
 ## `flatcap/manifesto.py`
 
@@ -16196,7 +16202,7 @@ antes de a chave existir não é comparado: ausência ali não é «sem rótulo�
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1464 linhas.*
+*1467 linhas.*
 
 O `.docx` do relatório.
 
@@ -16683,22 +16689,32 @@ cor só entram quando não há estilo para mandar neles.
 
 - *linha 797* — `except KeyError:` — pragma: no cover - o estilo veio da resolução
 
+*linha 800*
+
+> O XML do Word recusa esses caracteres e o lxml levanta ValueError; o perfil já os acusa.
+
 ### `def _alinhar(paragrafo, de_texto)`
 
-*linha 813*
+*linha 814*
 
 ### `_CELULA_NUMERICA`
 
-*linha 817*
+*linha 818*
 
 > Uma célula que se lê como número: `15`, `26,8`, `+0,45`, `−1,2`, `< 0,001`,
 > `100,0%` — e a data `01/03/2026`, que numa tabela de período se alinha com os
 > números ao lado dela. O traço e a célula vazia não contam para lado nenhum: são o
 > "não se aplica" de qualquer coluna.
 
+### `_FORA_DO_XML`
+
+*linha 826*
+
+> O que o XML 1.0 não aceita: controle C0 (menos tab, LF e CR), surrogate solto, U+FFFE/FFFF.
+
 ### `def _colunas_de_texto(tabela)`
 
-*linha 827*
+*linha 830*
 
 As posições das colunas que são texto e vão à esquerda.
 
@@ -16717,23 +16733,23 @@ alinhamento seria pôr apresentação dentro do dado.
 
 ### `def _largura_util(documento)`
 
-*linha 854*
+*linha 857*
 
 A mancha da página: largura menos as duas margens, lida da seção.
 
 ### `def _resolver_estilos(documento)`
 
-*linha 862*
+*linha 865*
 
 Percorre as filas e devolve o primeiro nome que o modelo tem.
 
 #### `def primeiro(fila)`
 
-*linha 868*
+*linha 871*
 
 ### `def _limpar_fim(documento)`
 
-*linha 884*
+*linha 887*
 
 Descarta os parágrafos vazios do fim do modelo.
 
@@ -16744,7 +16760,7 @@ inteira em branco, o que faz o documento parecer defeituoso já na abertura.
 
 ### `def _propriedades(documento, relatorio)`
 
-*linha 901*
+*linha 904*
 
 Os metadados do arquivo, que o Windows mostra sem ninguém abrir o documento.
 
@@ -16755,7 +16771,7 @@ pode não existir: o relatório da amostra sai de um projeto que só tem o
 
 ### `def _salvar_atomico(documento, caminho)`
 
-*linha 925*
+*linha 928*
 
 Grava o documento inteiro ou não grava nada.
 
@@ -16771,7 +16787,7 @@ O temporário é o do `ficha.temporario_ao_lado`, que respeita o `umask`: o
 
 ### `def _manter_junta(quadro)`
 
-*linha 955*
+*linha 958*
 
 Impede que uma tabela curta se parta na quebra de página.
 
@@ -16785,9 +16801,9 @@ cabeçalho repetido que resolve a leitura do outro lado.
 
 #### `def prender(linha)`
 
-*linha 969*
+*linha 972*
 
-*linha 979*
+*linha 982*
 
 > A tabela longa parte, e é o cabeçalho repetido que resolve a leitura do
 > outro lado. Com uma exceção: o `Total`. Sozinho no alto de uma página,
@@ -16798,7 +16814,7 @@ cabeçalho repetido que resolve a leitura do outro lado.
 
 ### `def _repetir_cabecalho(linha)`
 
-*linha 990*
+*linha 993*
 
 Marca a primeira linha como cabeçalho, para o Word repeti-la a cada página.
 
@@ -16808,17 +16824,17 @@ metade de baixo é uma coluna de números sem nome.
 
 ### `def _sombrear(celula, cor)`
 
-*linha 1004*
+*linha 1007*
 
 ### `def _bordas_da_tabela(tabela, cor, espessura)`
 
-*linha 1012*
+*linha 1015*
 
 Uma borda em volta de tudo. Serve a caixa de aviso, que é uma célula só.
 
 ### `def _bordas_de_tres_linhas(quadro, cor)`
 
-*linha 1025*
+*linha 1028*
 
 Topo, sob o cabeçalho, base. Nenhuma vertical.
 
@@ -16830,11 +16846,11 @@ o cliente pôr dois relatórios lado a lado.
 
 ### `def _lado_da_borda(nome, espessura, cor)`
 
-*linha 1043*
+*linha 1046*
 
 ### `def _escrever_bordas(tabela, lados)`
 
-*linha 1052*
+*linha 1055*
 
 Escreve `w:tblBorders`, com `none` explícito no que não foi pedido.
 
@@ -16842,13 +16858,13 @@ O `none` precisa ser escrito: sem ele, o lado herda a borda do estilo de
 tabela do modelo, e uma tabela de três linhas herdaria as verticais de um
 `Table Grid` institucional sem nada no código dizendo de onde elas vieram.
 
-*linha 1070*
+*linha 1073*
 
 > `tblBorders` vem antes de `tblLayout` e `tblLook` no esquema do OOXML.
 
 ### `def _rodape_com_pagina(secao)`
 
-*linha 1078*
+*linha 1081*
 
 O rodapé do documento padrão: `página N`, centralizado.
 
@@ -16858,13 +16874,13 @@ como instrução (`PAGE`) e o Word calcula na hora de exibir. Escrever o número
 
 ### `def _campo(paragrafo, instrucao, tamanho)`
 
-*linha 1094*
+*linha 1097*
 
 ### O modelo
 
 ### `def escrever_template(caminho)`
 
-*linha 1116*
+*linha 1119*
 
 Escreve um `template.docx` com os estilos do FlatCap já definidos.
 
@@ -16878,7 +16894,7 @@ procura antes de qualquer outro. Mude a fonte de `FlatCap Corpo` e o
 documento inteiro muda; ponha o logotipo no cabeçalho e ele aparece em todas
 as páginas de todos os relatórios.
 
-*linha 1139*
+*linha 1142*
 
 > As propriedades do arquivo são o único lugar de dentro do `.docx` em que
 > cabe uma explicação: elas aparecem no Word em Arquivo → Informações, não são
@@ -16887,14 +16903,14 @@ as páginas de todos os relatórios.
 
 ### `_NOTA_DO_MODELO`
 
-*linha 1152*
+*linha 1155*
 
 > O `dc:description` do OOXML tem limite de 255 caracteres — daí a nota ser um
 > ponteiro para a folha de decisões, e não a explicação inteira.
 
 ### `def _escrever_decisoes(caminho)`
 
-*linha 1162*
+*linha 1165*
 
 Escreve a folha de decisões ao lado do modelo, se ela ainda não existir.
 
@@ -16906,7 +16922,7 @@ a fusão do `dicionario.csv` existe para impedir.
 
 ### `def _fonte_do_estilo(estilo, nome)`
 
-*linha 1178*
+*linha 1181*
 
 Escreve a fonte nos quatro atributos do `w:rFonts`, e não só em dois.
 
@@ -16921,7 +16937,7 @@ convivem, quem vence depende da versão do Word.
 
 ### `def _fixar_tema(documento)`
 
-*linha 1200*
+*linha 1203*
 
 Põe a mesma fonte também no tema do documento.
 
@@ -16936,7 +16952,7 @@ mexe em outra coisa — e ele não tem como descobrir por quê.
 
 ### `def _definir_estilos(documento)`
 
-*linha 1223*
+*linha 1226*
 
 Cria os estilos `FlatCap *`, cada um herdando de um nativo do Word.
 
@@ -16959,13 +16975,13 @@ variável no painel de navegação do Word e num sumário, e `FlatCap Legenda` d
 
 #### `def criar(nome, base, tipo)`
 
-*linha 1248*
+*linha 1251*
 
-- *linha 1254* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
+- *linha 1257* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
 
 ### `def _estilo_de_tabela(documento)`
 
-*linha 1297*
+*linha 1300*
 
 Cria `FlatCap Tabela` — as três linhas, dentro do modelo.
 
@@ -16986,7 +17002,7 @@ cabeçalho" sem precisar saber quantas linhas a tabela tem.
 
 ### `def _margens_da_celula(cm)`
 
-*linha 1346*
+*linha 1349*
 
 O respiro entre a régua e o texto. Sem ele a tabela de três linhas fica
 apertada — sem verticais, é o espaço que separa as colunas.

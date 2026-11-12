@@ -286,6 +286,20 @@ class TestSecoes:
         assert any(media in celula.text for quadro in doc.tables for linha in quadro.rows
                    for celula in linha.cells)
 
+    @pytest.mark.filterwarnings("ignore:Glyph 31")  # o gráfico da descritiva ainda avisa
+    def test_caractere_de_controle_sai_do_texto_e_nao_derruba_o_docx(self, documento):
+        """
+        REGRESSÃO: `Pronto\\x1fSocorro` terminava em `ValueError: All strings must
+        be XML compatible`, sem `.docx`.
+        """
+        import bancos
+
+        quadro = bancos.completo()
+        quadro["sexo"] = quadro["sexo"].replace("Feminino", "Pronto\x1fSocorro")
+        doc, _ = documento(quadro)
+        celulas = [c.text for t in doc.tables for linha in t.rows for c in linha.cells]
+        assert "ProntoSocorro" in celulas
+
     def test_a_linha_total_sai_em_negrito(self, documento):
         doc, _ = documento()
         for quadro in doc.tables:
