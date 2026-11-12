@@ -7,6 +7,19 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.1] — a vírgula nos eixos
+
+### Corrigido
+- As marcas numéricas dos eixos dos gráficos — a dispersão, o Q-Q e o histograma — saíam
+  com ponto decimal (`1.52`), ao lado das tabelas com vírgula (`1,52`). Agora saem com
+  vírgula em qualquer máquina, e o rótulo de categoria, como `Até R$ 1.000`, não muda.
+- O valor-p logo abaixo do α — `0,0495` — saía `0,050` ao lado de «o teste rejeita»: o
+  arredondamento a três casas cruzava o α. Agora sai com quatro casas truncadas, `0,0495`,
+  nas tabelas e nas frases de todas as análises que mostram p.
+- Os rótulos escritos no dicionário depois da análise — `1=Masculino|2=Feminino` — deixavam
+  o relatório com `1` e `2` e nenhum alerta. O alerta de dicionário mudado agora confere os
+  rótulos e a ordem das categorias.
+
 ## [1.24.0] — a marca do pareado
 
 ### Mudado
