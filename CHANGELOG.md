@@ -7,6 +7,13 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.2] — o caractere de controle
+
+### Corrigido
+- Um caractere invisível de controle num valor do banco — `Pronto\x1fSocorro` — derrubava o
+  `relatorio` com `ValueError: All strings must be XML compatible`, sem `.docx`. Agora ele sai
+  do texto do documento, e o perfil o acusa em «Corrigir antes de começar».
+
 ## [1.24.1] — a vírgula nos eixos
 
 ### Corrigido
