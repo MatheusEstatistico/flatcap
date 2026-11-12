@@ -797,7 +797,8 @@ def _texto(
         except KeyError:  # pragma: no cover - o estilo veio da resolução
             pass
 
-    trecho = paragrafo.add_run(str(conteudo))
+    # O XML do Word recusa esses caracteres e o lxml levanta ValueError; o perfil já os acusa.
+    trecho = paragrafo.add_run(_FORA_DO_XML.sub("", str(conteudo)))
     if negrito:
         trecho.bold = True
     if italico:
@@ -822,6 +823,8 @@ _CELULA_NUMERICA = re.compile(
     r"^(?:[<>≤≥]\s*)?[+\-−]?\d+(?:,\d+)?%?$|^\d{2}/\d{2}/\d{4}$"
 )
 _CELULA_NEUTRA = frozenset({"", "—", "-"})
+# O que o XML 1.0 não aceita: controle C0 (menos tab, LF e CR), surrogate solto, U+FFFE/FFFF.
+_FORA_DO_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
 
 
 def _colunas_de_texto(tabela: TabelaLida) -> frozenset[int]:

@@ -237,6 +237,8 @@ _NUMERO_PTBR = re.compile(r"^[+-]?\d{1,3}(?:\.\d{3})+(?:,\d+)?$|^[+-]?\d+(?:,\d+
 _NUMERO_EN = re.compile(r"^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d+)?$|^[+-]?\d+(?:\.\d+)?$")
 _VIRGULA_DECIMAL = re.compile(r"^[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+),\d+$")
 _ESPACOS = re.compile(r"\s+")
+# Controle C0 e DEL; tabulação e quebra de linha ficam de fora, são texto legível.
+_CONTROLE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
 
 _MARCA_GERACAO = "<!-- flatcap perfil"
 
@@ -887,6 +889,23 @@ def _achados_textuais(nome: str, textos: list[str]) -> tuple[Achado, ...]:
                     "qualquer contagem, e iguais para quem olha a planilha."
                 ),
                 exemplos=tuple(repr(texto) for texto in espacos[:LIMITE_EXEMPLOS]),
+            )
+        )
+
+    controle = sorted({texto for texto in textos if _CONTROLE.search(texto)})
+    if controle:
+        achados.append(
+            Achado(
+                codigo="caractere_de_controle",
+                gravidade=CORRIGIR,
+                variavel=nome,
+                titulo=f"{len(controle)} valor(es) com caractere invisível de controle",
+                detalhe=(
+                    "Um caractere que não se vê na planilha e não se imprime — costuma "
+                    "vir de cópia de outro sistema. Ele separa categorias que parecem "
+                    "iguais, e o relatório em Word não consegue guardá-lo: sai sem ele."
+                ),
+                exemplos=tuple(repr(texto) for texto in controle[:LIMITE_EXEMPLOS]),
             )
         )
 
