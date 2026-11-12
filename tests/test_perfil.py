@@ -366,6 +366,26 @@ class TestSugestao:
         """
         assert _coluna(perfilado(bancos.minusculo(6)), "idade").sugestao == NUMERICA
 
+    def test_identificador_numerico_vira_ignorar(self, perfilado):
+        """
+        REGRESSÃO: `record_id`, `id` e `prontuario` em número saíam `numerica`, e a
+        descritiva escrevia a média do `record_id`. O nome manda antes do tipo lido.
+        """
+        quadro = bancos.completo()
+        n = len(quadro)
+        quadro["record_id"] = range(1, n + 1)
+        quadro["id"] = range(101, 101 + n)
+        quadro["prontuario"] = [f"{i:05d}" for i in range(n)]  # número guardado como texto
+        perfil = perfilado(quadro)
+        for coluna in ("record_id", "id", "prontuario"):
+            assert _coluna(perfil, coluna).sugestao == IGNORAR, coluna
+
+    def test_identificador_que_se_repete_segue_o_tipo(self, perfilado):
+        """O nome sozinho não basta: `cod_grupo` com 1, 2, 3 repetidos é código."""
+        quadro = bancos.completo()
+        quadro["cod_grupo"] = [1, 2, 3] * (len(quadro) // 3)
+        assert _coluna(perfilado(quadro), "cod_grupo").sugestao == CATEGORICA
+
     def test_texto_livre_vira_ignorar(self, perfilado):
         assert _coluna(perfilado(bancos.completo()), "observacoes").sugestao == IGNORAR
 
