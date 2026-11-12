@@ -910,6 +910,18 @@ no dicionário depois da descritiva deixava o documento com `1` e `2` e nenhum a
 `dicionario_mudou` olhava o tipo, o rótulo e as faixas, e não as categorias, embora o
 manifesto guarde os códigos e os rótulos. O `relatorio._categorias_mudaram` os compara com o
 dicionário de hoje; o manifesto de antes de as chaves existirem não é comparado.
+
+## 1.24.2 — o caractere de controle
+
+**Um caractere de controle num valor não derruba o relatório.** Com `Pronto\\x1fSocorro` no
+banco, o perfil não dizia nada, a descritiva rodava só com o aviso `Glyph 31 missing`, e o
+`relatorio` terminava em `ValueError: All strings must be XML compatible`, sem `.docx`: o XML
+do Word não aceita caractere de controle, e `documento._texto` escrevia o valor cru. Agora
+`_texto`, por onde passa todo texto do documento, tira antes do `add_run` exatamente o que o
+XML 1.0 recusa — controle C0 menos tab, LF e CR, surrogate solto, U+FFFE e U+FFFF — e o valor
+sai `ProntoSocorro`. A limpeza é só do documento, e o banco continua como o cliente o
+entregou: o perfil ganhou o detector `caractere_de_controle`, de gravidade `CORRIGIR`, com o
+exemplo em `repr` para o caractere aparecer no `perfil.md`.
 """
 
-__version__ = "1.24.1"
+__version__ = "1.24.2"
