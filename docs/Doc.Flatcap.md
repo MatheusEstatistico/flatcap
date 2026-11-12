@@ -6490,7 +6490,7 @@ Converte o JSON já decodificado em `Manifesto`.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*595 linhas.*
+*624 linhas.*
 
 Os `.png` das análises: as barras, os histogramas e as colunas da descritiva, o
 Q-Q da normalidade e a dispersão da correlação.
@@ -6564,7 +6564,7 @@ por que este módulo continua sem erro próprio.
 
 ### `matplotlib.use("Agg")`
 
-*linha 83*
+*linha 85*
 
 > `Agg` antes de qualquer outro import do matplotlib: sem isso a biblioteca
 > procura um servidor gráfico, que não existe em terminal nem em servidor, e o
@@ -6572,7 +6572,7 @@ por que este módulo continua sem erro próprio.
 
 ### `FONTE`
 
-*linha 88*
+*linha 90*
 
 > A fonte dos gráficos.
 >
@@ -6589,7 +6589,7 @@ por que este módulo continua sem erro próprio.
 
 ### `APARENCIA`
 
-*linha 102*
+*linha 104*
 
 > A configuração de aparência mora aqui em cima, com a paleta, onde se acha sem
 > procurar — mas ela **não** é escrita no `rcParams` global, e essa é a correção.
@@ -6612,47 +6612,47 @@ por que este módulo continua sem erro próprio.
 > `R$ 1.000 a R$ 2.000` saía desenhada `R1.000aR 2.000`, em itálico e sem os
 > espaços, ao lado da tabela que dizia certo.
 
-- *linha 128* — `import matplotlib.pyplot as plt` — noqa: E402 - obrigatoriamente depois do `use`
+- *linha 130* — `import matplotlib.pyplot as plt` — noqa: E402 - obrigatoriamente depois do `use`
 
-- *linha 129* — `from matplotlib.ticker import MaxNLocator, ScalarFormatter` — noqa: E402
+- *linha 131* — `from matplotlib.ticker import MaxNLocator, ScalarFormatter` — noqa: E402
 
-- *linha 131* — `if TYPE_CHECKING:` — só para a anotação; em tempo de execução nada disto é carregado
+- *linha 133* — `if TYPE_CHECKING:` — só para a anotação; em tempo de execução nada disto é carregado
 
 ### `SUPERFICIE`
 
-*linha 134*
+*linha 136*
 
 > A paleta. Fundo, tintas e grade de um sistema de visualização conferido; a série
 > é a cor de identidade nº 1 dele. Ficam com nome aqui em cima porque trocar a cor
 > do FlatCap um dia deve ser trocar estas oito linhas, e não caçar hexadecimal
 > dentro das funções.
 
-- *linha 146* — `LARGURA_POLEGADAS = 6.3` — ~16 cm: a largura útil de uma página A4 com margens
+- *linha 148* — `LARGURA_POLEGADAS = 6.3` — ~16 cm: a largura útil de uma página A4 com margens
 
-- *linha 149* — `DPI = 300` — a resolução de impressão; 600 dava arquivos quatro vezes maiores sem ganho no papel
+- *linha 151* — `DPI = 300` — a resolução de impressão; 600 dava arquivos quatro vezes maiores sem ganho no papel
 
-- *linha 151* — `_ESPESSURA_BARRA = 0.58` — o resto da faixa é ar, que é o que separa as barras
+- *linha 153* — `_ESPESSURA_BARRA = 0.58` — o resto da faixa é ar, que é o que separa as barras
 
-- *linha 152* — `_ESPESSURA_COLUNA = 0.78` — a série no tempo é lida como um perfil, e pede menos ar
+- *linha 154* — `_ESPESSURA_COLUNA = 0.78` — a série no tempo é lida como um perfil, e pede menos ar
 
-- *linha 153* — `_LIMITE_ROTULOS_COLUNAS = 12` — acima disso o eixo carrega os valores
+- *linha 155* — `_LIMITE_ROTULOS_COLUNAS = 12` — acima disso o eixo carrega os valores
 
-- *linha 154* — `_LARGURA_ROTULO = 28` — caracteres antes de quebrar o rótulo de uma categoria
+- *linha 156* — `_LARGURA_ROTULO = 28` — caracteres antes de quebrar o rótulo de uma categoria
 
 ### `_PONTO_QQ`
 
-*linha 156*
+*linha 158*
 
 > O ponto do Q-Q. Pequeno e sem contorno: em uma amostra de duzentos casos os
 > pontos do miolo se encostam, e um contorno escuro em cada um transformaria o
 > centro da nuvem em um borrão — que é justamente a parte que precisa ser lida
 > como uma linha reta.
 
-- *linha 161* — `_ALTURA_QQ = 3.6` — um dedo a mais que o padrão: o Q-Q é lido como um quadrado
+- *linha 163* — `_ALTURA_QQ = 3.6` — um dedo a mais que o padrão: o Q-Q é lido como um quadrado
 
 ### `_PONTO_DISPERSAO`
 
-*linha 163*
+*linha 165*
 
 > O ponto da dispersão. A área cresce com o número de casos que caem no mesmo lugar
 > — área, e não raio, porque é a área que o olho compara —, e o maior ponto tem um
@@ -6660,15 +6660,21 @@ por que este módulo continua sem erro próprio.
 > cobriria o gráfico. Quando o teto aperta, todos encolhem na mesma proporção, e o
 > ponto de um caso só continua visível.
 
+### `_CONTROLE`
+
+*linha 174*
+
+> Todo controle C0 e C1, menos o `\n`: é com ele que o `textwrap` quebra o rótulo.
+
 ### `def versao_do_matplotlib()`
 
-*linha 173*
+*linha 178*
 
 A versão que desenhou. Vai para o `ambiente` do manifesto.
 
 ### `def fonte_dos_graficos()`
 
-*linha 180*
+*linha 185*
 
 A fonte que o matplotlib **de fato** resolveu — não a que foi pedida.
 
@@ -6687,7 +6693,7 @@ aplicado a si mesma.
 
 ### `def desenhar(grafico, caminho)`
 
-*linha 203*
+*linha 208*
 
 Escreve o `.png` de um `Grafico`, onde quer que o chamador tenha pedido.
 
@@ -6701,16 +6707,29 @@ módulo. A mensagem diz a espécie pedida e as que existem, porque o erro
 acontece enquanto alguém escreve uma análise nova e o que ele precisa ler é
 "você escreveu `qqplot` e o nome é `qq`".
 
-*linha 227*
+*linha 234*
 
 > Montar e salvar dentro do mesmo contexto. A aparência vale para esta figura
 > e não fica no processo depois dela — ver `APARENCIA`.
+
+### `def _sem_controle(grafico)`
+
+*linha 251*
+
+O texto do gráfico sem caractere de controle.
+
+Nenhuma fonte tem glifo para eles: `Pronto\x1fSocorro` saía com um quadrado no
+meio e o aviso `Glyph 31 missing`. O perfil já os acusa; aqui só não se desenha.
+
+#### `def limpo(texto)`
+
+*linha 259*
 
 ### Uma forma por espécie
 
 ### `def _barras(grafico)`
 
-*linha 247*
+*linha 276*
 
 Categórica: barras horizontais, na ordem da tabela, com o valor na ponta.
 
@@ -6718,14 +6737,14 @@ Horizontais e não verticais porque o rótulo é texto — "Ensino fundamental
 incompleto" cabe deitado e não cabe em pé. A ordem é a de cima para baixo, que
 é a ordem em que a tabela é lida.
 
-*linha 282*
+*linha 311*
 
 > Sem eixo de valores: todo valor já está escrito na ponta da sua barra, e o
 > eixo seria a mesma informação uma segunda vez.
 
 ### `def _histograma(grafico)`
 
-*linha 297*
+*linha 326*
 
 Numérica: a forma da distribuição, em classes calculadas pelo `descritiva.py`.
 
@@ -6734,7 +6753,7 @@ cor do fundo, e não um contorno escuro, que acrescentaria tinta sem dado.
 
 ### `def _colunas(grafico)`
 
-*linha 327*
+*linha 356*
 
 Data: casos por mês ou por ano, em ordem cronológica.
 
@@ -6743,7 +6762,7 @@ vê meses empilhados na vertical precisa parar para entender a direção.
 
 ### `def _qq(grafico)`
 
-*linha 371*
+*linha 400*
 
 Q-Q: o valor observado contra o valor que a normal previa para aquela posição.
 
@@ -6766,7 +6785,7 @@ Os pontos ficam **por cima** da reta (`zorder`), porque são eles o dado; a reta
 é a régua. E ela é tinta apagada, não a cor da série, pela regra da casa: a
 identidade vem do dado, e nenhum outro elemento usa a cor da série.
 
-*linha 406*
+*linha 435*
 
 > Os pontos primeiro, e o limite do eixo lido **deles** antes de a reta
 > entrar. A reta é uma referência infinita cortada nos extremos do eixo x,
@@ -6776,14 +6795,14 @@ identidade vem do dado, e nenhum outro elemento usa a cor da série.
 > eixo de `12,5 casos` da Fase 5, e a correção é a mesma — o eixo mostra o
 > que a variável tem, e o que sobra da reta é cortado.
 
-*linha 431*
+*linha 460*
 
 > `inteiro=False`: aqui o eixo carrega os valores da variável, e `12,5 kg`
 > existe. A regra das marcas inteiras é do eixo que conta casos.
 
 ### `def _dispersao(grafico)`
 
-*linha 438*
+*linha 467*
 
 Dispersão: um ponto por caso, a primeira variável do par no eixo x.
 
@@ -6807,11 +6826,11 @@ de 1 a 3 é o `12,5 casos` da Fase 5 com outro nome.
 
 ### `def _todos_inteiros(valores)`
 
-*linha 487*
+*linha 516*
 
 ### `_FORMAS`
 
-*linha 491*
+*linha 520*
 
 > O registro das espécies.
 >
@@ -6824,7 +6843,7 @@ de 1 a 3 é o `12,5 casos` da Fase 5 com outro nome.
 
 ### `class _VirgulaDecimal(ScalarFormatter)`
 
-*linha 509*
+*linha 538*
 
 As marcas numéricas com vírgula decimal, como nas tabelas ao lado da figura.
 
@@ -6833,24 +6852,24 @@ banco sairia com ponto num Windows em inglês.
 
 #### `def __call__(self, x, pos)`
 
-*linha 517*
+*linha 546*
 
 #### `def get_offset(self)`
 
-*linha 520*
+*linha 549*
 
 ### `def _figura(altura)`
 
-*linha 524*
+*linha 553*
 
-*linha 528*
+*linha 557*
 
 > Aqui, na criação: o eixo de categorias troca isto pelos próprios rótulos
 > quando chama `set_*ticklabels`, e só o eixo numérico fica com a vírgula.
 
 ### `def _eixo_de_valores(eixo, inteiro)`
 
-*linha 535*
+*linha 564*
 
 Grade horizontal fina e sólida, atrás das barras, e nenhuma moldura.
 
@@ -6864,7 +6883,7 @@ vai de 70,1 a 72,4, e a nuvem inteira caberia entre duas marcas.
 
 ### `def _titulo(eixo, grafico)`
 
-*linha 560*
+*linha 589*
 
 Título e subtítulo alinhados à esquerda, acima da área do gráfico.
 
@@ -6872,7 +6891,7 @@ Alinhados à esquerda porque a figura vai para dentro de um documento de texto,
 onde tudo o mais começa na margem esquerda — um título centralizado sobre uma
 página justificada lê como um cartaz.
 
-*linha 572*
+*linha 601*
 
 > `bold`, e não `semibold`: o Arial tem Regular e Bold e mais nada. Um
 > peso 600 pedido a uma família que não o tem é resolvido pelo matplotlib
@@ -6880,7 +6899,7 @@ página justificada lê como um cartaz.
 > máquina — o mesmo banco sairia com o título mais gordo no seu Windows
 > do que no de outra pessoa.
 
-*linha 579*
+*linha 608*
 
 > Folga suficiente para o subtítulo caber embaixo **e** para o rabo de um
 > `_` no nome da variável não cair em cima dele — nome de coluna de banco
