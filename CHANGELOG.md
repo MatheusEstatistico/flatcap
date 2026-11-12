@@ -7,6 +7,13 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.3] — o glifo que faltava
+
+### Corrigido
+- O mesmo caractere de controle — `Pronto\x1fSocorro` — saía no gráfico da descritiva como
+  um quadrado no meio do rótulo, com o aviso `Glyph 31 missing`. Agora os gráficos saem sem
+  ele, em todas as espécies.
+
 ## [1.24.2] — o caractere de controle
 
 ### Corrigido

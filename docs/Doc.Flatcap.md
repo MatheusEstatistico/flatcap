@@ -744,7 +744,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*927 linhas.*
+*937 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1667,6 +1667,16 @@ XML 1.0 recusa — controle C0 menos tab, LF e CR, surrogate solto, U+FFFE e U+F
 sai `ProntoSocorro`. A limpeza é só do documento, e o banco continua como o cliente o
 entregou: o perfil ganhou o detector `caractere_de_controle`, de gravidade `CORRIGIR`, com o
 exemplo em `repr` para o caractere aparecer no `perfil.md`.
+
+### 1.24.3 — o glifo que faltava
+
+**O gráfico não desenha caractere de controle.** A 1.24.2 tirou o `Pronto\x1fSocorro` do
+`.docx`, mas não do `.png`: a barra saía com um quadrado no meio do rótulo, e o matplotlib
+avisava `Glyph 31 missing`, porque nenhuma fonte tem glifo para caractere de controle. O
+`graficos._sem_controle`, chamado no começo de `desenhar`, tira do título, do subtítulo, dos
+nomes dos eixos, das categorias e dos rótulos das barras todo controle C0 e C1 menos o `\n`,
+que é com o que o `textwrap` quebra o rótulo longo. A lista não é a do `.docx`, e de
+propósito: o Word aceita tab e `\x85`, e a fonte não tem glifo para eles.
 
 ## `flatcap/config.py`
 
