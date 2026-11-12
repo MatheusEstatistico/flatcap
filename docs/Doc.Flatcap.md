@@ -6451,7 +6451,7 @@ Converte o JSON já decodificado em `Manifesto`.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*576 linhas.*
+*595 linhas.*
 
 Os `.png` das análises: as barras, os histogramas e as colunas da descritiva, o
 Q-Q da normalidade e a dispersão da correlação.
@@ -6575,7 +6575,7 @@ por que este módulo continua sem erro próprio.
 
 - *linha 128* — `import matplotlib.pyplot as plt` — noqa: E402 - obrigatoriamente depois do `use`
 
-- *linha 129* — `from matplotlib.ticker import MaxNLocator` — noqa: E402
+- *linha 129* — `from matplotlib.ticker import MaxNLocator, ScalarFormatter` — noqa: E402
 
 - *linha 131* — `if TYPE_CHECKING:` — só para a anotação; em tempo de execução nada disto é carregado
 
@@ -6783,13 +6783,35 @@ de 1 a 3 é o `12,5 casos` da Fase 5 com outro nome.
 
 ### Peças comuns
 
-### `def _figura(altura)`
+### `class _VirgulaDecimal(ScalarFormatter)`
 
 *linha 509*
 
+As marcas numéricas com vírgula decimal, como nas tabelas ao lado da figura.
+
+Não é o `axes.formatter.use_locale`: ele segue o locale da máquina, e o mesmo
+banco sairia com ponto num Windows em inglês.
+
+#### `def __call__(self, x, pos)`
+
+*linha 517*
+
+#### `def get_offset(self)`
+
+*linha 520*
+
+### `def _figura(altura)`
+
+*linha 524*
+
+*linha 528*
+
+> Aqui, na criação: o eixo de categorias troca isto pelos próprios rótulos
+> quando chama `set_*ticklabels`, e só o eixo numérico fica com a vírgula.
+
 ### `def _eixo_de_valores(eixo, inteiro)`
 
-*linha 516*
+*linha 535*
 
 Grade horizontal fina e sólida, atrás das barras, e nenhuma moldura.
 
@@ -6803,7 +6825,7 @@ vai de 70,1 a 72,4, e a nuvem inteira caberia entre duas marcas.
 
 ### `def _titulo(eixo, grafico)`
 
-*linha 541*
+*linha 560*
 
 Título e subtítulo alinhados à esquerda, acima da área do gráfico.
 
@@ -6811,7 +6833,7 @@ Alinhados à esquerda porque a figura vai para dentro de um documento de texto,
 onde tudo o mais começa na margem esquerda — um título centralizado sobre uma
 página justificada lê como um cartaz.
 
-*linha 553*
+*linha 572*
 
 > `bold`, e não `semibold`: o Arial tem Regular e Bold e mais nada. Um
 > peso 600 pedido a uma família que não o tem é resolvido pelo matplotlib
@@ -6819,7 +6841,7 @@ página justificada lê como um cartaz.
 > máquina — o mesmo banco sairia com o título mais gordo no seu Windows
 > do que no de outra pessoa.
 
-*linha 560*
+*linha 579*
 
 > Folga suficiente para o subtítulo caber embaixo **e** para o rabo de um
 > `_` no nome da variável não cair em cima dele — nome de coluna de banco

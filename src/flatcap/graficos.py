@@ -126,7 +126,7 @@ APARENCIA: dict[str, object] = {
 }
 
 import matplotlib.pyplot as plt  # noqa: E402 - obrigatoriamente depois do `use`
-from matplotlib.ticker import MaxNLocator  # noqa: E402
+from matplotlib.ticker import MaxNLocator, ScalarFormatter  # noqa: E402
 
 if TYPE_CHECKING:  # só para a anotação; em tempo de execução nada disto é carregado
     from .manifesto import Grafico
@@ -506,10 +506,29 @@ _FORMAS = {
 # Peças comuns
 
 
+class _VirgulaDecimal(ScalarFormatter):
+    """
+    As marcas numéricas com vírgula decimal, como nas tabelas ao lado da figura.
+
+    Não é o `axes.formatter.use_locale`: ele segue o locale da máquina, e o mesmo
+    banco sairia com ponto num Windows em inglês.
+    """
+
+    def __call__(self, x, pos=None):
+        return super().__call__(x, pos).replace(".", ",")
+
+    def get_offset(self):
+        return super().get_offset().replace(".", ",")
+
+
 def _figura(altura: float):
     figura, eixo = plt.subplots(figsize=(LARGURA_POLEGADAS, altura), dpi=DPI)
     figura.patch.set_facecolor(SUPERFICIE)
     eixo.set_facecolor(SUPERFICIE)
+    # Aqui, na criação: o eixo de categorias troca isto pelos próprios rótulos
+    # quando chama `set_*ticklabels`, e só o eixo numérico fica com a vírgula.
+    eixo.xaxis.set_major_formatter(_VirgulaDecimal())
+    eixo.yaxis.set_major_formatter(_VirgulaDecimal())
     return figura, eixo
 
 
