@@ -7,6 +7,14 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.4] — o identificador numérico
+
+### Corrigido
+- `record_id`, `id` e `prontuario` em número eram sugeridos `numerica` no dicionário, e a
+  descritiva e a normalidade os analisavam: média, histograma, Shapiro-Wilk. Agora saem
+  `ignorar`, como o identificador em texto. Num `dicionario.csv` que já existe a linha não
+  muda: troque para `ignorar` à mão.
+
 ## [1.24.3] — o glifo que faltava
 
 ### Corrigido

@@ -744,7 +744,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*937 linhas.*
+*949 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1677,6 +1677,18 @@ avisava `Glyph 31 missing`, porque nenhuma fonte tem glifo para caractere de con
 nomes dos eixos, das categorias e dos rótulos das barras todo controle C0 e C1 menos o `\n`,
 que é com o que o `textwrap` quebra o rótulo longo. A lista não é a do `.docx`, e de
 propósito: o Word aceita tab e `\x85`, e a fonte não tem glifo para eles.
+
+### 1.24.4 — o identificador numérico
+
+**O identificador numérico é sugerido como `ignorar`.** `record_id`, `id` e `prontuario` em
+número saíam `numerica` no dicionário, e a descritiva escrevia a média, as faixas e o
+histograma do `record_id`, e a normalidade testava o Shapiro-Wilk dele. Em
+`perfil._sugerir`, onde a primeira regra que casa vence, o ramo numérico respondia antes da
+regra do identificador, que só o identificador em texto alcançava. Agora ela vem antes do
+ramo numérico e do teste de número guardado como texto — um `prontuario` em `00123` também
+saía `numerica`. A regra em si não mudou: nome com cara de identificador **e** nenhum valor
+repetido, e por isso `cod_grupo` com 1, 2 e 3 continua `categorica`. A fusão nunca reescreve
+linha existente, então um `dicionario.csv` que já diz `numerica` continua dizendo.
 
 ## `flatcap/config.py`
 
