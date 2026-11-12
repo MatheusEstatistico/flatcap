@@ -1069,6 +1069,10 @@ def _sugerir(
 
     preenchidos = linhas - faltantes
 
+    # Antes do ramo numérico: `record_id` é número, e saía `numerica` com média e Shapiro-Wilk.
+    if _parece_identificador(nome) and unicos == preenchidos and preenchidos:
+        return IGNORAR, "o nome sugere identificador e nenhum valor se repete"
+
     if _e_numerica(serie):
         # Três testes, e os dois últimos são o que segura o palpite. Só "poucos
         # valores distintos" classificaria como código toda coluna numérica de um
@@ -1101,9 +1105,6 @@ def _sugerir(
             return NUMERICA, "os valores são números, guardados como texto"
         if _formato_de_data(textos)[0] is not None:
             return DATA, "os valores são datas, guardadas como texto"
-
-    if _parece_identificador(nome) and unicos == preenchidos and preenchidos:
-        return IGNORAR, "o nome sugere identificador e nenhum valor se repete"
 
     if (
         preenchidos >= MINIMO_PARA_HEURISTICA

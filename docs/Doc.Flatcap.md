@@ -5421,7 +5421,7 @@ listas são separadas por `|`.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1745 linhas.*
+*1746 linhas.*
 
 O perfil do banco — o que você leva para a reunião.
 
@@ -5826,7 +5826,11 @@ A ordem das regras é a decisão: a primeira que casa vence. O motivo viaja
 junto porque uma sugestão sem justificativa não dá para conferir — e conferir
 é literalmente o que se pede que você faça com este arquivo.
 
-*linha 1073*
+*linha 1072*
+
+> Antes do ramo numérico: `record_id` é número, e saía `numerica` com média e Shapiro-Wilk.
+
+*linha 1077*
 
 > Três testes, e os dois últimos são o que segura o palpite. Só "poucos
 > valores distintos" classificaria como código toda coluna numérica de um
@@ -5836,7 +5840,7 @@ junto porque uma sugestão sem justificativa não dá para conferir — e confer
 
 ### `def _categorias_sugeridas(tipo, categorias, unicos, achados)`
 
-*linha 1120*
+*linha 1121*
 
 A ordem proposta para `categorias_ordem`: da mais frequente para a menos.
 
@@ -5864,34 +5868,34 @@ Fica em branco quando algum valor contém `|`, que é o separador da lista.
 
 ### `def _e_numerica(serie)`
 
-*linha 1164*
+*linha 1165*
 
 ### `def _e_data(serie)`
 
-*linha 1170*
+*linha 1171*
 
 ### `def _e_booleana(serie)`
 
-*linha 1174*
+*linha 1175*
 
 ### `def _tipos_de(serie)`
 
-*linha 1178*
+*linha 1179*
 
 Quantos tipos de Python convivem na coluna. Um só, quase sempre.
 
 ### `def _tipo_lido(serie)`
 
-*linha 1187*
+*linha 1188*
 
 Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
-*linha 1192*
+*linha 1193*
 
 > Coluna sem nenhum valor chega como `float64` por convenção do pandas, e
 > anunciá-la como "decimal" seria descrever a convenção, não o banco.
 
-*linha 1201*
+*linha 1202*
 
 > `_tipos_de` e não `serie.dtype == object`: o dtype responde "como o pandas
 > guardou isto", e a pergunta é "quantas naturezas convivem aqui". No pandas
@@ -5902,17 +5906,17 @@ Como o leitor entendeu a coluna, em português, para a tabela do perfil.
 
 ### `def _so_inteiros(preenchidos)`
 
-*linha 1212*
+*linha 1213*
 
 ### `def _textos(preenchidos)`
 
-*linha 1223*
+*linha 1224*
 
 Os valores como texto, sem tirar espaço: o espaço sobrando é um dos achados.
 
 ### `def _exemplos(preenchidos)`
 
-*linha 1232*
+*linha 1233*
 
 Alguns valores para reconhecer a coluna.
 
@@ -5923,7 +5927,7 @@ documento que vai para a mesa da reunião custa uma pergunta.
 
 ### `def _contagem(preenchidos)`
 
-*linha 1253*
+*linha 1254*
 
 Valores e quantas vezes cada um aparece, do mais frequente para o menos.
 
@@ -5940,35 +5944,35 @@ tabela nunca encontrava.
 
 ### `def _resumo_numerico(preenchidos)`
 
-*linha 1273*
+*linha 1274*
 
-- *linha 1278* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
+- *linha 1279* — `except (TypeError, ValueError):` — pragma: no cover - dtype numérico sempre converte
 
 ### Auxiliares de texto
 
 ### `def _e_numero(texto)`
 
-*linha 1294*
+*linha 1295*
 
 ### `def _variacoes_de_grafia(textos)`
 
-*linha 1301*
+*linha 1302*
 
 Agrupa valores que só diferem em acento, caixa ou espaço.
 
 ### `def _chave(texto)`
 
-*linha 1317*
+*linha 1318*
 
 A forma canônica de um texto: sem acento, sem caixa, sem espaço sobrando.
 
 ### `def _parece_identificador(nome)`
 
-*linha 1326*
+*linha 1327*
 
 ### `def _nomes_repetidos(nomes)`
 
-*linha 1331*
+*linha 1332*
 
 Nomes de coluna que colidem, das duas formas em que isso acontece.
 
@@ -5979,15 +5983,15 @@ são nomes diferentes para o `pandas` e a mesma variável para o cliente.
 
 ### `def _encurtar(texto, limite)`
 
-*linha 1361*
+*linha 1362*
 
 ### `def _porcentagem(fracao)`
 
-*linha 1366*
+*linha 1367*
 
 ### `def _numero(valor, casas)`
 
-*linha 1370*
+*linha 1371*
 
 Número no formato brasileiro, sem zero à toa: `52,5` e não `52,50`.
 
@@ -5999,15 +6003,15 @@ dela é pequena. Até a 1.14.0 eram sempre duas, e uma concentração na casa de
 
 ### `def texto_do_perfil(perfil, fusao)`
 
-*linha 1392*
+*linha 1393*
 
 Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_cabecalho(perfil)`
 
-*linha 1408*
+*linha 1409*
 
-*linha 1410*
+*linha 1411*
 
 > `rotulo_do_projeto` e não `raiz.name`: desde a 1.1.0 o nome da pasta é
 > `Projeto 006`, que não identifica ninguém — e este título encabeça o
@@ -6015,18 +6019,18 @@ Monta o `perfil.md` inteiro. Sem tocar no disco, para o `--sim` mostrá-lo.
 
 ### `def _md_avisos(perfil)`
 
-*linha 1454*
+*linha 1455*
 
 ### `def _md_checklist(perfil)`
 
-*linha 1464*
+*linha 1465*
 
 A parte que existe para ser lida em voz alta na reunião.
 
 Vem antes das tabelas de propósito: é o que exige decisão. As tabelas são
 consulta, e consulta se procura quando precisa.
 
-*linha 1494*
+*linha 1495*
 
 > Mais folgado do que na tabela: aqui o exemplo é o que faz o
 > cliente encontrar o valor na planilha, e cortado pela metade
@@ -6034,11 +6038,11 @@ consulta, e consulta se procura quando precisa.
 
 ### `def _md_variaveis(perfil)`
 
-*linha 1504*
+*linha 1505*
 
 ### `def _md_categoricas(perfil, fusao)`
 
-*linha 1542*
+*linha 1543*
 
 Os valores observados de cada categórica, que é o que se olha para preencher
 `categorias_ordem`.
@@ -6051,17 +6055,17 @@ vira ler a tabela em voz alta. Enquanto ele não responde, a coluna não existe
 
 ### `def _md_numericas(perfil)`
 
-*linha 1611*
+*linha 1612*
 
 O resumo de cada numérica, que é o que se olha para decidir as faixas.
 
 ### `def _md_dicionario(perfil, fusao)`
 
-*linha 1644*
+*linha 1645*
 
 ### `def _celula(texto)`
 
-*linha 1694*
+*linha 1695*
 
 Um valor do banco dentro de uma célula de tabela markdown.
 
@@ -6071,7 +6075,7 @@ toma com colchete e o `rich`.
 
 ### `def _geracao_anterior(caminho)`
 
-*linha 1705*
+*linha 1706*
 
 Quando o `perfil.md` que está no disco foi gerado.
 
@@ -6081,7 +6085,7 @@ com as suas anotações da reunião, é outra.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1730*
+*linha 1731*
 
 ## `flatcap/manifesto.py`
 
