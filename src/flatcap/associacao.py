@@ -758,7 +758,7 @@ def testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParTe
     """
     Conta, aplica a regra de Cochran e roda o teste que ela escolheu.
 
-    Pública desde a 1.25.0, com o apelido privado que este módulo usa: cada linha
+    Pública desde a 1.24.5, com o apelido privado que este módulo usa: cada linha
     categórica da caracterização é este teste, com o grupo como a variável 1, e o p
     dela sai, letra por letra, o que o par `[sexo, escolaridade]` daria aqui.
     """

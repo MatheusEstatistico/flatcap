@@ -331,7 +331,7 @@ class Artefato:
     isso que ela é um campo próprio e não uma dedução a partir da extensão.
 
     Os três de baixo são de apresentação da tabela, e só a caracterização os preenche,
-    desde a 1.25.0: `recuo`, as linhas — contadas a partir de zero, sem o cabeçalho — que
+    desde a 1.24.5: `recuo`, as linhas — contadas a partir de zero, sem o cabeçalho — que
     saem recuadas, as categorias embaixo da variável; `rodape`, o que sai impresso
     embaixo da tabela, a legenda dos testes; e `deitada`, a tabela que pede a página em
     paisagem. Moram aqui, e não no `.csv`, porque o `.csv` é o dado que se abre no

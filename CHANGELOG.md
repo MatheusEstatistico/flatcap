@@ -7,6 +7,30 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.5] — a Tabela 1
+
+### Acrescentado
+- `flatcap caracterizacao <id>`: a Tabela 1 de artigo — as variáveis da lista
+  `caracterizacao:` da ficha, uma coluna por grupo, o Total e o p. A numérica sai em média
+  (DP) ou em mediana [Q1 a Q3], pela regra dos pressupostos da comparação entre grupos, com o
+  t de Welch ou o Mann-Whitney — a ANOVA de Welch ou o Kruskal-Wallis com três grupos ou
+  mais —; a categórica, em n (%), com o qui-quadrado — com Yates só na 2×2 — ou o exato de
+  Fisher, pela regra de Cochran. O p de cada linha é o que a comparação e a associação dariam
+  para o mesmo par.
+- Três formas de item: `- sexo: [idade, imc, escolaridade]`, o grupo antes dos dois-pontos;
+  `- por: sexo`, com todas as variáveis do dicionário; e `- [idade, imc]`, sem grupo, só com o
+  Total. `p: nao` na linha de baixo do item tira a coluna do p e a legenda dos testes, para o
+  ensaio randomizado.
+- O p sai com a letra do teste — `0,026a` —, e a legenda embaixo da tabela diz qual teste é
+  cada letra. Quem não tem o grupo fica fora da tabela, com aviso.
+- O relatório traz a Tabela 1 na segunda página, qualquer que seja a posição dela na lista
+  `analises:`, e as seções das outras análises começam na página seguinte. As categorias
+  saem recuadas, a variável não se parte entre páginas, e a tabela de três grupos ou mais
+  sai numa página deitada.
+- A caracterização entra no `flatcap analisar` e na metodologia da primeira página.
+- Sem rodada de caracterização, o documento sai como antes. Com ela, a numeração das tabelas
+  das outras seções anda uma casa por tabela de caracterização.
+
 ## [1.24.4] — o identificador numérico
 
 ### Corrigido

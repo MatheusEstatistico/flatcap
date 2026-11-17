@@ -1059,7 +1059,7 @@ def casas_da_coluna(*colunas: pd.Series) -> int:
     No pareado e nas medidas repetidas, as da medida que pede mais, para a tabela não
     misturar — e a diferença do pareado sai com elas também.
 
-    Pública desde a 1.25.0, com o apelido privado que este módulo usa, como as outras
+    Pública desde a 1.24.5, com o apelido privado que este módulo usa, como as outras
     peças que a caracterização reaproveita: a coluna Total da Tabela 1 sai com as casas
     do `resumo_<variável>.csv`, e não com outras.
     """
@@ -1080,7 +1080,7 @@ def resumo_no_manifesto(resumo: dict[str, float] | None) -> dict[str, float | No
     tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
     um grupo, que a descritiva não tem, não morar só na célula.
 
-    Pública desde a 1.25.0, com o apelido privado: o manifesto da caracterização guarda
+    Pública desde a 1.24.5, com o apelido privado: o manifesto da caracterização guarda
     o resumo de cada grupo com as mesmas chaves e o mesmo arredondamento.
     """
     resumo = resumo or {}
@@ -1662,7 +1662,7 @@ def comparar_grupos(
     só, um valor só em todas as linhas —, e as do teste escolhido vêm depois dela:
     cada teste tem o seu mínimo no R.
 
-    Pública desde a 1.25.0, com o apelido privado que este módulo usa: cada linha
+    Pública desde a 1.24.5, com o apelido privado que este módulo usa: cada linha
     numérica da caracterização é esta comparação, sem método escrito, e o p dela sai,
     letra por letra, o que o item `[imc, sexo]` da lista `comparacao:` daria.
     """
@@ -2678,7 +2678,7 @@ def de_postos(variavel: VariavelComparada) -> bool:
     A linha resume pela mediana e pelos quartis: o teste dela — o que rodou, ou o que a
     regra escolheu — é de postos.
 
-    Pública desde a 1.25.0, com o apelido privado que este módulo usa: a forma de cada
+    Pública desde a 1.24.5, com o apelido privado que este módulo usa: a forma de cada
     linha numérica da caracterização, `média (DP)` ou `mediana [Q1 a Q3]`, é esta.
     """
     return _teste_da_linha(variavel) in TESTES_DE_POSTOS
@@ -4164,7 +4164,7 @@ def shapiro_no_manifesto(normal: Normal | None) -> dict[str, Any] | None:
     O Shapiro-Wilk de um vetor como o manifesto o guarda: o W, o p, se rejeita e o
     impedimento.
 
-    Pública desde a 1.25.0, com o apelido privado: o da caracterização sai na mesma
+    Pública desde a 1.24.5, com o apelido privado: o da caracterização sai na mesma
     forma do desta análise.
     """
     if normal is None:
@@ -4367,7 +4367,7 @@ def media_e_desvio(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> st
     `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
     pelo mesmo `numero()` e com as mesmas casas.
 
-    Pública desde a 1.25.0, com o apelido privado que este módulo usa: as células da
+    Pública desde a 1.24.5, com o apelido privado que este módulo usa: as células da
     caracterização saem por aqui, e uma segunda formatação é como a média da Tabela 1
     diria `58,50` ao lado do `58,5` da comparação.
     """
@@ -4385,7 +4385,7 @@ def mediana_e_quartis(resumo: dict[str, float] | None, casas: int = CASAS_IC) ->
     escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
     colchetes e o `a` do intervalo.
 
-    Pública desde a 1.25.0, com o apelido privado, pelo motivo do `media_e_desvio`.
+    Pública desde a 1.24.5, com o apelido privado, pelo motivo do `media_e_desvio`.
     """
     if not resumo:
         return _AUSENTE
