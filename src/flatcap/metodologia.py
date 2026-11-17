@@ -54,6 +54,7 @@ from typing import Any
 
 from .manifesto import (
     ANALISE_ASSOCIACAO,
+    ANALISE_CARACTERIZACAO,
     ANALISE_COMPARACAO,
     ANALISE_CORRELACAO,
     ANALISE_CRUZAMENTO,
@@ -81,8 +82,10 @@ from .manifesto import (
 TITULO = "Metodologia Estatística (texto padrão)"
 
 # A ordem das frases é a de uma seção de métodos — descrever, cruzar, testar —, e não
-# a das seções do relatório, que é a da lista `analises:` da ficha.
+# a das seções do relatório, que é a da lista `analises:` da ficha. A caracterização
+# vem primeiro: ela apresenta os participantes antes de qualquer outra descrição.
 ORDEM: tuple[str, ...] = (
+    ANALISE_CARACTERIZACAO,
     ANALISE_DESCRITIVA,
     ANALISE_CRUZAMENTO,
     ANALISE_ASSOCIACAO,
@@ -91,6 +94,26 @@ ORDEM: tuple[str, ...] = (
     ANALISE_COMPARACAO,
     ANALISE_REGRESSAO,
 )
+
+# A caracterização dos participantes, a Tabela 1: como as características foram
+# descritas e, quando a tabela saiu com o p, por quais testes foram comparadas. `{por}`
+# são os grupos das tabelas — «por sexo», com o rótulo do dicionário começando em
+# minúscula, menos a sigla: «por IMC categorizado» —, e some na tabela sem grupo. A
+# explicação da forma entra só quando as duas aparecem, como a da correlação. Os testes
+# das numéricas se escrevem como na comparação (`COMPARACOES`), e os das categóricas,
+# como na associação: depois do primeiro, a palavra «teste» fica subentendida.
+FRASE_CARACTERIZACAO = (
+    "As características dos participantes foram descritas{por} {formas}{conforme}"
+    "{comparadas}."
+)
+POR_GRUPOS = " por {grupos},"
+FREQUENCIAS = "em frequências absolutas e relativas"
+EM_FORMAS = "em {formas}"
+MEDIAS = "média e desvio padrão"
+MEDIANAS = "mediana e quartis"
+CONFORME = ", conforme o teste de Shapiro-Wilk{onde}"
+EM_CADA_GRUPO = " em cada grupo"
+COMPARADAS = ", e comparadas {testes}"
 
 # A descritiva: como cada tipo do dicionário foi resumido. Com mais de um tipo, o
 # primeiro vira o sujeito da frase e os outros vêm depois dele, elípticos: «As
@@ -230,8 +253,10 @@ VERSOES = " versões {python}"
 
 # ─────────────────────────────────────────────────────────────────────────────
 
-# As análises que testam hipótese, e por isso pedem a frase do nível de significância.
+# As análises que testam hipótese, e por isso pedem a frase do nível de significância. A
+# caracterização, só quando saiu com o p: sem ele, ela descreve e não testa.
 _TESTAM = (
+    ANALISE_CARACTERIZACAO,
     ANALISE_ASSOCIACAO,
     ANALISE_NORMALIDADE,
     ANALISE_CORRELACAO,
@@ -245,6 +270,11 @@ _ALFA_PADRAO = 0.05
 _QUI_QUADRADOS = frozenset({"Qui-quadrado", "Qui-quadrado com correção de Yates"})
 _YATES = "Qui-quadrado com correção de Yates"
 _FISHER = "Exato de Fisher"
+
+# A forma das numéricas na caracterização, como o manifesto dela a grava: os cabeçalhos
+# do resumo da comparação.
+_FORMA_DA_MEDIA = "média (DP)"
+_FORMA_DA_MEDIANA = "mediana [Q1 a Q3]"
 
 
 @dataclass(frozen=True)
@@ -298,8 +328,14 @@ def montar_metodologia(manifestos: Iterable[Manifesto]) -> Metodologia:
         return Metodologia(sem_frase=tuple(sem_frase))
 
     # O nível de significância só quando alguma frase nomeou um teste: uma comparação
-    # em que toda linha saiu "não testado" não tem p a ler contra ele.
-    testam = [por_analise[nome] for nome in _TESTAM if nome in com_frase]
+    # em que toda linha saiu "não testado" não tem p a ler contra ele. A frase da
+    # caracterização existe também sem o p, e aí ela não testou nada.
+    testam = [
+        por_analise[nome]
+        for nome in _TESTAM
+        if nome in com_frase
+        and (nome != ANALISE_CARACTERIZACAO or _testados(por_analise[nome]))
+    ]
     if testam:
         frases.append(_significancia(testam))
     frases.append(_programas(list(por_analise.values())))
@@ -310,6 +346,82 @@ def montar_metodologia(manifestos: Iterable[Manifesto]) -> Metodologia:
 
 
 # As frases
+
+
+def _caracterizacao(manifesto: Manifesto) -> str:
+    """
+    «As características dos participantes foram descritas por sexo, em frequências
+    absolutas e relativas e em média e desvio padrão ou mediana e quartis, conforme o
+    teste de Shapiro-Wilk em cada grupo, e comparadas pelo teste t de Welch ou pelo de
+    Mann-Whitney e pelo qui-quadrado de Pearson, com a correção de Yates nas tabelas
+    2×2, ou pelo exato de Fisher.»
+
+    Cada pedaço sai só quando aparece em alguma tabela: as categóricas, as duas formas
+    das numéricas, os grupos, e os testes que deram p.
+    """
+    tabelas = _linhas(manifesto, "tabelas")
+    linhas = [
+        (tabela, linha)
+        for tabela in tabelas
+        for linha in tabela.get("linhas") or ()
+        if isinstance(linha, dict)
+    ]
+    if not linhas:
+        return ""
+
+    grupos: list[str] = []
+    for tabela in tabelas:
+        rotulo = _minuscula(str(tabela.get("rotulo_do_grupo") or ""))
+        if rotulo and rotulo not in grupos:
+            grupos.append(rotulo)
+    por = POR_GRUPOS.format(grupos=" e por ".join(grupos)) if grupos else ""
+
+    numericas = [linha for tabela, linha in linhas if linha.get("tipo") == "numerica"]
+    formas_das_numericas = [
+        texto
+        for forma, texto in ((_FORMA_DA_MEDIA, MEDIAS), (_FORMA_DA_MEDIANA, MEDIANAS))
+        if any(linha.get("forma") == forma for linha in numericas)
+    ]
+    formas = []
+    if any(linha.get("tipo") == "categorica" for _, linha in linhas):
+        formas.append(FREQUENCIAS)
+    if formas_das_numericas:
+        formas.append(EM_FORMAS.format(formas=" ou ".join(formas_das_numericas)))
+    conforme = ""
+    if len(formas_das_numericas) > 1:
+        em_cada_grupo = all(
+            tabela.get("grupo") for tabela, linha in linhas if linha.get("tipo") == "numerica"
+        )
+        conforme = CONFORME.format(onde=EM_CADA_GRUPO if em_cada_grupo else "")
+
+    testes = {
+        str(linha.get("teste"))
+        for _, linha in linhas
+        if linha.get("teste") and linha.get("p") is not None
+    }
+    pelos = [
+        _pelo(nome)
+        for delineamento in ("dois_grupos", "k_grupos")
+        for teste, nome in COMPARACOES[delineamento].items()
+        if teste in testes
+    ]
+    categoricas = []
+    if testes & _QUI_QUADRADOS:
+        categoricas.append(QUI_QUADRADO + (YATES if _YATES in testes else ""))
+    if _FISHER in testes:
+        categoricas.append(FISHER)
+    juntos = _sem_repetir_pelo_teste([*pelos, *categoricas])
+    numericos, categoricos = juntos[: len(pelos)], juntos[len(pelos) :]
+    partes = []
+    if numericos:
+        partes.append(_ou(numericos))
+    if categoricos:
+        partes.append((", ou " if YATES in categoricos[0] else " ou ").join(categoricos))
+    comparadas = COMPARADAS.format(testes=" e ".join(partes)) if partes else ""
+
+    return FRASE_CARACTERIZACAO.format(
+        por=por, formas=" e ".join(formas), conforme=conforme, comparadas=comparadas
+    )
 
 
 def _descritiva(manifesto: Manifesto) -> str:
@@ -450,6 +562,7 @@ def _regressao(manifesto: Manifesto) -> str:
 
 
 _FRASES = {
+    ANALISE_CARACTERIZACAO: _caracterizacao,
     ANALISE_DESCRITIVA: _descritiva,
     ANALISE_CRUZAMENTO: _cruzamento,
     ANALISE_ASSOCIACAO: _associacao,
@@ -562,6 +675,38 @@ def _sem_repetir_teste(testes: list[str]) -> list[str]:
 
 def _maiuscula(texto: str) -> str:
     return texto[:1].upper() + texto[1:]
+
+
+def _minuscula(rotulo: str) -> str:
+    """«Sexo» → «sexo», para o meio da frase; a sigla fica como está: «IMC», «pH»."""
+    if len(rotulo) > 1 and rotulo[1].isupper():
+        return rotulo
+    return rotulo[:1].lower() + rotulo[1:]
+
+
+def _pelo(teste: str) -> str:
+    """«o teste t de Welch» → «pelo teste t de Welch»; «a ANOVA de Welch» → «pela …»."""
+    artigo, resto = teste.split(" ", 1)
+    return f"{'pela' if artigo == 'a' else 'pelo'} {resto}"
+
+
+def _sem_repetir_pelo_teste(testes: list[str]) -> list[str]:
+    """Depois do primeiro «pelo teste», os outros ficam «pelo de Mann-Whitney»."""
+    saida: list[str] = []
+    disse = False
+    for teste in testes:
+        if disse:
+            teste = teste.replace("pelo teste ", "pelo ", 1)
+        disse = disse or "teste " in teste
+        saida.append(teste)
+    return saida
+
+
+def _ou(itens: Sequence[str]) -> str:
+    """`["a"]` → «a»; `["a", "b", "c"]` → «a, b ou c»."""
+    if len(itens) <= 1:
+        return "".join(itens)
+    return ", ".join(itens[:-1]) + f" ou {itens[-1]}"
 
 
 def _lista(itens: Sequence[str]) -> str:

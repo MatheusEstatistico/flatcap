@@ -4,7 +4,7 @@
 O lote — as análises da lista `analises:` do projeto.yaml, de uma vez.
 
 Cada análise tem o seu comando, e todos continuam existindo: `flatcap descritiva`,
-`flatcap correlacao` e os outros cinco. Este módulo é para o dia em que a reunião
+`flatcap correlacao` e os outros seis. Este módulo é para o dia em que a reunião
 combinou quatro delas — em vez de quatro comandos, um, o `flatcap analisar`:
 
     plano = preparar_analises(raiz)   # prepara todas; se uma recusa, nada é escrito
@@ -25,9 +25,9 @@ junto sem que uma linha daqui mude.
 O preço é o banco aberto uma vez por análise, e não uma vez só: cada `preparar_*`
 chama o `banco.abrir` dele, com a conferência do `sha256`. Num banco de algumas
 centenas de linhas são décimos de segundo por análise — os gráficos a 300 DPI custam
-mais do que isso. Abrir uma vez só pediria um parâmetro novo em sete módulos e
-entregaria o mesmo `DataFrame` a sete análises, e a primeira que o alterasse por
-engano mudaria as outras seis. Sete leituras dão sete quadros independentes, que é
+mais do que isso. Abrir uma vez só pediria um parâmetro novo em oito módulos e
+entregaria o mesmo `DataFrame` a oito análises, e a primeira que o alterasse por
+engano mudaria as outras sete. Oito leituras dão oito quadros independentes, que é
 o que cada comando já faz sozinho.
 
 ## As três regras, do plano da Fase 7
@@ -45,7 +45,7 @@ precisa aparecer antes de a descritiva arquivar a rodada anterior — senão sob
 rodada velha arquivada e metade da nova escrita. As recusas saem **todas de uma vez**,
 pelo motivo da descritiva: descobrir a segunda depois de corrigir a primeira é o jeito
 mais lento de arrumar uma ficha. A exceção é o que vale para todas — a ficha, o banco,
-o dicionário —, que para na primeira: sete painéis dizendo que o `dicionario.csv` não
+o dicionário —, que para na primeira: oito painéis dizendo que o `dicionario.csv` não
 existe não ensinam nada que o primeiro não tenha ensinado.
 
 **Um registro nome → módulo, com import preguiçoso.** O `REGISTRO` é o que faz a
@@ -82,6 +82,7 @@ from .ficha import ARQUIVO_PROJETO, FALHA_NO_DESFAZER, Ficha, bloco
 from .ficha import ler as ler_ficha
 from .manifesto import (
     ANALISE_ASSOCIACAO,
+    ANALISE_CARACTERIZACAO,
     ANALISE_COMPARACAO,
     ANALISE_CORRELACAO,
     ANALISE_CRUZAMENTO,
@@ -135,7 +136,7 @@ class Analise:
     def erros_do_projeto(self) -> tuple[type[Exception], ...]:
         """
         As recusas da análise que valem para todas: o dicionário ausente, e o que não
-        descreve o banco. As sete análises obedecem ao mesmo dicionário pela mesma
+        descreve o banco. As oito análises obedecem ao mesmo dicionário pela mesma
         função, `descritiva.conferir_dicionario`, e a recusa de uma é a de todas.
         """
         modulo = self.modulo
@@ -168,6 +169,7 @@ class Analise:
 # exige as duas iguais: uma análise nova que entre num dos dois registros e não no
 # outro roda sem ter lugar no documento, ou tem lugar no documento e não roda.
 REGISTRO: tuple[Analise, ...] = (
+    Analise(ANALISE_CARACTERIZACAO, "Caracterização", desenha=False),
     Analise(ANALISE_DESCRITIVA, "Descritiva", desenha=True),
     Analise(ANALISE_CRUZAMENTO, "Cruzamento", desenha=False),
     Analise(ANALISE_ASSOCIACAO, "Associação", desenha=False),

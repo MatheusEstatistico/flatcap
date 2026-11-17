@@ -24,6 +24,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     regressao.py   ajusta modelos: linear simples, linear múltipla e logística
+    caracterizacao.py a Tabela 1: as variáveis por grupo, pela comparação e pela associação
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento

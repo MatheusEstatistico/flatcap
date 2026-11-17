@@ -151,6 +151,7 @@ matrícula do projeto, como aparece no `flatcap listar`.
 | `flatcap correlacao <id>` | Pearson, Spearman ou Kendall, pelos pressupostos, para os pares da lista `correlacao:`. |
 | `flatcap comparacao <id>` | Testes t e ANOVAs, ou os de postos — Wilcoxon, Mann-Whitney, Kruskal-Wallis e Friedman —, pelos pressupostos: contra uma referência, entre grupos, entre duas medidas pareadas ou entre medidas repetidas. |
 | `flatcap regressao <id>` | Regressão linear simples, linear múltipla ou logística, pelo tipo do desfecho, para os modelos da lista `regressao:`. |
+| `flatcap caracterizacao <id>` | A Tabela 1: as variáveis da lista `caracterizacao:` por grupo, em média (DP), mediana [Q1 a Q3] ou n (%), com o Total e o p. |
 | `flatcap analisar <id>` | Roda de uma vez as análises da lista `analises:` do `projeto.yaml`. |
 | `flatcap relatorio <id>` | Monta o relatório `.docx` a partir das análises já rodadas. |
 | `flatcap template` | Escreve o modelo `.docx` que o relatório usa, para ajustar no Word. |
@@ -353,14 +354,19 @@ bibliotecas saiu cada arquivo. Rodar de novo arquiva a rodada anterior inteira e
 | `correlacao` | `correlacao:` com os pares — `- [idade, imc]`, ou `- [dor, ansiedade, kendall]` com o método |
 | `comparacao` | `comparacao:` com os itens — `- [imc, 25]` (uma amostra), `- [imc, sexo]` (grupos), `- pareado: [pas_0, pas_1]` (pareado), `- repetidas: [pas_0, pas_1, pas_2]` (medidas repetidas) |
 | `regressao` | `regressao:` com os modelos — `- pas: [idade, imc, sexo]` (o desfecho antes dos dois-pontos), e `evento: Sim` na linha de baixo quando a logística pedir |
+| `caracterizacao` | `caracterizacao:` com as tabelas — `- sexo: [idade, imc, escolaridade]` (o grupo antes dos dois-pontos), `- por: sexo` (todas as variáveis), `- [idade, imc]` (sem grupo, só o Total), e `p: nao` na linha de baixo para tirar o p |
 
 Os pares e os itens se escrevem na ficha, na reunião: trinta variáveis dão 435 pares, e
 testar todos é *p-hacking* feito por máquina. Sem a lista, o comando recusa e diz o que
 escrever. Um exemplo de ficha com todos os blocos:
 
 ```yaml
-analises: [descritiva, normalidade, associacao, comparacao]   # a ordem das seções do relatório
+analises: [descritiva, caracterizacao, normalidade, associacao, comparacao]   # a ordem das seções do relatório
 
+caracterizacao:
+  - sexo: [idade, pas, imc, escolaridade, tabagismo, avc]   # a Tabela 1: o grupo antes dos dois-pontos
+  - por: grupo                  # todas as variáveis do dicionário, por grupo
+    p: nao                      # sem a coluna do p: num ensaio randomizado, a linha de base não se testa
 normalidade: [idade, imc]
 associacao:
   - [sexo, desfecho]

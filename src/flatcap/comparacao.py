@@ -1051,13 +1051,17 @@ class VariavelComparada:
         }
 
 
-def _casas_da_coluna(*colunas: pd.Series) -> int:
+def casas_da_coluna(*colunas: pd.Series) -> int:
     """
     As casas decimais da variável, decididas como a descritiva as decide: pela coluna
     inteira, e não pelos casos da comparação — a média da uma amostra sai, letra por
     letra, a do `resumo_<variável>.csv`, e a de cada grupo sai com as mesmas casas.
     No pareado e nas medidas repetidas, as da medida que pede mais, para a tabela não
     misturar — e a diferença do pareado sai com elas também.
+
+    Pública desde a 1.25.0, com o apelido privado que este módulo usa, como as outras
+    peças que a caracterização reaproveita: a coluna Total da Tabela 1 sai com as casas
+    do `resumo_<variável>.csv`, e não com outras.
     """
     casas = [
         casas_do_resumo(resumo_numerico(coluna.dropna().astype("float64")))
@@ -1067,17 +1071,26 @@ def _casas_da_coluna(*colunas: pd.Series) -> int:
     return max(casas, default=CASAS_IC)
 
 
-def _resumo_no_manifesto(resumo: dict[str, float] | None) -> dict[str, float | None]:
+_casas_da_coluna = casas_da_coluna
+
+
+def resumo_no_manifesto(resumo: dict[str, float] | None) -> dict[str, float | None]:
     """
     As duas formas do resumo, sempre — a média e o desvio, a mediana e os quartis: a
     tabela imprime a do teste da linha, e o manifesto guarda as duas, para a mediana de
     um grupo, que a descritiva não tem, não morar só na célula.
+
+    Pública desde a 1.25.0, com o apelido privado: o manifesto da caracterização guarda
+    o resumo de cada grupo com as mesmas chaves e o mesmo arredondamento.
     """
     resumo = resumo or {}
     return {
         chave: _arredondar(resumo.get(chave))
         for chave in ("media", "desvio", "mediana", "q1", "q3")
     }
+
+
+_resumo_no_manifesto = resumo_no_manifesto
 
 
 @dataclass(frozen=True)
@@ -1630,7 +1643,7 @@ def _menor_p_exato(metodo: str, tamanhos: Sequence[int]) -> float:
 # Uma variável, entre os grupos de outra
 
 
-def _comparar_grupos(
+def comparar_grupos(
     quadro: pd.DataFrame, pergunta: Pergunta, total: int
 ) -> tuple[VariavelComparada | None, str]:
     """
@@ -1648,6 +1661,10 @@ def _comparar_grupos(
     Três barreiras vêm antes da regra — nenhum caso com as duas respostas, um grupo
     só, um valor só em todas as linhas —, e as do teste escolhido vêm depois dela:
     cada teste tem o seu mínimo no R.
+
+    Pública desde a 1.25.0, com o apelido privado que este módulo usa: cada linha
+    numérica da caracterização é esta comparação, sem método escrito, e o p dela sai,
+    letra por letra, o que o item `[imc, sexo]` da lista `comparacao:` daria.
     """
     linha = pergunta.linha
     de_grupo = pergunta.grupos
@@ -1755,6 +1772,9 @@ def _comparar_grupos(
         resultado=resultado,
         avisos=tuple(avisos),
     ), ""
+
+
+_comparar_grupos = comparar_grupos
 
 
 def _delineamento_dos_grupos(quantos: int, de_grupo: Linha) -> str:
@@ -2653,8 +2673,18 @@ def _teste_da_linha(variavel: VariavelComparada) -> str:
     return escolha.metodo or escolha.da_regra
 
 
-def _de_postos(variavel: VariavelComparada) -> bool:
+def de_postos(variavel: VariavelComparada) -> bool:
+    """
+    A linha resume pela mediana e pelos quartis: o teste dela — o que rodou, ou o que a
+    regra escolheu — é de postos.
+
+    Pública desde a 1.25.0, com o apelido privado que este módulo usa: a forma de cada
+    linha numérica da caracterização, `média (DP)` ou `mediana [Q1 a Q3]`, é esta.
+    """
     return _teste_da_linha(variavel) in TESTES_DE_POSTOS
+
+
+_de_postos = de_postos
 
 
 def _resumo_da_linha(variavel: VariavelComparada, resumo: dict[str, float] | None) -> str:
@@ -4129,7 +4159,14 @@ def _ambiente() -> dict[str, Any]:
     }
 
 
-def _shapiro_no_manifesto(normal: Normal | None) -> dict[str, Any] | None:
+def shapiro_no_manifesto(normal: Normal | None) -> dict[str, Any] | None:
+    """
+    O Shapiro-Wilk de um vetor como o manifesto o guarda: o W, o p, se rejeita e o
+    impedimento.
+
+    Pública desde a 1.25.0, com o apelido privado: o da caracterização sai na mesma
+    forma do desta análise.
+    """
     if normal is None:
         return None
     return {
@@ -4138,6 +4175,9 @@ def _shapiro_no_manifesto(normal: Normal | None) -> dict[str, Any] | None:
         "rejeita": normal.rejeita if normal.testada else None,
         "impedimento": normal.impedimento or None,
     }
+
+
+_shapiro_no_manifesto = shapiro_no_manifesto
 
 
 # Mensagens
@@ -4322,26 +4362,38 @@ def _estatistica_em_texto(resultado: Resultado) -> str:
     return texto
 
 
-def _media_e_desvio(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
+def media_e_desvio(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
     """
     `26,41 (4,12)` — a média e o desvio como o `resumo_<variável>.csv` os escreve,
     pelo mesmo `numero()` e com as mesmas casas.
+
+    Pública desde a 1.25.0, com o apelido privado que este módulo usa: as células da
+    caracterização saem por aqui, e uma segunda formatação é como a média da Tabela 1
+    diria `58,50` ao lado do `58,5` da comparação.
     """
     if not resumo:
         return _AUSENTE
     return f"{numero(resumo['media'], casas)} ({numero(resumo['desvio'], casas)})"
 
 
-def _mediana_e_quartis(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
+_media_e_desvio = media_e_desvio
+
+
+def mediana_e_quartis(resumo: dict[str, float] | None, casas: int = CASAS_IC) -> str:
     """
     `25,9 [23,1 a 28,7]` — a mediana e os quartis como o `resumo_<variável>.csv` os
     escreve, pelo mesmo `numero()` e com as mesmas casas, com os quartis entre
     colchetes e o `a` do intervalo.
+
+    Pública desde a 1.25.0, com o apelido privado, pelo motivo do `media_e_desvio`.
     """
     if not resumo:
         return _AUSENTE
     mediana, q1, q3 = (numero(resumo[chave], casas) for chave in ("mediana", "q1", "q3"))
     return f"{mediana} [{q1} a {q3}]"
+
+
+_mediana_e_quartis = mediana_e_quartis
 
 
 def _intervalo(intervalo: tuple[float, float] | None, casas: int = CASAS_IC) -> str:
@@ -4498,13 +4550,20 @@ __all__ = [
     "SemItensError",
     "VariavelComparada",
     "VariavelIncompativelError",
+    "casas_da_coluna",
     "comparar",
+    "comparar_grupos",
+    "de_postos",
     "executar_comparacao",
     "itens_da_ficha",
     "linhas_da_tabela",
+    "media_e_desvio",
+    "mediana_e_quartis",
     "metodo_escrito",
     "montar_manifesto",
     "preparar_comparacao",
     "referencia_escrita",
     "regra",
+    "resumo_no_manifesto",
+    "shapiro_no_manifesto",
 ]

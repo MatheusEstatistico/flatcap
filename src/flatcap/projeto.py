@@ -131,6 +131,11 @@ PASTA_COMPARACAO = "comparacao"
 # comparação: o modelo é escolhido dentro da análise, pelo tipo do desfecho.
 PASTA_REGRESSAO = "regressao"
 
+# A rodada da caracterização dos participantes — a Tabela 1. O mesmo nome nos três
+# lugares, como as de cima: a pasta, o campo `analise` do manifesto e a chave da ficha
+# — a lista `analises:` e o bloco `caracterizacao:` com as tabelas.
+PASTA_CARACTERIZACAO = "caracterizacao"
+
 # A pasta da amostragem, a quarta do projeto — e a única que o `novo` não cria.
 #
 # O projeto costuma começar com a amostragem e evoluir depois para a análise, e tudo

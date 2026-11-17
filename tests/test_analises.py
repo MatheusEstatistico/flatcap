@@ -57,7 +57,7 @@ from flatcap.projeto import PASTA_ANALISES, PASTA_ANTIGAS
 
 TODAS = (
     "analises: [descritiva, normalidade, cruzamento, associacao, correlacao, comparacao, "
-    "regressao]"
+    "regressao, caracterizacao]"
 )
 
 # Um bloco por análise que tem bloco, com o que o banco do `conftest` aceita.
@@ -67,6 +67,7 @@ BLOCOS = (
     "correlacao:\n  - [idade, imc]\n"
     "comparacao:\n  - [imc, 25]\n  - [imc, sexo]\n"
     "regressao:\n  - imc: [idade, sexo]\n"
+    "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n"
 )
 
 DEPOIS = AGORA.replace(hour=16)
@@ -148,7 +149,7 @@ class TestASomaDosComandos:
         self, projeto_para_o_lote, tmp_path
     ):
         """
-        O critério de pronto do módulo: as sete análises, e `3. Análises/` igual byte a
+        O critério de pronto do módulo: as oito análises, e `3. Análises/` igual byte a
         byte — as tabelas, as notas dos `.csv` e os manifestos, com a hora deles.
         """
         lote = projeto_para_o_lote()
@@ -198,6 +199,7 @@ class TestASomaDosComandos:
                 "correlacao",
                 "comparacao",
                 "regressao",
+                "caracterizacao",
             ),
             com_graficos=False,
         )
@@ -206,8 +208,9 @@ class TestASomaDosComandos:
         assert linhas[:-1] == linhas_do_historico(um_por_um)
         assert f"`flatcap analisar {RECORD_ID}`" in linhas[-1]
         assert (
-            "7 análises da lista `analises:`, na ordem dela: `descritiva`, `normalidade`, "
-            "`cruzamento`, `associacao`, `correlacao`, `comparacao` e `regressao`" in linhas[-1]
+            "8 análises da lista `analises:`, na ordem dela: `descritiva`, `normalidade`, "
+            "`cruzamento`, `associacao`, `correlacao`, `comparacao`, `regressao` e "
+            "`caracterizacao`" in linhas[-1]
         )
         assert "Rodado com `--sem-graficos`." in linhas[-1]
 
@@ -486,7 +489,7 @@ class TestPreparar:
     def test_a_aba_e_a_conferencia_chegam_a_todas(self, projeto_para_o_lote, monkeypatch):
         """
         O que o comando de cada uma receberia: a mesma aba e a mesma conferência do
-        `sha256` para as sete. O espião registra e abre o `.csv` do projeto sem aba.
+        `sha256` para as oito. O espião registra e abre o `.csv` do projeto sem aba.
         """
         raiz = projeto_para_o_lote()
         pedidos = {}

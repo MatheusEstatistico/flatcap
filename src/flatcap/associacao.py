@@ -754,9 +754,13 @@ def contingencia(quadro: pd.DataFrame, primeira: Linha, segunda: Linha) -> Conti
     )
 
 
-def _testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParTestado:
+def testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParTestado:
     """
     Conta, aplica a regra de Cochran e roda o teste que ela escolheu.
+
+    Pública desde a 1.25.0, com o apelido privado que este módulo usa: cada linha
+    categórica da caracterização é este teste, com o grupo como a variável 1, e o p
+    dela sai, letra por letra, o que o par `[sexo, escolaridade]` daria aqui.
     """
     tabela = contingencia(quadro, par.primeira, par.segunda)
     validos = tabela.n
@@ -833,6 +837,9 @@ def _testar_par(quadro: pd.DataFrame, par: Par, total: int, limite: int) -> ParT
             ),
         )
     return ParTestado(**base, teste=TESTE_FISHER, p=p, cochran=cochran)
+
+
+_testar_par = testar_par
 
 
 def na_ordem_do_dicionario(observados: set[str], linha: Linha) -> tuple[str, ...]:
@@ -1775,5 +1782,6 @@ __all__ = [
     "preparar_associacao",
     "qui_quadrado",
     "regra_de_cochran",
+    "testar_par",
     "v_de_cramer",
 ]

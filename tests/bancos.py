@@ -666,6 +666,82 @@ def para_regredir() -> pd.DataFrame:
     )
 
 
+def para_caracterizar() -> pd.DataFrame:
+    """
+    Cento e vinte casos para a Tabela 1, com uma variável para cada caminho dela.
+
+    `sexo` é o código `1`/`2`, alternando linha a linha, com **três células vazias** — os
+    casos que ficam fora da tabela inteira: 59 no primeiro grupo e 58 no segundo. Entre os
+    grupos de `sexo`:
+
+    * `idade` — normal nos dois grupos, com a média do segundo quatro anos acima: **t de
+      Welch**;
+    * `pas` — normal nos dois, com o segundo onze pontos acima: o t de Welch com p abaixo
+      de 0,001, e a **mesma letra** da idade;
+    * `imc` — dezoito mais a exponencial de escores normais, assimétrica nos dois, com
+      **três células vazias**: **Mann-Whitney**, e a linha `(sem informação)`;
+    * `escolaridade` — texto, três categorias com casos e uma declarada sem nenhum
+      (`Pós-graduação`), com **três células vazias**: **qui-quadrado** 2×3;
+    * `tabagismo` — `Sim` e `Não`, com as esperadas acima de 5: **qui-quadrado com
+      Yates**;
+    * `avc` — código `0`/`1`, evento raro: esperada abaixo de 5, **exato de Fisher**;
+
+    e mais três: `grupo`, com **três** categorias e nenhuma vazia — a tabela de página em
+    paisagem —, `data_inclusao`, uma data, que fica fora da tabela, e `obs`, texto livre,
+    que o dicionário marca `ignorar`.
+
+    Nada é sorteado: dentro de cada sexo, os escores são os quantis da normal em sessenta
+    posições, em permutações fixas — `(7 k)`, `(11 k)` e `(13 k) mod 60` —, e as
+    categóricas são listas com as contagens escritas por extenso, embaralhadas do mesmo
+    jeito. Os p são conferidos contra o R sobre estes mesmos números.
+    """
+    import math
+    from statistics import NormalDist
+
+    n = 120
+    metade = n // 2
+    normal = NormalDist()
+    escores = [normal.inv_cdf((j + 0.5) / metade) for j in range(metade)]
+
+    def z(passo: int, i: int) -> float:
+        return escores[(passo * (i // 2)) % metade]
+
+    def por_sexo(primeiro: list, segundo: list, passo: int) -> list:
+        """O k-ésimo caso de cada sexo recebe o elemento `(passo k) mod 60` da lista dele."""
+        return [(segundo if i % 2 else primeiro)[(passo * (i // 2)) % metade] for i in range(n)]
+
+    sexo: list[int | None] = [2 if i % 2 else 1 for i in range(n)]
+    for posicao in (7, 40, 93):
+        sexo[posicao] = None
+    imc: list[float | None] = [
+        round(18 + math.exp(2.0 + 0.6 * z(13, i) - (0.15 if i % 2 else 0.0)), 1)
+        for i in range(n)
+    ]
+    for posicao in (10, 22, 51):
+        imc[posicao] = None
+    escolaridade: list[str | None] = por_sexo(
+        ["Fundamental"] * 25 + ["Médio"] * 21 + ["Superior"] * 14,
+        ["Fundamental"] * 16 + ["Médio"] * 22 + ["Superior"] * 22,
+        17,
+    )
+    for posicao in (4, 33, 70):
+        escolaridade[posicao] = None
+    return pd.DataFrame(
+        {
+            "sexo": sexo,
+            "grupo": _repetir(["Controle", "Dose baixa", "Dose alta"], n),
+            "idade": [round(52 + 9 * z(7, i) + (4 if i % 2 else 0), 1) for i in range(n)],
+            "pas": [float(round(122 + 9 * z(11, i) + (11 if i % 2 else 0))) for i in range(n)],
+            "imc": imc,
+            "escolaridade": escolaridade,
+            "tabagismo": por_sexo(["Sim"] * 7 + ["Não"] * 53, ["Sim"] * 15 + ["Não"] * 45, 19),
+            "avc": por_sexo([1] * 2 + [0] * 58, [1] * 7 + [0] * 53, 23),
+            "data_inclusao": [f"{(i % 28) + 1:02d}/{(i % 6) + 1:02d}/2026" for i in range(n)],
+            "obs": [f"anotação {i}" for i in range(n)],
+        }
+    )
+
+
 def minusculo(linhas: int = 3) -> pd.DataFrame:
     """
     Um banco de três linhas: abaixo do mínimo em que proporção quer dizer algo.

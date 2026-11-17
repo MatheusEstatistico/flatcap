@@ -78,6 +78,7 @@ ORDEM = (
     "correlacao",
     "hipoteses",
     "comparacao",
+    "caracterizacao",
     "regressao",
     "analises",
     "metodologia",

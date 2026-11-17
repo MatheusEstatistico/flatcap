@@ -42,6 +42,7 @@ from .dicionario import DicionarioError
 from .ficha import IMPLEMENTACAO, FichaError, ProjetoNaoEncontradoError, localizar_projeto
 from .manifesto import (
     ANALISE_ASSOCIACAO,
+    ANALISE_CARACTERIZACAO,
     ANALISE_COMPARACAO,
     ANALISE_CORRELACAO,
     ANALISE_CRUZAMENTO,
@@ -99,6 +100,7 @@ if TYPE_CHECKING:  # só para as anotações: ver o comentário em `perfil`
     from .amostragem import Amostragem, PlanoAmostragem
     from .analises import Etapa, Feita, PlanoAnalises
     from .associacao import Associacao, PlanoAssociacao
+    from .caracterizacao import Caracterizacao, PlanoCaracterizacao
     from .comparacao import Comparacao, PlanoComparacao
     from .correlacao import Correlacao, PlanoCorrelacao
     from .cruzamento import ParCruzado, PlanoCruzamento
@@ -3980,6 +3982,277 @@ def _arvore_da_regressao(plano: PlanoRegressao) -> Tree:
     return arvore
 
 
+# flatcap caracterizacao
+
+@app.command()
+def caracterizacao(
+    identificador: str = typer.Argument(
+        ...,
+        help = "record_id ou matrícula do projeto, como aparece no `flatcap listar`."
+    ),
+    aba: str | None = typer.Option(
+        None, "--aba", metavar = "NOME",
+        help = "Planilha a ler, quando o .xlsx tiver mais de uma. Sem isso, a primeira."
+    ),
+    rapido: bool = typer.Option(
+        False, "--rapido",
+        help = "Não reconfere o sha256 dos arquivos. Útil com bancos muito grandes."
+    ),
+    sim: bool = typer.Option(
+        False, "--sim",
+        help = "Executa de fato. Sem esta opção o comando apenas simula."
+    ),
+    env: str | None = typer.Option(
+        None, "--env",
+        help = "Caminho de um .env alternativo."
+    ),
+) -> None:
+    """
+    Monta a Tabela 1: a caracterização dos participantes, por grupo.
+
+    Para cada item da lista `caracterizacao:` do projeto.yaml, uma tabela: as variáveis
+    nas linhas, uma coluna por categoria do grupo, o Total e o p. A numérica sai em média
+    (DP) ou em mediana [Q1 a Q3], pela regra da comparação entre grupos — o Shapiro-Wilk
+    em cada grupo —, com o t de Welch ou o Mann-Whitney, e com a ANOVA de Welch ou o
+    Kruskal-Wallis entre três grupos ou mais; a categórica, em n (%), com o qui-quadrado
+    ou o exato de Fisher, pela regra de Cochran da associação. O p sai com a letra do
+    teste, e a legenda embaixo da tabela. Quem não tem o grupo fica fora da tabela.
+
+    Os itens se escrevem na ficha — o grupo antes dos dois-pontos; `por:` e o grupo, para
+    todas as variáveis do dicionário; ou só a lista, sem grupo, para a tabela só com o
+    Total:
+
+        caracterizacao:
+          - sexo: \\[idade, imc, escolaridade]
+          - por: sexo
+            p: nao
+          - \\[idade, imc, sexo]
+
+    `p: nao`, na linha de baixo do item, tira a coluna do p — num ensaio randomizado, em
+    que não se testa a linha de base. Sai um .csv por item em
+    `3. Análises/caracterizacao/`, com um `manifesto.json`.
+
+    Rodar de novo arquiva a rodada anterior inteira em `2. Versões antigas/`.
+
+    POR PADRÃO APENAS SIMULA. Repita com --sim para escrever.
+    """
+    # O `pandas` e o `scipy` entram aqui dentro, como em todo comando que abre o
+    # banco: o `listar`, que roda várias vezes por dia, não deve pagar por eles.
+    from .banco import BancoError
+    from .caracterizacao import (
+        CaracterizacaoError,
+        executar_caracterizacao,
+        preparar_caracterizacao,
+    )
+
+    cfg = _configuracao(env)
+
+    try:
+        raiz = localizar_projeto(cfg.root, identificador)
+        plano = preparar_caracterizacao(raiz, aba = aba, conferir = not rapido)
+    except FichaError as erro:
+        raise _abortar("Projeto", str(erro)) from erro
+    except BancoError as erro:
+        raise _abortar("Banco de dados", str(erro)) from erro
+    except DicionarioError as erro:
+        raise _abortar("Dicionário", str(erro)) from erro
+    except CaracterizacaoError as erro:
+        raise _abortar("Caracterização", str(erro)) from erro
+    except OSError as erro:
+        raise _abortar("Leitura em disco", str(erro)) from erro
+
+    _mostrar_caracterizacao(plano)
+
+    if not sim:
+        console.print(
+            "\n[yellow]Simulação.[/yellow] Nada foi escrito nem arquivado.\n"
+            "Repita com [bold]--sim[/bold] para gerar a pasta."
+        )
+        return
+
+    try:
+        resultado = executar_caracterizacao(plano)
+    except OSError as erro:
+        raise _falha_na_escrita(plano.pasta, erro) from erro
+
+    _rodada_escrita("Caracterização escrita.", plano, resultado)
+
+
+def _mostrar_caracterizacao(plano: PlanoCaracterizacao) -> None:
+    """
+    O que a caracterização mostra antes de escrever — no comando dela e no `analisar`.
+    """
+    console.print(_cabecalho_da_caracterizacao(plano))
+    for tabela in _tabelas_da_caracterizacao(plano.caracterizacao):
+        console.print(tabela)
+    console.print(_nota_da_caracterizacao(plano.caracterizacao))
+    for aviso in plano.caracterizacao.avisos:
+        erro_console.print(Text(f"\n{aviso}", style = "yellow"))
+    console.print(_arvore_da_caracterizacao(plano))
+
+
+def _cabecalho_da_caracterizacao(plano: PlanoCaracterizacao) -> Text:
+    """
+    Quem, qual banco, se dá para confiar nele, e quantas tabelas entram.
+    """
+    caracterizacao = plano.caracterizacao
+    ficha = caracterizacao.ficha
+    banco = caracterizacao.banco
+
+    cabecalho = Text.assemble(
+        (rotulo_do_projeto(ficha.raiz), "bold"),
+        ("  ·  ", "dim"), ("registro ", "dim"), (ficha.record_id or "?", "bold"),
+        ("  ·  ", "dim"), ("status ", "dim"), (ficha.status or "?", ""),
+        "\n",
+        ("Banco ", "dim"), (banco.versao.arquivo, "bold"),
+        ("  ·  ", "dim"), (banco.tamanho_legivel, "dim"),
+        ("  ·  ", "dim"),
+        (f"{banco.linhas} linhas × {banco.colunas} colunas", ""),
+    )
+    if banco.leitura.aba:
+        cabecalho.append(Text.assemble(("  ·  ", "dim"), (f'planilha "{banco.leitura.aba}"', "")))
+
+    cabecalho.append("\n")
+    if banco.confere is True:
+        cabecalho.append(Text("Integridade confere com a ficha", style = "green"))
+    elif banco.confere is False:
+        cabecalho.append(
+            Text("ALTERADO: o arquivo não confere com o sha256 da ficha", style = "red bold")
+        )
+    else:
+        cabecalho.append(Text("Integridade não conferida (--rapido)", style = "dim"))
+
+    quantas = len(caracterizacao.tabelas)
+    cabecalho.append(
+        Text.assemble(
+            ("  ·  ", "dim"),
+            (f"{quantas} {_plural(quantas, 'tabela', 'tabelas')}", ""),
+            (" da lista `caracterizacao:` do projeto.yaml", "dim"),
+        )
+    )
+    return cabecalho
+
+
+def _tabelas_da_caracterizacao(caracterizacao: Caracterizacao) -> list[Table]:
+    """
+    Uma tabela por item, com as mesmas células do `.csv`, e o rodapé dela embaixo.
+
+    A tabela do terminal lê as células que vão para o disco e não reformata nada. O
+    recuo das categorias, que o `.csv` não tem — ele é apresentação —, sai aqui como no
+    documento. O p abaixo de 0,05 sai em negrito, e a linha sem teste numa tabela que
+    leva o p sai com o traço apagado: são destaques de quem lê a simulação, e ficam no
+    terminal.
+    """
+    from .normalidade import ALFA
+
+    tabelas: list[Table] = []
+    for csv in caracterizacao.tabelas:
+        tabela = Table(
+            show_header = True, header_style = "bold", title = csv.titulo,
+            title_style = "bold", title_justify = "left",
+            caption = "\n".join(csv.rodape) or None, caption_justify = "left",
+        )
+        for posicao, nome in enumerate(csv.cabecalho):
+            if csv.com_p and posicao == len(csv.cabecalho) - 1:  # o p: número, à direita
+                tabela.add_column(Text(nome), justify = "right", no_wrap = True)
+            else:
+                tabela.add_column(Text(nome), overflow = "fold")
+
+        for caracteristica in csv.caracteristicas:
+            if not caracteristica.testada:
+                estilo_p = "dim"
+            elif caracteristica.p is not None and caracteristica.p < ALFA:
+                estilo_p = "bold"
+            else:
+                estilo_p = ""
+            for ordem, celulas in enumerate(csv.linhas_de(caracteristica)):
+                primeira = Text(("  " if ordem else "") + celulas[0])
+                resto = [Text(celula) for celula in celulas[1:]]
+                if csv.com_p and ordem == 0:
+                    resto[-1].stylize(estilo_p)
+                tabela.add_row(primeira, *resto)
+        tabelas.append(tabela)
+    return tabelas
+
+
+def _nota_da_caracterizacao(caracterizacao: Caracterizacao) -> Text:
+    """
+    Por que cada linha saiu na forma e no teste em que saiu, e quantos testes são.
+
+    As frases são as mesmas das notas do `.csv` — as da comparação e as da associação —, e
+    saem na simulação porque é nela que se confere a escolha antes de ela ir para o
+    documento. A linha sem teste numa tabela que leva o p sai em amarelo.
+    """
+    corpo = Text("\nEscolha da forma e do teste:", style = "bold")
+    for tabela in caracterizacao.tabelas:
+        for caracteristica in tabela.caracteristicas:
+            if not caracteristica.escolha:
+                continue
+            destaque = tabela.com_p and not caracteristica.testada
+            corpo.append("\n")
+            corpo.append(Text(caracteristica.escolha, style = "yellow" if destaque else "dim"))
+
+    testadas = len(caracterizacao.testadas)
+    sem_teste = len(caracterizacao.sem_teste)
+    corpo.append("\n\n")
+    corpo.append(
+        Text.assemble(
+            (f"{testadas} {_plural(testadas, 'teste', 'testes')}", "bold"),
+            (f"; {sem_teste} {_plural(sem_teste, 'linha', 'linhas')} sem teste"
+             if sem_teste else "", ""),
+            (
+                ". Cada linha é um teste, sem correção para comparações múltiplas."
+                if testadas > 1 else ".",
+                "dim",
+            ),
+        )
+    )
+    return corpo
+
+
+def _arvore_da_caracterizacao(plano: PlanoCaracterizacao) -> Tree:
+    """
+    Desenha o que `executar_caracterizacao` escreveria, lendo o próprio plano.
+    """
+    arvore = Tree(Text(str(plano.raiz), style = "dim"))
+
+    if plano.arquivamento is not None:
+        de, para = plano.arquivamento
+        quantos = len([p for p in de.iterdir()])
+        ramo = arvore.add(Text(f"{PASTA_ANTIGAS}/"))
+        ramo.add(
+            Text.assemble(
+                (f"{para.name}/", "yellow"),
+                (f"   recebe a rodada anterior ({quantos} arquivo(s))", "dim"),
+            )
+        )
+
+    ramo = arvore.add(
+        Text.assemble(
+            (f"{PASTA_ANALISES}/{plano.pasta.name}/", "bold green"),
+            ("   novo" if plano.arquivamento is None else "   refeito", "dim"),
+        )
+    )
+    for tabela in plano.caracterizacao.tabelas:
+        quantas = len(tabela.caracteristicas)
+        grupo = f", por {tabela.rotulo_do_grupo}" if tabela.grupo is not None else ", sem grupo"
+        ramo.add(
+            Text.assemble(
+                ("+ ", "green"), (tabela.arquivo, ""),
+                (f"   {quantas} {_plural(quantas, 'variável', 'variáveis')}{grupo}", "dim"),
+            )
+        )
+    ramo.add(
+        Text.assemble(
+            ("+ ", "green"), ("manifesto.json", "bold"),
+            (f"   índice de {plano.manifesto.total_artefatos} artefato(s)", "dim"),
+        )
+    )
+
+    arvore.add(Text.assemble((ARQUIVO_HISTORICO, ""), ("   + 1 linha", "dim")))
+    return arvore
+
+
 # flatcap analisar
 
 @dataclass(frozen=True)
@@ -4051,11 +4324,22 @@ def _resumo_da_comparacao(plano: PlanoComparacao) -> str:
     )
 
 
+def _resumo_da_caracterizacao(plano: PlanoCaracterizacao) -> str:
+    caracterizacao = plano.caracterizacao
+    quantas = len(caracterizacao.tabelas)
+    return f"{quantas} {_plural(quantas, 'tabela', 'tabelas')}" + _sem_teste(
+        len(caracterizacao.sem_teste)
+    )
+
+
 # Pelo nome da análise, o mesmo do `analises.REGISTRO` — e há teste que exige os dois
 # iguais: uma análise que o lote rodasse sem estar aqui seria uma análise que ele não
 # saberia mostrar. As funções `_mostrar_*` são as que o comando de cada análise chama,
 # e a frase é a mesma que ele diz: o lote é a soma dos comandos também na tela.
 _NA_TELA: dict[str, _Tela] = {
+    ANALISE_CARACTERIZACAO: _Tela(
+        _mostrar_caracterizacao, "Caracterização escrita.", _resumo_da_caracterizacao
+    ),
     ANALISE_DESCRITIVA: _Tela(
         _mostrar_descritiva, "Descritiva escrita.", _resumo_da_descritiva
     ),

@@ -137,6 +137,51 @@ class TestTexto:
         assert volta.banco == original.banco
 
 
+class TestApresentacaoDaTabela:
+    """
+    Os três campos de apresentação do `Artefato`, que só a caracterização preenche: o
+    recuo das linhas, o rodapé da tabela e a página deitada.
+    """
+
+    def test_os_tres_campos_vao_e_voltam(self):
+        from dataclasses import replace
+
+        artefato = Artefato(
+            "caracterizacao_sexo.csv",
+            "caracterizacao",
+            "csv",
+            "Características dos participantes, por Sexo",
+            recuo=(2, 4, 5),
+            rodape=("a t de Welch; b Exato de Fisher.", "Percentuais sobre os casos com resposta."),
+            deitada=True,
+        )
+        item = replace(_manifesto().itens[0], artefatos=(artefato,))
+        corpo = json.loads(texto_do_manifesto(_manifesto(itens=(item,))))
+        assert corpo["formato"] == FORMATO == 1
+        assert corpo["variaveis"][0]["artefatos"][0]["recuo"] == [2, 4, 5]
+        assert de_dicionario(corpo).itens[0].artefatos[0] == artefato
+
+    def test_vazios_eles_nao_vao_para_o_arquivo(self):
+        """O manifesto das outras análises sai como antes, chave por chave."""
+        corpo = json.loads(texto_do_manifesto(_manifesto()))
+        for item in corpo["variaveis"]:
+            for artefato in item["artefatos"]:
+                assert set(artefato) == {"arquivo", "especie", "formato", "titulo"}
+
+    def test_o_manifesto_de_antes_e_lido_sem_eles(self):
+        corpo = {
+            "formato": 1,
+            "gerado_em": "2026-09-09T15:00:00",
+            "variaveis": [
+                {"variavel": "sexo", "artefatos": [
+                    {"arquivo": "freq_sexo.csv", "especie": "frequencia", "formato": "csv"},
+                ]},
+            ],
+        }
+        artefato = de_dicionario(corpo).itens[0].artefatos[0]
+        assert (artefato.recuo, artefato.rodape, artefato.deitada) == ((), (), False)
+
+
 class TestTabela:
     def test_quebra_de_linha_nao_sai_do_comentario(self, tmp_path):
         """
