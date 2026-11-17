@@ -169,7 +169,7 @@ Opções que valem para vários comandos:
 | `--sim` | Executa de fato (nos comandos que escrevem). |
 | `--aba NOME` | A planilha a ler, quando o `.xlsx` tem mais de uma. Sem isso, a primeira. |
 | `--rapido` | Não reconfere o `sha256` das versões do banco. Útil com bancos muito grandes. |
-| `--sem-graficos` | Escreve só as tabelas, sem carregar o `matplotlib` (descritiva, normalidade, correlação e lote). |
+| `--sem-graficos` | Escreve só as tabelas, sem carregar o `matplotlib` (descritiva, normalidade, correlação, regressão e lote). |
 
 ### `flatcap doctor`
 

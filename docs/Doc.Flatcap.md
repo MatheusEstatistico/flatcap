@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.18.1.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.24.5.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -54,8 +54,9 @@ Cinco ideias atravessam o projeto:
   manifesto de cada rodada: um projeto reaberto seis meses depois se explica sozinho.
 - **O que se analisa está escrito.** Trinta variáveis dão 435 pares, e testar todos é
   *p-hacking* feito por máquina. Sem a lista escrita na ficha, a análise recusa.
-- **Conferido contra o R.** Os testes estatísticos reproduzem o R 4.3.3, e a suíte compara
-  com valores calculados no R — nunca com o próprio FlatCap.
+- **Conferido contra o R.** Os testes estatísticos reproduzem o R: a suíte compara com valores
+  calculados no R 4.3.3 — e, na regressão e na caracterização, no 4.5.0 —, nunca com o próprio
+  FlatCap.
 
 O FlatCap foi escrito para o formulário de um serviço específico, mas o acoplamento mora num
 lugar só (o `modelo.py`), e um formulário com os mesmos nomes de campo funciona sem mudar o
@@ -226,6 +227,7 @@ REDCap ──listar──▶ o que chegou, e o que já virou pasta
            associacao ──▶ 3. Análises/associacao/       │  os pares e os itens vêm das
            correlacao ──▶ 3. Análises/correlacao/       │  listas escritas no projeto.yaml
            comparacao ──▶ 3. Análises/comparacao/       │
+            regressao ──▶ 3. Análises/regressao/        │
        caracterizacao ──▶ 3. Análises/caracterizacao/   ┘
              analisar ──▶ as da lista `analises:`, de uma vez
                    │
@@ -286,6 +288,7 @@ do projeto — esta só quando o cliente tem um projeto.
 | `flatcap associacao <id>` | não | `3. Análises/associacao/` | qui-quadrado ou Fisher, pela regra de Cochran |
 | `flatcap correlacao <id>` | não | `3. Análises/correlacao/` | Pearson, Spearman ou Kendall, pelos pressupostos |
 | `flatcap comparacao <id>` | não | `3. Análises/comparacao/` | testes t e ANOVAs, ou Wilcoxon, Mann-Whitney, Kruskal-Wallis e Friedman, pelos pressupostos: contra referência, entre grupos, entre medidas — duas, no pareado, ou mais |
+| `flatcap regressao <id>` | não | `3. Análises/regressao/` | linear simples, linear múltipla ou logística, pelo tipo do desfecho, para os modelos da lista `regressao:` |
 | `flatcap caracterizacao <id>` | não | `3. Análises/caracterizacao/` | a Tabela 1: as variáveis da lista `caracterizacao:` por grupo, com o Total e o p |
 | `flatcap analisar <id>` | não | as pastas das análises | as análises da lista `analises:`, de uma vez |
 | `flatcap relatorio <id>` | não | `Relatorio_<matrícula>_<data>.docx` | o documento, montado das rodadas; a Tabela 1, quando há, na segunda página |
@@ -300,7 +303,7 @@ As opções que se repetem:
 | `--env CAMINHO` | todos | usa outro `.env` |
 | `--aba NOME` | perfil e análises | a planilha a ler, quando o `.xlsx` tem mais de uma |
 | `--rapido` | dados listar, perfil, análises, relatório | não reconfere o `sha256` das versões do banco |
-| `--sem-graficos` | descritiva, normalidade, correlação, analisar | escreve só as tabelas, sem carregar o `matplotlib` |
+| `--sem-graficos` | descritiva, normalidade, correlação, regressão, analisar | escreve só as tabelas, sem carregar o `matplotlib` |
 | `--resumo` | analisar | mostra só a tabela do lote |
 | `--criar-root`, `--criar-env` | doctor | criam a pasta de dados e o `.env` da conta |
 | `--template ARQUIVO`, `--titulo TEXTO` | relatorio, amostragem | o modelo e o título do documento |
@@ -348,7 +351,9 @@ FLATCAP_ROOT/                                    fora do Git · backup próprio
         │   ├── cruzamento/     manifesto.json · cruz_<a>_x_<b>.csv
         │   ├── associacao/     manifesto.json · associacao.csv
         │   ├── correlacao/     manifesto.json · correlacao.csv · disp_<a>_x_<b>.png
-        │   └── comparacao/     manifesto.json · uma_amostra.csv · dois_grupos.csv · k_grupos.csv · pareado.csv · repetidas.csv
+        │   ├── comparacao/     manifesto.json · uma_amostra.csv · dois_grupos.csv · k_grupos.csv · pareado.csv · repetidas.csv
+        │   ├── regressao/      manifesto.json · regressao.csv · coef_<modelo>.csv · residuos_<modelo>.png · qq_<modelo>.png
+        │   └── caracterizacao/ manifesto.json · caracterizacao_<grupo>.csv
         └── 4. Amostragem/                            só com amostragem: nasce no primeiro `flatcap amostragem`
             ├── desenho.yaml                          o plano da amostra — seu, nunca sobrescrito
             ├── tamanho.csv · manifesto.json          a conta e o índice da rodada
@@ -410,6 +415,11 @@ comparacao:
   - pareado: [pas_0, pas_1]                  # as mesmas pessoas, duas vezes: o pareado
   - repetidas: [pas_0, pas_1, pas_2]         # a mesma medida, três vezes
     metodo: anova
+regressao:
+  - pas: [idade]                             # desfecho numérico, um preditor: a linear simples
+  - pas: [idade, imc, sexo]                  # dois preditores ou mais: a linear múltipla
+  - obito: [idade, sexo]                     # desfecho de duas categorias: a logística, em OR
+    evento: Sim                              # o evento; sem ele, a segunda categoria do dicionário
 caracterizacao:
   - sexo: [idade, pas, imc, escolaridade]    # a Tabela 1: o grupo antes dos dois-pontos
   - por: grupo                               # todas as variáveis do dicionário, por grupo
@@ -485,6 +495,7 @@ gravação; depois do cabeçalho das colunas, `#` é dado.
 | `associacao/` | `associacao.csv` | o par, n, o teste, o p e o V de Cramér |
 | `correlacao/` | `correlacao.csv`, `disp_<a>_x_<b>.png` | o par, n, o método, o coeficiente, o IC 95% e o p; a dispersão |
 | `comparacao/` | `uma_amostra.csv`, `dois_grupos.csv`, `k_grupos.csv`, `pareado.csv`, `repetidas.csv` | uma tabela por delineamento pedido |
+| `regressao/` | `regressao.csv`, `coef_<modelo>.csv`, `residuos_<modelo>.png`, `qq_<modelo>.png` | uma linha por modelo — o R² e o F, ou os eventos, o AIC e a razão de verossimilhança —; os coeficientes de cada modelo, com o IC 95% e o p, em OR na logística; nas lineares, os resíduos contra os ajustados e o Q-Q deles |
 | `caracterizacao/` | `caracterizacao_<grupo>.csv`, `caracterizacao_geral.csv` sem grupo | a Tabela 1, uma por item: cada variável em média (DP), mediana [Q1 a Q3] ou n (%) por grupo, o Total, e o p com a letra do teste |
 
 Todos os `.csv` seguem uma convenção: UTF-8 com BOM, `;` entre os campos, vírgula decimal, sem
@@ -562,7 +573,7 @@ do `__init__.py` na Parte II):
 | a pasta e a ficha | `projeto`, `ficha`, `dados`, `painel` | `pyyaml`, `ruamel.yaml` |
 | o banco e a reunião | `banco`, `dicionario`, `perfil` | `pandas`, `openpyxl` |
 | o contrato de saída | `manifesto`, `graficos` | `matplotlib` (só o `graficos`) |
-| as análises | `descritiva`, `normalidade`, `cruzamento`, `associacao`, `correlacao`, `hipoteses`, `comparacao`, `caracterizacao`, `analises` | `pandas`, `scipy` |
+| as análises | `descritiva`, `normalidade`, `cruzamento`, `associacao`, `correlacao`, `hipoteses`, `comparacao`, `regressao`, `caracterizacao`, `analises` | `pandas`, `scipy` |
 | o documento | `metodologia`, `relatorio`, `documento` | `python-docx` (só o `documento`) |
 | a amostragem | `amostral`, `amostragem` | nenhuma: a conta é da biblioteca padrão, e o `.docx` sai pelo `documento` |
 | a interface | `cli` | `typer`, `rich` |
@@ -626,18 +637,28 @@ O ritual completo de uma mudança está no [`CONTRIBUTING.md`](../CONTRIBUTING.m
 
 ## 10. As versões
 
-Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **único lugar**: o
-`pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. Por enquanto, o FlatCap não
-publica pacotes nem etiquetas: quem instala pelo repositório ([seção 2](#2-instalação))
-recebe o que está no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois.
+Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **único lugar** de
+onde o código a lê: o `pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. O FlatCap
+não publica pacotes: quem instala pelo repositório ([seção 2](#2-instalação)) recebe o que está
+no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois. Desde a 1.24.0, cada versão
+tem uma etiqueta anotada no Git — `v1.24.5` — no merge commit do pull request que a fechou.
 
-Para fechar uma versão:
+Toda mudança entra no `main` por um pull request, de uma branch com o nome dela. Para fechar
+uma versão:
 
-1. Suba o `__version__` no `__init__.py`.
+1. Numa branch `versao-X.Y.Z` — ou na própria branch da mudança, quando a versão é só ela —,
+   suba o `__version__` no `__init__.py`, e o número no topo deste documento.
 2. Escreva a seção da versão no docstring do `__init__.py` (o porquê) e no `CHANGELOG.md` (o
    quê, em uma linha por mudança).
-3. Rode `python tools/gerar_doc.py` e o ritual do [`CONTRIBUTING.md`](../CONTRIBUTING.md), e
-   faça o commit no `main`.
+3. Rode `python tools/gerar_doc.py` e o ritual do [`CONTRIBUTING.md`](../CONTRIBUTING.md), faça
+   o commit e abra o pull request para o `main`.
+4. Depois do merge, ponha a etiqueta da versão no merge commit — anotada, com o título da seção
+   dela — e envie-a:
+
+   ```bash
+   git tag -a v1.24.5 <merge commit> -m "1.24.5 — a Tabela 1"
+   git push origin v1.24.5
+   ```
 
 **E um executável, sem Python?** Dá para empacotar o FlatCap com o PyInstaller num executável
 por sistema, mas com o `pandas`, o `scipy` e o `matplotlib` dentro ele costuma passar de 100 MB,
