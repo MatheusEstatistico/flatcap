@@ -637,18 +637,28 @@ O ritual completo de uma mudança está no [`CONTRIBUTING.md`](../CONTRIBUTING.m
 
 ## 10. As versões
 
-Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **único lugar**: o
-`pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. Por enquanto, o FlatCap não
-publica pacotes nem etiquetas: quem instala pelo repositório ([seção 2](#2-instalação))
-recebe o que está no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois.
+Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **único lugar** de
+onde o código a lê: o `pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. O FlatCap
+não publica pacotes: quem instala pelo repositório ([seção 2](#2-instalação)) recebe o que está
+no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois. Desde a 1.24.0, cada versão
+tem uma etiqueta anotada no Git — `v1.24.5` — no merge commit do pull request que a fechou.
 
-Para fechar uma versão:
+Toda mudança entra no `main` por um pull request, de uma branch com o nome dela. Para fechar
+uma versão:
 
-1. Suba o `__version__` no `__init__.py`, e o número no topo deste documento.
+1. Numa branch `versao-X.Y.Z` — ou na própria branch da mudança, quando a versão é só ela —,
+   suba o `__version__` no `__init__.py`, e o número no topo deste documento.
 2. Escreva a seção da versão no docstring do `__init__.py` (o porquê) e no `CHANGELOG.md` (o
    quê, em uma linha por mudança).
-3. Rode `python tools/gerar_doc.py` e o ritual do [`CONTRIBUTING.md`](../CONTRIBUTING.md), e
-   faça o commit no `main`.
+3. Rode `python tools/gerar_doc.py` e o ritual do [`CONTRIBUTING.md`](../CONTRIBUTING.md), faça
+   o commit e abra o pull request para o `main`.
+4. Depois do merge, ponha a etiqueta da versão no merge commit — anotada, com o título da seção
+   dela — e envie-a:
+
+   ```bash
+   git tag -a v1.24.5 <merge commit> -m "1.24.5 — a Tabela 1"
+   git push origin v1.24.5
+   ```
 
 **E um executável, sem Python?** Dá para empacotar o FlatCap com o PyInstaller num executável
 por sistema, mas com o `pandas`, o `scipy` e o `matplotlib` dentro ele costuma passar de 100 MB,
