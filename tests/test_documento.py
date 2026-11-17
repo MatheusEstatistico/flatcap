@@ -520,6 +520,170 @@ class TestSecoes:
         assert all(abs(f.width - util) < Pt(2) for f in formas)
 
 
+# ── A segunda página ────────────────────────────────────────────────────────
+
+
+CARACTERIZACAO = "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n"
+# Três grupos de escolaridade: a tabela deitada.
+CARACTERIZACAO_DEITADA = "caracterizacao:\n  - escolaridade: [idade, imc, sexo]\n"
+
+
+@pytest.fixture
+def com_tabela_1(projeto_com_rodada):
+    """O `.docx` de um projeto com a descritiva e a caracterização, e o plano dele."""
+
+    def escrever_um(bloco: str = CARACTERIZACAO):
+        from conftest import acrescentar_a_ficha
+        from flatcap.caracterizacao import executar_caracterizacao, preparar_caracterizacao
+
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, bloco)
+        executar_caracterizacao(preparar_caracterizacao(raiz, agora=QUANDO))
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        executar_relatorio(plano)
+        return Document(str(plano.destino)), plano
+
+    return escrever_um
+
+
+def _quebras(doc) -> list[str]:
+    """Os parágrafos que começam página nova pelo `page_break_before`."""
+    return [p.text for p in doc.paragraphs if p.paragraph_format.page_break_before]
+
+
+def _tabela_1(doc):
+    return next(t for t in doc.tables if t.rows[0].cells[0].text == "Característica")
+
+
+class TestSegundaPagina:
+    def test_a_tabela_1_abre_a_segunda_pagina_e_a_descritiva_a_seguinte(self, com_tabela_1):
+        doc, plano = com_tabela_1()
+        assert _quebras(doc) == ["Caracterização dos participantes", plano.secoes[1].rotulo]
+        assert len(doc.sections) == 1
+        legendas = [p.text for p in doc.paragraphs if p.text.startswith("Tabela ")]
+        assert legendas[0] == "Tabela 1. Características dos participantes, por sexo"
+
+    def test_as_categorias_saem_recuadas(self, com_tabela_1):
+        doc, plano = com_tabela_1()
+        recuo = set(plano.secoes[0].tabelas[0].recuo)
+        assert recuo
+        for indice, linha in enumerate(_tabela_1(doc).rows[1:]):
+            # O Word guarda o recuo em vinte avos de ponto: 0,4 cm volta como 0,4004.
+            recuado = linha.cells[0].paragraphs[0].paragraph_format.left_indent
+            assert (round(recuado.cm, 2) if recuado is not None else None) == (
+                0.4 if indice in recuo else None
+            )
+
+    def test_a_letra_do_teste_sai_sobrescrita_e_o_texto_e_o_do_csv(self, com_tabela_1):
+        doc, plano = com_tabela_1()
+        lida = plano.secoes[0].tabelas[0]
+        quadro = _tabela_1(doc)
+        assert [[c.text for c in linha.cells] for linha in quadro.rows] == [
+            list(lida.colunas), *(list(linha) for linha in lida.linhas)
+        ]
+        celulas_do_p = [linha.cells[-1] for linha in quadro.rows[1:] if linha.cells[-1].text]
+        assert celulas_do_p
+        for celula in celulas_do_p:
+            *numero, letra = celula.paragraphs[0].runs
+            assert letra.font.superscript is True and len(letra.text) == 1
+            assert not any(trecho.font.superscript for trecho in numero)
+        assert not any(
+            trecho.font.superscript
+            for linha in quadro.rows
+            for celula in linha.cells[:-1]
+            for trecho in celula.paragraphs[0].runs
+        )
+
+    def test_o_p_vai_a_direita_e_os_resumos_a_esquerda(self, com_tabela_1):
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+        doc, _ = com_tabela_1()
+        linha = _tabela_1(doc).rows[1]
+        alinhamentos = [celula.paragraphs[0].alignment for celula in linha.cells]
+        esquerda, direita = WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.RIGHT
+        assert alinhamentos == [esquerda, esquerda, esquerda, esquerda, direita]
+
+    def test_o_rodape_sai_embaixo_em_letra_pequena_preso_a_tabela(self, com_tabela_1):
+        doc, plano = com_tabela_1()
+        rodape = plano.secoes[0].tabelas[0].rodape
+        paragrafos = [p for p in doc.paragraphs if p.text in rodape]
+        assert [p.text for p in paragrafos] == list(rodape)
+        legenda = paragrafos[0]
+        letras = [trecho.text for trecho in legenda.runs if trecho.font.superscript]
+        assert letras == ["a", "b"]
+        assert all(trecho.font.size == Pt(8.5) for p in paragrafos for trecho in p.runs)
+        assert [p.paragraph_format.keep_with_next for p in paragrafos] == [True, False]
+        ultima = _tabela_1(doc).rows[-1]
+        assert all(c.paragraphs[0].paragraph_format.keep_with_next for c in ultima.cells)
+
+    def test_a_variavel_nao_se_parte_entre_paginas(self, com_tabela_1):
+        """Cada linha se prende à recuada debaixo dela: o bloco da variável anda junto."""
+        doc, plano = com_tabela_1()
+        recuo = plano.secoes[0].tabelas[0].recuo
+        linhas = _tabela_1(doc).rows
+        for indice in recuo:
+            assert linhas[indice].cells[0].paragraphs[0].paragraph_format.keep_with_next
+
+    def test_a_tabela_deitada_e_a_volta_ao_retrato(self, com_tabela_1):
+        """
+        Três grupos: uma seção do Word em paisagem para a Tabela 1, e a seguinte de volta
+        ao retrato — as duas quebras de seção já abrem a página, e nenhum título leva o
+        `page_break_before`, que daria página em branco.
+        """
+        from docx.enum.section import WD_ORIENT
+
+        doc, plano = com_tabela_1(CARACTERIZACAO_DEITADA)
+        retrato, paisagem, volta = doc.sections
+        assert retrato.orientation == volta.orientation == WD_ORIENT.PORTRAIT
+        assert paisagem.orientation == WD_ORIENT.LANDSCAPE
+        assert paisagem.page_width == retrato.page_height
+        assert paisagem.page_height == retrato.page_width
+        assert (volta.page_width, volta.page_height) == (retrato.page_width, retrato.page_height)
+        assert _quebras(doc) == []
+        assert paisagem.footer.is_linked_to_previous and volta.footer.is_linked_to_previous
+        assert paisagem.header.is_linked_to_previous and volta.header.is_linked_to_previous
+        assert "w:start" not in doc.element.body.xml.split("<w:pgNumType", 1)[-1][:40]
+
+        # A quebra vai no parágrafo que fecha a página de antes, e não num parágrafo novo:
+        # o da metodologia, e o que vem depois do rodapé da tabela.
+        fechos = [p for p in doc.paragraphs if p._p.pPr is not None and p._p.pPr.sectPr is not None]
+        assert [p.text for p in fechos][0] == plano.relatorio.metodologia[0]
+        assert len(fechos) == 2
+
+    def test_sem_caracterizacao_o_docx_de_hoje(self, documento):
+        """
+        Nenhum dos campos novos chega às outras tabelas: uma seção só, uma quebra só — a
+        da primeira seção —, nenhum sobrescrito e nenhum recuo de célula.
+        """
+        doc, plano = documento()
+        assert len(doc.sections) == 1
+        assert _quebras(doc) == [plano.secoes[0].rotulo]
+        xml = doc.element.body.xml
+        assert "w:vertAlign" not in xml
+        assert not any(
+            celula.paragraphs[0].paragraph_format.left_indent is not None
+            for quadro in doc.tables
+            for linha in quadro.rows
+            for celula in linha.cells
+        )
+
+    def test_o_que_conta_como_p_com_a_letra(self):
+        from flatcap.documento import _colunas_de_texto, _letra_do_teste
+        from flatcap.relatorio import TabelaLida
+
+        assert _letra_do_teste("0,026a") == ("0,026", "a")
+        assert _letra_do_teste("< 0,001b") == ("< 0,001", "b")
+        for celula in ("Sim", "—", "39 (38,2)", "58,5 (10,49)", "3b descalço"):
+            assert _letra_do_teste(celula) == (celula, "")
+        corpo = (("Idade", "52 (9)", "0,026a"), ("Sexo", "", "—"))
+        sem = TabelaLida("t.csv", "t", "T", colunas=("a", "b", "p"), linhas=corpo)
+        com = TabelaLida(
+            "t.csv", "t", "T", colunas=("a", "b", "p"), linhas=corpo, rodape=("a t de Welch.",)
+        )
+        assert _colunas_de_texto(sem) == frozenset({0, 1, 2})
+        assert _colunas_de_texto(com) == frozenset({0, 1})
+
+
 # ── O contrato com o template ───────────────────────────────────────────────
 
 

@@ -131,6 +131,11 @@ PASTA_COMPARACAO = "comparacao"
 # comparação: o modelo é escolhido dentro da análise, pelo tipo do desfecho.
 PASTA_REGRESSAO = "regressao"
 
+# A rodada da caracterização dos participantes — a Tabela 1. O mesmo nome nos três
+# lugares, como as de cima: a pasta, o campo `analise` do manifesto e a chave da ficha
+# — a lista `analises:` e o bloco `caracterizacao:` com as tabelas.
+PASTA_CARACTERIZACAO = "caracterizacao"
+
 # A pasta da amostragem, a quarta do projeto — e a única que o `novo` não cria.
 #
 # O projeto costuma começar com a amostragem e evoluir depois para a análise, e tudo
@@ -738,7 +743,8 @@ _CABECALHO_YAML = """
 #   analises  as análises combinadas na reunião, na ordem das seções do
 #             relatório — [descritiva, correlacao]. O `flatcap analisar`
 #             roda as desta lista, nessa ordem; os pares e os itens de cada
-#             uma vão num bloco com o nome dela (`correlacao:`).
+#             uma vão num bloco com o nome dela (`correlacao:`). A
+#             `caracterizacao`, a Tabela 1, sai sempre na segunda página.
 #   dados     uma entrada por versão do banco, em ordem cronológica.
 """
 

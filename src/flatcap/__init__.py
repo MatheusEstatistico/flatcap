@@ -24,6 +24,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     hipoteses.py   a aritmética dos testes de comparação, como o R (sem pandas)
     comparacao.py  compara contra uma referência, entre grupos e entre medidas repetidas
     regressao.py   ajusta modelos: linear simples, linear múltipla e logística
+    caracterizacao.py a Tabela 1: as variáveis por grupo, pela comparação e pela associação
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
     metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
@@ -944,6 +945,52 @@ ramo numérico e do teste de número guardado como texto — um `prontuario` em 
 saía `numerica`. A regra em si não mudou: nome com cara de identificador **e** nenhum valor
 repetido, e por isso `cod_grupo` com 1, 2 e 3 continua `categorica`. A fusão nunca reescreve
 linha existente, então um `dicionario.csv` que já diz `numerica` continua dizendo.
+
+## 1.24.5 — a Tabela 1
+
+**`caracterizacao.py`: a caracterização dos participantes, a "Tabela 1" de artigo.** As
+variáveis escolhidas, uma coluna por grupo, o Total e o p — a tabela que um artigo traz antes
+dos resultados, e que se montava à mão a partir da descritiva, da comparação e da associação.
+Os itens vêm da lista `caracterizacao:` da ficha, uma tabela por item: o grupo antes dos
+dois-pontos, como na comparação, `- sexo: [idade, imc, escolaridade]`; `- por: sexo`, com
+todas as variáveis analisáveis do dicionário; ou só a lista, `- [idade, imc]`, sem grupo, com
+o Total e sem p. `p: nao` na linha de baixo do item tira a coluna do p e a legenda dos testes:
+no ensaio randomizado, o CONSORT desaconselha testar a linha de base.
+
+**Sem conta nova.** A linha numérica é a comparação entre grupos, sem método escrito, pelo
+`comparacao.comparar_grupos`: o Shapiro-Wilk em cada grupo decide entre a média (DP) com o t
+de Welch — a ANOVA de Welch com três grupos ou mais — e a mediana [Q1 a Q3] com o
+Mann-Whitney — o Kruskal-Wallis. A categórica é a associação, pelo `associacao.testar_par`: a
+regra de Cochran entre o qui-quadrado, com Yates só na 2×2, e o exato de Fisher. O p de cada
+linha é, letra por letra, o que as duas dariam para o mesmo par, e as células saem pelos
+formatadores delas, que ficaram públicos com o apelido privado. A regra dos pressupostos manda
+sempre, mesmo quando a lista `comparacao:` escreve outro método para o mesmo par.
+
+**A tabela.** Uma coluna por categoria do grupo com caso, na ordem do dicionário, com o n no
+cabeçalho. Quem não tem o grupo fica fora da tabela inteira, com aviso: os grupos somam o
+Total, que por isso pode diferir do n da descritiva. Os faltantes de cada variável vão na linha
+`(sem informação)`, só com o n; as categorias, em n (%) sobre os casos com resposta na coluna,
+e a declarada sem caso sai com zero, fora do teste. O p sai com a letra do teste colada —
+`0,026a` —, as letras na ordem em que os testes aparecem, e a legenda embaixo da tabela é a
+única nota impressa no documento. As recusas são as de sempre: o formato antes de abrir o
+banco, o dicionário logo depois de conferi-lo, e o grupo de uma categoria só com os casos
+contados.
+
+**A segunda página.** O relatório põe a rodada da caracterização sempre primeiro, em qualquer
+posição da lista `analises:` ou fora dela, e a seção seguinte começa em página nova
+(`Secao.pagina_nova`). A apresentação vem do manifesto, em três campos opcionais do `Artefato`
+— `recuo`, `rodape` e `deitada` —, gravados só quando preenchidos; o `FORMATO` continua 1. O
+`documento.py` recua as categorias, prende o rodapé à tabela, põe a letra do teste em
+sobrescrito — formatação do Word, e não um caractere sobrescrito, que nem toda fonte tem —,
+não deixa a variável se partir entre páginas, e abre uma seção em paisagem para a tabela de
+três grupos ou mais, com a volta ao retrato depois. A quebra de seção vai no parágrafo que
+fecha a página de antes, e não num parágrafo novo, e a seção que vem logo depois dela não leva
+o `page_break_before`: nenhuma das duas sobra como página em branco.
+
+**Sem a caracterização, nada muda**: o `.docx` sai, byte a byte, o de antes. Com ela, a
+primeira página ganha a frase dela na metodologia — só os testes que deram p, e sem a frase do
+nível de significância quando a tabela saiu sem o p —, e a numeração das tabelas das outras
+seções anda uma casa por tabela de caracterização.
 """
 
-__version__ = "1.24.4"
+__version__ = "1.24.5"

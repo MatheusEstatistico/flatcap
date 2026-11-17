@@ -214,6 +214,105 @@ class TestMetodologia:
         assert "sobrevivencia" not in " ".join(plano.relatorio.metodologia)
 
 
+# ── A segunda página ────────────────────────────────────────────────────────
+
+
+CARACTERIZACAO = "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n"
+
+
+@pytest.fixture
+def projeto_com_tabela_1(projeto_com_rodada):
+    """
+    O projeto com a rodada da descritiva e a da caracterização, e a lista `analises:`
+    que o teste escrever — ou a que a ficha já tem, vazia.
+    """
+
+    def montar(lista: str | None = None, bloco: str = CARACTERIZACAO):
+        from conftest import acrescentar_a_ficha, escrever_analises
+        from flatcap.caracterizacao import executar_caracterizacao, preparar_caracterizacao
+
+        raiz = projeto_com_rodada()
+        if lista is not None:
+            escrever_analises(raiz, lista)
+        acrescentar_a_ficha(raiz, bloco)
+        executar_caracterizacao(preparar_caracterizacao(raiz, agora=QUANDO))
+        return raiz
+
+    return montar
+
+
+class TestSegundaPagina:
+    @pytest.mark.parametrize(
+        "lista",
+        [
+            "analises: [caracterizacao, descritiva]",
+            "analises: [descritiva, caracterizacao]",
+            "analises: [descritiva]",
+            None,
+        ],
+        ids=["primeira da lista", "última da lista", "fora da lista", "sem lista"],
+    )
+    def test_a_caracterizacao_e_sempre_a_primeira_rodada(self, projeto_com_tabela_1, lista):
+        relatorio = preparar_relatorio(projeto_com_tabela_1(lista), agora=QUANDO).relatorio
+        assert relatorio.analises == ("caracterizacao", "descritiva")
+        assert relatorio.secoes[0].rotulo == "Caracterização dos participantes"
+
+    def test_a_pagina_nova_so_na_primeira_secao_depois_dela(self, projeto_com_tabela_1):
+        secoes = preparar_relatorio(projeto_com_tabela_1(), agora=QUANDO).relatorio.secoes
+        assert [secao.pagina_nova for secao in secoes] == [False, True] + [False] * (
+            len(secoes) - 2
+        )
+
+    def test_a_tabela_traz_a_apresentacao_do_artefato(self, projeto_com_tabela_1):
+        from flatcap.manifesto import ler as ler_manifesto
+        from flatcap.projeto import PASTA_ANALISES
+
+        raiz = projeto_com_tabela_1()
+        secoes = preparar_relatorio(raiz, agora=QUANDO).relatorio.secoes
+        artefato = ler_manifesto(raiz / PASTA_ANALISES / "caracterizacao").itens[0].artefatos[0]
+        tabela = secoes[0].tabelas[0]
+        assert tabela.recuo and tabela.rodape
+        assert (tabela.recuo, tabela.rodape, tabela.deitada) == (
+            artefato.recuo, artefato.rodape, artefato.deitada,
+        )
+        assert not any(
+            tabela.recuo or tabela.rodape or tabela.deitada
+            for secao in secoes[1:]
+            for tabela in secao.tabelas
+        )
+
+    def test_a_frase_dela_abre_a_metodologia(self, projeto_com_tabela_1):
+        relatorio = preparar_relatorio(projeto_com_tabela_1(), agora=QUANDO).relatorio
+        assert relatorio.metodologia[0].startswith(
+            "As características dos participantes foram descritas por sexo,"
+        )
+
+    def test_as_conferencias_de_rodada_velha_valem_para_ela(self, projeto_com_tabela_1):
+        from flatcap.projeto import PASTA_ANALISES
+
+        raiz = projeto_com_tabela_1()
+        caminho = raiz / "dicionario.csv"
+        texto = caminho.read_text(encoding="utf-8-sig").replace(
+            "imc;imc;numerica", "imc;imc;ignorar"
+        )
+        caminho.write_text(texto, encoding="utf-8", newline="\n")
+        (raiz / PASTA_ANALISES / "caracterizacao" / "caracterizacao_sexo.csv").unlink()
+
+        plano = preparar_relatorio(raiz, agora=QUANDO)
+        alertas = {alerta.codigo: alerta for alerta in plano.relatorio.alertas}
+        assert "`imc` deixou de ser analisável no dicionário depois da rodada de " \
+            "`caracterizacao`" in alertas["dicionario_mudou"].detalhe
+        assert "caracterizacao/caracterizacao_sexo.csv" in alertas["artefato_ausente"].detalhe
+
+    def test_sem_rodada_de_caracterizacao_o_relatorio_de_hoje(self, projeto_com_rodada):
+        relatorio = preparar_relatorio(projeto_com_rodada(), agora=QUANDO).relatorio
+        assert relatorio.analises == ("descritiva",)
+        assert not any(secao.pagina_nova for secao in relatorio.secoes)
+        assert not any(
+            tabela.recuo or tabela.rodape or tabela.deitada for tabela in relatorio.tabelas
+        )
+
+
 class TestLerTabela:
     """
     Sem `pandas` de propósito. Não é economia de dependência, é economia de

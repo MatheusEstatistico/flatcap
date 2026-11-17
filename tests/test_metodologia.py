@@ -31,6 +31,7 @@ from conftest import acrescentar_a_ficha
 from flatcap import analises, associacao, comparacao, correlacao, regressao
 from flatcap.manifesto import (
     ANALISE_ASSOCIACAO,
+    ANALISE_CARACTERIZACAO,
     ANALISE_COMPARACAO,
     ANALISE_CORRELACAO,
     ANALISE_CRUZAMENTO,
@@ -156,6 +157,18 @@ class TestOsNomesSaoOsDasAnalises:
             associacao.TESTE_FISHER,
         }
         assert metodologia._YATES == associacao.TESTE_YATES
+
+    def test_as_formas_e_os_testes_da_caracterizacao(self):
+        """
+        A forma das numéricas é o cabeçalho do resumo da comparação, e os testes delas são
+        os da regra entre grupos — que a frase escreve pelo `COMPARACOES`.
+        """
+        from flatcap import metodologia
+
+        assert metodologia._FORMA_DA_MEDIA == comparacao.COLUNA_DA_MEDIA
+        assert metodologia._FORMA_DA_MEDIANA == comparacao.COLUNA_DA_MEDIANA
+        for delineamento in (comparacao.DOIS_GRUPOS, comparacao.K_GRUPOS):
+            assert set(comparacao.REGRA[delineamento]) <= set(COMPARACOES[delineamento])
 
     def test_os_modelos_da_regressao(self):
         assert {*LINEARES, LOGISTICA} == set(regressao.MODELOS)
@@ -685,6 +698,145 @@ class TestSemFrase:
 # ── A regressão ─────────────────────────────────────────────────────────────
 
 
+def _tabela_caracterizada(rotulo: str | None, *linhas: dict) -> dict:
+    """Uma tabela da caracterização como o manifesto a grava: o grupo e as linhas."""
+    return {
+        "grupo": rotulo.lower() if rotulo else None,
+        "rotulo_do_grupo": rotulo,
+        "linhas": list(linhas),
+    }
+
+
+def _numerica(forma: str, teste: str | None = None, p: float | None = None) -> dict:
+    return {"tipo": "numerica", "forma": forma, "teste": teste, "p": p}
+
+
+def _categorica(teste: str | None = None, p: float | None = None) -> dict:
+    return {"tipo": "categorica", "forma": "n (%)", "teste": teste, "p": p}
+
+
+def _caracterizacao(*tabelas: dict) -> Manifesto:
+    linhas = [linha for tabela in tabelas for linha in tabela["linhas"]]
+    return _manifesto(
+        ANALISE_CARACTERIZACAO,
+        {
+            "tabelas": list(tabelas),
+            "testados": sum(1 for linha in linhas if linha["p"] is not None),
+        },
+        regras={"alfa": 0.05, "comparacoes_multiplas": "nenhuma correção"},
+    )
+
+
+MEDIA = "média (DP)"
+MEDIANA = "mediana [Q1 a Q3]"
+
+
+class TestCaracterizacao:
+    def test_a_frase_do_exemplo(self):
+        texto = _texto(
+            _caracterizacao(
+                _tabela_caracterizada(
+                    "Sexo",
+                    _numerica(MEDIA, "t de Welch", 0.026),
+                    _numerica(MEDIANA, "Mann-Whitney", 0.071),
+                    _categorica("Qui-quadrado", 0.146),
+                    _categorica("Qui-quadrado com correção de Yates", 0.396),
+                    _categorica("Exato de Fisher", 0.098),
+                )
+            )
+        )
+        assert texto.startswith(
+            "As características dos participantes foram descritas por sexo, em frequências "
+            "absolutas e relativas e em média e desvio padrão ou mediana e quartis, conforme o "
+            "teste de Shapiro-Wilk em cada grupo, e comparadas pelo teste t de Welch ou pelo de "
+            "Mann-Whitney e pelo qui-quadrado de Pearson, com a correção de Yates nas tabelas "
+            "2×2, ou pelo exato de Fisher. Adotou-se o nível de significância de 5%, sem "
+            "correção para comparações múltiplas."
+        )
+
+    def test_sem_o_p_descreve_e_nao_fala_de_significancia(self):
+        texto = _texto(
+            _caracterizacao(
+                _tabela_caracterizada(
+                    "Sexo", _numerica(MEDIA), _numerica(MEDIANA), _categorica()
+                )
+            )
+        )
+        assert texto == (
+            "As características dos participantes foram descritas por sexo, em frequências "
+            "absolutas e relativas e em média e desvio padrão ou mediana e quartis, conforme o "
+            "teste de Shapiro-Wilk em cada grupo. As análises foram feitas usando a linguagem "
+            "Python versão 3.13."
+        )
+
+    def test_sem_grupo_o_shapiro_e_o_da_variavel_inteira(self):
+        texto = _texto(
+            _caracterizacao(
+                _tabela_caracterizada(None, _numerica(MEDIA), _numerica(MEDIANA), _categorica())
+            )
+        )
+        assert texto.startswith(
+            "As características dos participantes foram descritas em frequências absolutas e "
+            "relativas e em média e desvio padrão ou mediana e quartis, conforme o teste de "
+            "Shapiro-Wilk. As análises"
+        )
+
+    def test_uma_forma_so_nao_explica_a_regra(self):
+        texto = _texto(
+            _caracterizacao(_tabela_caracterizada("Sexo", _numerica(MEDIA, "t de Welch", 0.02)))
+        )
+        assert texto.startswith(
+            "As características dos participantes foram descritas por sexo, em média e desvio "
+            "padrão, e comparadas pelo teste t de Welch. Adotou-se o nível de significância de "
+            "5%."
+        )
+
+    def test_tres_grupos_ou_mais(self):
+        texto = _texto(
+            _caracterizacao(
+                _tabela_caracterizada(
+                    "Grupo",
+                    _numerica(MEDIA, "ANOVA de Welch", 0.5),
+                    _numerica(MEDIANA, "Kruskal-Wallis", 0.4),
+                    _categorica("Exato de Fisher", 0.9),
+                )
+            )
+        )
+        assert (
+            "e comparadas pela ANOVA de Welch ou pelo teste de Kruskal-Wallis e pelo exato de "
+            "Fisher." in texto
+        )
+
+    def test_os_grupos_de_cada_tabela_e_a_sigla_em_maiuscula(self):
+        texto = _texto(
+            _caracterizacao(
+                _tabela_caracterizada("IMC categorizado", _categorica()),
+                _tabela_caracterizada("Sexo", _categorica()),
+                _tabela_caracterizada("Sexo", _categorica()),
+            )
+        )
+        assert texto.startswith(
+            "As características dos participantes foram descritas por IMC categorizado e por "
+            "sexo, em frequências absolutas e relativas."
+        )
+
+    def test_o_teste_que_nao_deu_p_nao_entra(self):
+        """O Fisher além do limite do cálculo: escolhido, e sem p — não rodou."""
+        texto = _texto(
+            _caracterizacao(_tabela_caracterizada("Grupo", _categorica("Exato de Fisher")))
+        )
+        assert "Fisher" not in texto
+        assert "Adotou-se" not in texto
+
+    def test_vem_antes_da_descritiva(self):
+        assert ORDEM[0] == ANALISE_CARACTERIZACAO
+        texto = _texto(
+            _manifesto(ANALISE_DESCRITIVA, tipos=("categorica",)),
+            _caracterizacao(_tabela_caracterizada("Sexo", _categorica())),
+        )
+        assert texto.index("As características") < texto.index("As variáveis categóricas")
+
+
 def _modelo(nome: str, ajustado: bool = True) -> dict:
     """Um modelo como a regressão o grava: sem `coeficientes`, ele não saiu."""
     modelo: dict = {"modelo": nome, "desfecho": "pas"}
@@ -763,6 +915,7 @@ class TestComAsRodadasDeVerdade:
     @pytest.fixture
     def rodadas(self, projeto_com_rodada):
         from flatcap.associacao import executar_associacao, preparar_associacao
+        from flatcap.caracterizacao import executar_caracterizacao, preparar_caracterizacao
         from flatcap.comparacao import executar_comparacao, preparar_comparacao
         from flatcap.correlacao import executar_correlacao, preparar_correlacao
         from flatcap.regressao import executar_regressao, preparar_regressao
@@ -773,8 +926,10 @@ class TestComAsRodadasDeVerdade:
             "associacao:\n  - [sexo, escolaridade]\n"
             "correlacao:\n  - [idade, imc]\n"
             "comparacao:\n  - [imc, sexo]\n  - [idade, 40, t]\n"
-            "regressao:\n  - imc: [idade, sexo]\n",
+            "regressao:\n  - imc: [idade, sexo]\n"
+            "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n",
         )
+        executar_caracterizacao(preparar_caracterizacao(raiz, agora=QUANDO))
         executar_associacao(preparar_associacao(raiz, agora=QUANDO))
         executar_correlacao(preparar_correlacao(raiz, com_graficos=False, agora=QUANDO))
         executar_comparacao(preparar_comparacao(raiz, agora=QUANDO))
@@ -801,6 +956,14 @@ class TestComAsRodadasDeVerdade:
         assert COMPARACOES["dois_grupos"][detalhes["dois_grupos"][0]["teste"]] in texto
         # O t da uma amostra foi escrito na ficha; o dos dois grupos, não.
         assert "Exceto quando o teste foi definido de antemão" in texto
+
+        tabela = por_analise[ANALISE_CARACTERIZACAO].itens[0].detalhes["tabelas"][0]
+        testes = [linha["teste"] for linha in tabela["linhas"]]
+        assert texto.startswith(
+            "As características dos participantes foram descritas por sexo, em frequências "
+            "absolutas e relativas e em "
+        )
+        assert COMPARACOES["dois_grupos"][testes[0]].replace("o teste", "pelo teste") in texto
 
         modelos = por_analise[ANALISE_REGRESSAO].itens[0].detalhes["modelos"]
         assert [modelo["modelo"] for modelo in modelos] == [regressao.LINEAR_MULTIPLA]

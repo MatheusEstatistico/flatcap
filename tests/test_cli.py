@@ -47,6 +47,7 @@ from flatcap.projeto import (
     PASTA_ANTIGAS,
     PASTA_ANTIGAS_DA_AMOSTRAGEM,
     PASTA_ASSOCIACAO,
+    PASTA_CARACTERIZACAO,
     PASTA_COMPARACAO,
     PASTA_CORRELACAO,
     PASTA_CRUZAMENTO,
@@ -1654,6 +1655,72 @@ class TestComparacao:
         resultado = rodar("comparacao", RECORD_ID)
         assert resultado.exit_code == 1
         assert "`student` não se aplica a 3 grupos" in _sem_moldura(resultado)
+
+
+class TestCaracterizacao:
+    BLOCO = "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n"
+
+    def test_simula_por_padrao_e_mostra_a_tabela_e_a_escolha(self, rodar, projeto_com_rodada):
+        """
+        A simulação mostra a tabela que vai para o documento, com o rodapé, **e** por que
+        cada linha saiu na forma e no teste em que saiu.
+        """
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("caracterizacao", RECORD_ID)
+        assert resultado.exit_code == 0
+        assert not (raiz / PASTA_ANALISES / PASTA_CARACTERIZACAO).exists()
+        saida = _saida(resultado)
+        assert "Características dos participantes, por sexo" in saida
+        assert "a t de Welch; b Exato de Fisher." in saida
+        assert "Escolha da forma e do teste:" in saida
+        assert "idade por sexo: n = 24 (12 em Feminino e 12 em Masculino)" in saida
+        assert "Percentuais sobre os casos com resposta." in saida
+        assert "caracterizacao_sexo.csv" in saida
+        assert "Simulação" in saida
+
+    def test_com_sim_escreve_a_pasta(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("caracterizacao", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        assert "Caracterização escrita." in _saida(resultado)
+        pasta = raiz / PASTA_ANALISES / PASTA_CARACTERIZACAO
+        assert (pasta / "caracterizacao_sexo.csv").is_file()
+        assert (pasta / "manifesto.json").is_file()
+
+    def test_sem_a_lista_sai_com_um_e_ensina_a_forma(self, rodar, projeto_com_rodada):
+        projeto_com_rodada()
+        resultado = rodar("caracterizacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        saida = _saida(resultado)
+        assert "Caracterização" in saida
+        assert "- sexo: [idade, imc, escolaridade]" in saida
+        assert "- por: sexo" in saida
+
+    def test_o_item_fora_do_dicionario_sai_com_um(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        acrescentar_a_ficha(raiz, "caracterizacao:\n  - sexo: [peso]\n")
+        resultado = rodar("caracterizacao", RECORD_ID)
+        assert resultado.exit_code == 1
+        assert "`peso` não está no dicionario.csv" in _sem_moldura(resultado)
+
+    def test_o_help_mostra_a_forma(self):
+        """O colchete é marcação para o `rich`: sem o escape, o exemplo some."""
+        saida = _saida(runner.invoke(app, ["caracterizacao", "--help"]))
+        assert "- sexo: [idade, imc, escolaridade]" in saida
+        assert "- [idade, imc, sexo]" in saida
+        assert "p: nao" in saida
+
+    def test_o_lote_roda_a_caracterizacao(self, rodar, projeto_com_rodada):
+        raiz = projeto_com_rodada()
+        escrever_analises(raiz, "analises: [caracterizacao]")
+        acrescentar_a_ficha(raiz, self.BLOCO)
+        resultado = rodar("analisar", RECORD_ID, "--sim")
+        assert resultado.exit_code == 0
+        saida = _saida(resultado)
+        assert "Caracterização escrita." in saida
+        assert "1 tabela" in saida
 
 
 class TestAnalisar:

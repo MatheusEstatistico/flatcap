@@ -49,7 +49,8 @@ não estiver na lista entra depois, na `ORDEM_PADRAO_DAS_ANALISES` do
 `manifesto.py`, e o que não estiver em nenhuma das duas entra no fim, em ordem
 alfabética. Análise escrita na ficha e sem rodada no disco não é erro: vira um
 aviso no terminal, porque quase sempre é a análise que você combinou e ainda
-não rodou.
+não rodou. A exceção é a caracterização, que vem sempre primeiro: ver "O que sai
+na segunda página", abaixo.
 
 **Se elas ainda descrevem o que está na pasta.** Quatro conferências, e nenhuma
 delas recusa o comando — a decisão da fase foi **gerar com o aviso dentro do
@@ -99,17 +100,35 @@ uma frase que nomeia só os testes que rodaram, lidos do manifesto, e a versão 
 Python fecha o parágrafo. Também não abre o banco — o que ela afirma é o que os
 manifestos registraram. Viaja em dois campos próprios do `Relatorio`, e não no
 `texto`, porque o subtítulo dela é um título, e o `documento.py` precisa saber
-disso para escrevê-lo no estilo de subtítulo.
+disso para escrevê-lo no estilo de subtítulo. Com uma rodada de caracterização, a
+frase dela abre o parágrafo — e é tudo o que a Tabela 1 muda na primeira página.
 
 Campo da ficha em branco não encolhe a página em silêncio: vira um marcador
 visível **e** um `Alerta` de código `texto_ausente`. Nada disso fere a regra da
 casa: ler a ficha é ler YAML, não é abrir o banco.
 
+## O que sai na segunda página
+
+Com uma rodada de `caracterizacao` na pasta, a Tabela 1 — os participantes por
+grupo, com o Total e o p — vem logo depois da primeira página, **qualquer que seja
+a posição dela na lista `analises:`**, ou fora dela: é a página que um artigo põe
+antes de qualquer resultado. A rodada dela é sempre a primeira (`_ordenar`), e a
+seção seguinte, a primeira das análises de antes, começa em página nova
+(`Secao.pagina_nova`), como começava quando a primeira página era seguida direto
+por ela. Sem rodada de caracterização, o documento sai como antes.
+
+A apresentação dessa tabela vem do artefato do manifesto, e não do `.csv`: as
+linhas recuadas, o rodapé com a legenda dos testes e a página deitada da tabela de
+três grupos ou mais viajam na `TabelaLida`, e o `documento.py` os aplica. A numeração
+das tabelas anda uma casa por tabela de caracterização, e é a única mudança nas
+seções de sempre.
+
 ## O que este módulo deliberadamente não faz
 
-Não escreve prosa sobre os números. Não monta uma "Tabela 1" consolidada. Não
-escreve apêndice técnico. As três foram decisões suas, e as três continuam a um
-argumento de distância — o `Relatorio` já carrega tudo o que elas precisariam.
+Não escreve prosa sobre os números. Não monta tabela nenhuma: a "Tabela 1" é a
+caracterização, uma análise como as outras, e este módulo só a põe na segunda
+página. Não escreve apêndice técnico. As decisões foram suas, e o `Relatorio` já
+carrega tudo o que a prosa e o apêndice precisariam.
 
 E não imprime mais a tabela de identificação nem os rodapés de denominador das
 tabelas: as duas saíram na revisão de formatação, e o que elas diziam sobre a
@@ -123,7 +142,7 @@ import csv
 import io
 import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -144,6 +163,7 @@ from .ficha import (
 )
 from .ficha import ler as ler_ficha
 from .manifesto import (
+    ANALISE_CARACTERIZACAO,
     ANALISE_DESCRITIVA,
     ARQUIVO_MANIFESTO,
     ORDEM_PADRAO_DAS_ANALISES,
@@ -269,6 +289,10 @@ class TabelaLida:
     Os valores são texto e continuam texto. Converter `28,7` para `0.287` e
     formatar de novo na hora de escrever seria reintroduzir, no último passo do
     fluxo, exatamente o arredondamento que a Fase 5 já resolveu.
+
+    `recuo`, `rodape` e `deitada` vêm do artefato do manifesto, e não do `.csv`:
+    são a apresentação da Tabela 1 — as linhas recuadas, o que sai impresso embaixo
+    dela e a página em paisagem. Nas outras tabelas ficam vazios.
     """
 
     arquivo: str
@@ -277,6 +301,9 @@ class TabelaLida:
     notas: tuple[str, ...] = ()
     colunas: tuple[str, ...] = ()
     linhas: tuple[tuple[str, ...], ...] = ()
+    recuo: tuple[int, ...] = ()
+    rodape: tuple[str, ...] = ()
+    deitada: bool = False
 
     @property
     def largura(self) -> int:
@@ -307,6 +334,9 @@ class Secao:
     A ordem das seções é a do manifesto, que é a do dicionário, que é a das
     colunas do banco. Reordenar o `dicionario.csv` reordena o documento, sem
     tocar em código — é a decisão da Fase 5 aparecendo aqui.
+
+    `pagina_nova` marca a primeira seção depois da Tabela 1, que começa em página
+    nova como a primeira de todas começa depois da primeira página.
     """
 
     variavel: str
@@ -316,6 +346,7 @@ class Secao:
     faltantes: int
     tabelas: tuple[TabelaLida, ...] = ()
     figuras: tuple[Figura, ...] = ()
+    pagina_nova: bool = False
 
     @property
     def preenchidos(self) -> int:
@@ -565,7 +596,7 @@ def preparar_relatorio(
         manifesto=_manifesto_principal(rodadas),
         rodadas=rodadas,
         titulo=titulo,
-        secoes=tuple(secao for rodada in rodadas for secao in rodada.secoes),
+        secoes=_secoes_do_documento(rodadas),
         # O texto entra no `Relatorio` como dado, e o `documento.py` não lê
         # constante nenhuma. É o que mantém a divisão da fase — e é o que fez
         # esta mudança caber em uma linha: o dia previsto na Fase 6, em que a
@@ -882,6 +913,10 @@ def _ordenar(
     na lista da ficha, a posição na `ORDEM_PADRAO_DAS_ANALISES`, e o nome. Nome
     escrito na ficha e sem rodada no disco não entra aqui — ele vira aviso, em
     `_rodadas`.
+
+    Antes dos três, a caracterização: a Tabela 1 é sempre a primeira rodada, em
+    qualquer posição da lista ou fora dela, porque ela é a segunda página do
+    documento, e não uma seção entre as outras.
     """
     na_ficha = {nome: posicao for posicao, nome in enumerate(analises_da_ficha)}
     no_padrao = {
@@ -891,12 +926,30 @@ def _ordenar(
         sorted(
             rodadas,
             key=lambda rodada: (
+                rodada.analise != ANALISE_CARACTERIZACAO,
                 na_ficha.get(rodada.analise, len(na_ficha)),
                 no_padrao.get(rodada.analise, len(no_padrao)),
                 rodada.analise,
             ),
         )
     )
+
+
+def _secoes_do_documento(rodadas: tuple[Rodada, ...]) -> tuple[Secao, ...]:
+    """
+    As seções de todas as rodadas, na ordem delas — e, depois da Tabela 1, a primeira
+    seção das outras marcada para começar em página nova.
+
+    A caracterização é sempre a primeira rodada (`_ordenar`), e ocupa a segunda
+    página; a seção seguinte começa na próxima, como a primeira seção começava
+    depois da primeira página quando não havia Tabela 1.
+    """
+    secoes = [secao for rodada in rodadas for secao in rodada.secoes]
+    if rodadas and rodadas[0].analise == ANALISE_CARACTERIZACAO:
+        depois = len(rodadas[0].secoes)
+        if depois < len(secoes):
+            secoes[depois] = replace(secoes[depois], pagina_nova=True)
+    return tuple(secoes)
 
 
 def _manifesto_principal(rodadas: tuple[Rodada, ...]) -> Manifesto:
@@ -990,7 +1043,15 @@ def _secoes(pasta: Path, manifesto: Manifesto) -> tuple[tuple[Secao, ...], list[
                 ausentes.append(artefato.arquivo)
                 continue
             if artefato.e_tabela:
-                tabelas.append(ler_tabela(caminho, artefato.especie, artefato.titulo))
+                tabela = ler_tabela(caminho, artefato.especie, artefato.titulo)
+                tabelas.append(
+                    replace(
+                        tabela,
+                        recuo=artefato.recuo,
+                        rodape=artefato.rodape,
+                        deitada=artefato.deitada,
+                    )
+                )
             elif artefato.e_figura:
                 figuras.append(
                     Figura(

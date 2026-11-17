@@ -100,6 +100,7 @@ FORMATO = 1
 # valor que o `relatorio.py` vai casar com a lista `analises:` da ficha — e duas
 # grafias para a mesma análise é como uma rodada deixa de aparecer no documento
 # sem que nada diga por quê.
+ANALISE_CARACTERIZACAO = "caracterizacao"
 ANALISE_DESCRITIVA = "descritiva"
 ANALISE_NORMALIDADE = "normalidade"
 ANALISE_CRUZAMENTO = "cruzamento"
@@ -123,6 +124,11 @@ ANALISE_AMOSTRAGEM = "amostragem"
 # Rodada que não estiver nem na ficha nem aqui entra no fim, em ordem
 # alfabética — determinística, e visivelmente no fim, que é o lugar certo para
 # uma análise que ninguém disse onde queria.
+#
+# A caracterização vem antes de todas, antes até da descritiva: é a Tabela 1 de um
+# artigo, a que diz quem são os participantes antes de qualquer variável aparecer
+# sozinha. Aqui ela decide a ordem do lote e do registro; no documento ela sai na
+# segunda página qualquer que seja a posição dela na lista `analises:`.
 #
 # O cruzamento entra logo depois da descritiva, e não no fim nem em ordem
 # alfabética — que o poria antes dela. Sem teste, ele ainda é descrição: são as
@@ -152,6 +158,7 @@ ANALISE_AMOSTRAGEM = "amostragem"
 # `if/elif` espalhado, a análise nova aparece no documento em um lugar que
 # ninguém escolheu.
 ORDEM_PADRAO_DAS_ANALISES: tuple[str, ...] = (
+    ANALISE_CARACTERIZACAO,
     ANALISE_DESCRITIVA,
     ANALISE_CRUZAMENTO,
     ANALISE_ASSOCIACAO,
@@ -322,12 +329,24 @@ class Artefato:
     `especie` é o que o `relatorio.py` usa para decidir onde ele entra no
     documento: uma `frequencia` vira tabela, um `histograma` vira figura. É por
     isso que ela é um campo próprio e não uma dedução a partir da extensão.
+
+    Os três de baixo são de apresentação da tabela, e só a caracterização os preenche,
+    desde a 1.24.5: `recuo`, as linhas — contadas a partir de zero, sem o cabeçalho — que
+    saem recuadas, as categorias embaixo da variável; `rodape`, o que sai impresso
+    embaixo da tabela, a legenda dos testes; e `deitada`, a tabela que pede a página em
+    paisagem. Moram aqui, e não no `.csv`, porque o `.csv` é o dado que se abre no
+    Excel, e recuo e página são apresentação. Vazios, eles não vão para o
+    `manifesto.json`: o manifesto das outras análises sai como antes, e uma versão
+    anterior que lê este ignora as chaves que não conhece — o `FORMATO` continua 1.
     """
 
     arquivo: str
     especie: str
     formato: str
     titulo: str = ""
+    recuo: tuple[int, ...] = ()
+    rodape: tuple[str, ...] = ()
+    deitada: bool = False
 
     @property
     def e_tabela(self) -> bool:
@@ -336,6 +355,22 @@ class Artefato:
     @property
     def e_figura(self) -> bool:
         return self.formato == "png"
+
+    def como_dicionario(self) -> dict[str, Any]:
+        """A forma serializável, com os campos de apresentação só quando preenchidos."""
+        corpo: dict[str, Any] = {
+            "arquivo": self.arquivo,
+            "especie": self.especie,
+            "formato": self.formato,
+            "titulo": self.titulo,
+        }
+        if self.recuo:
+            corpo["recuo"] = list(self.recuo)
+        if self.rodape:
+            corpo["rodape"] = list(self.rodape)
+        if self.deitada:
+            corpo["deitada"] = True
+        return corpo
 
 
 @dataclass(frozen=True)
@@ -481,15 +516,7 @@ class Manifesto:
                     "colunas": list(item.colunas_usadas),
                     "n": item.n,
                     "faltantes": item.faltantes,
-                    "artefatos": [
-                        {
-                            "arquivo": artefato.arquivo,
-                            "especie": artefato.especie,
-                            "formato": artefato.formato,
-                            "titulo": artefato.titulo,
-                        }
-                        for artefato in item.artefatos
-                    ],
+                    "artefatos": [artefato.como_dicionario() for artefato in item.artefatos],
                     "detalhes": item.detalhes,
                     "avisos": list(item.avisos),
                 }
@@ -593,6 +620,9 @@ def de_dicionario(corpo: Any, caminho: Path | None = None) -> Manifesto:
                     especie=str(artefato.get("especie", "")),
                     formato=str(artefato.get("formato", "")),
                     titulo=str(artefato.get("titulo", "")),
+                    recuo=tuple(int(linha) for linha in artefato.get("recuo") or ()),
+                    rodape=tuple(str(linha) for linha in artefato.get("rodape") or ()),
+                    deitada=bool(artefato.get("deitada", False)),
                 )
                 for artefato in item.get("artefatos", [])
                 if isinstance(artefato, dict)
@@ -638,6 +668,7 @@ def _data_e_hora(valor: Any, caminho: Path | None) -> datetime:
 __all__ = [
     "ANALISE_AMOSTRAGEM",
     "ANALISE_ASSOCIACAO",
+    "ANALISE_CARACTERIZACAO",
     "ANALISE_COMPARACAO",
     "ANALISE_CORRELACAO",
     "ANALISE_CRUZAMENTO",
