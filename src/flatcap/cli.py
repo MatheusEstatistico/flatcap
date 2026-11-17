@@ -4720,6 +4720,11 @@ def relatorio(
     combinado na reunião. O que não estiver na lista entra depois, e o que
     estiver na lista sem rodada no disco vira um aviso aqui no terminal.
 
+    Com uma rodada de `caracterizacao`, a Tabela 1 vem na segunda página, logo
+    depois da primeira, qualquer que seja a posição dela na lista, e as seções das
+    outras análises começam na página seguinte. A tabela de três grupos ou mais
+    sai numa página deitada.
+
     Não abre o banco e não recalcula nada: os números do documento são, letra
     por letra, os dos `.csv` que estão em `3. Análises/`.
 

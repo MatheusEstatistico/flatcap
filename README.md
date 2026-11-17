@@ -407,6 +407,11 @@ parágrafo — para o cliente levar para o artigo. O parágrafo é montado dos m
 rodadas e nomeia só os testes que de fato rodaram, com o nível de significância e a versão do
 Python. A redação se ajusta no bloco editável do topo de `src/flatcap/metodologia.py`.
 
+Com uma rodada de `caracterizacao`, a segunda página traz a Tabela 1 — os participantes por
+grupo, com o Total e o p, a letra do teste colada ao p e a legenda embaixo da tabela —,
+qualquer que seja a posição dela na lista `analises:`, e as seções das outras análises começam
+na página seguinte. A tabela de três grupos ou mais sai numa página deitada.
+
 | Opção | Efeito |
 |---|---|
 | `--template ARQUIVO` | Um `.docx` de onde herdar estilos, cabeçalho e capa. Sem isso, o `template.docx` da pasta do projeto, da do cliente ou do `FLATCAP_ROOT`. |

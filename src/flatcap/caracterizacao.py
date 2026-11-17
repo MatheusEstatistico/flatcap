@@ -100,6 +100,10 @@ grupos ou mais — são apresentação, e vão no artefato do manifesto (`recuo`
 teste, a letra, a frase da escolha, o resumo e o Shapiro-Wilk de cada grupo, e a
 contingência.
 
+No relatório, a caracterização sai sempre na segunda página, qualquer que seja a
+posição dela na lista `analises:`, e as seções das outras análises começam na página
+seguinte.
+
 ## As recusas
 
 Como nas outras análises. O formato do item, antes de abrir o banco — e com ele o grupo

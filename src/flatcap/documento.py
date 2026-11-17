@@ -69,6 +69,21 @@ metodologia.** Nessa ordem: o alerta vem antes do texto de abertura porque ele �
 metodologia fecha a página, com o subtítulo dela no mesmo estilo da linha
 `matrícula - nome`.
 
+**A segunda página é a Tabela 1, quando há.** A primeira seção começa em página nova,
+como sempre, e a seção marcada `pagina_nova` — a primeira depois da caracterização —
+também. A tabela da caracterização é a única com apresentação própria, que vem do
+manifesto: as categorias recuadas debaixo da variável; o rodapé em letra pequena,
+preso à tabela, com a legenda dos testes — a única nota impressa no documento —; e a
+letra do teste colada ao p, em sobrescrito, com a coluna do p à direita, como número.
+O texto da célula continua o do `.csv`: o sobrescrito é formatação, e não um caractere
+sobrescrito, que nem toda fonte tem.
+
+**A tabela de três grupos ou mais sai deitada**, numa seção do Word em paisagem, em
+página nova, e a seção seguinte volta ao retrato. A quebra de seção já abre a página,
+e por isso a seção que vem logo depois dela não leva o `page_break_before`, que daria
+uma página em branco. O cabeçalho, o rodapé e a numeração das páginas continuam os da
+seção de antes.
+
 **A última linha da tabela sai em negrito quando é o `Total`.** Uma tabela de
 frequência é lida de cima para baixo até o total; é a linha em que o olho para.
 
@@ -152,6 +167,9 @@ _CORPO_PT = 10.5
 _LEGENDA_PT = 9
 _NOTA_PT = 8.5
 _TABELA_PT = 9.5
+
+# O recuo das categorias debaixo da variável, na Tabela 1.
+_RECUO_CM = 0.4
 
 _ROTULO_TOTAL = "Total"
 
@@ -273,8 +291,18 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
 
     numero_tabela = 0
     numero_figura = 0
+    deitada = False  # a seção do Word aberta agora está em paisagem
 
     for posicao, secao in enumerate(relatorio.secoes):
+        # A tabela deitada abre uma seção do Word em paisagem antes da seção do
+        # relatório, e a primeira seção que não começa com uma tabela deitada volta ao
+        # retrato. A quebra de seção já abre a página.
+        pede = bool(secao.tabelas) and secao.tabelas[0].deitada
+        quebrou = pede != deitada
+        if quebrou:
+            _nova_secao(documento, deitada=pede)
+            deitada = pede
+
         cabecalho = _paragrafo(
             documento,
             secao.rotulo,
@@ -288,17 +316,25 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
         cabecalho.paragraph_format.keep_with_next = True
 
         # A primeira variável começa em página nova, para que a abertura fique
-        # sozinha na primeira. É `page_break_before` no título, e não um
-        # parágrafo de quebra atrás dele: um parágrafo a mais deixaria a marca
-        # dele no alto da página seguinte, empurrando o título para baixo, e
-        # sobraria no documento se um dia o texto de abertura sumisse.
-        if posicao == 0 and abriu:
+        # sozinha na primeira, e a primeira depois da Tabela 1 também. É
+        # `page_break_before` no título, e não um parágrafo de quebra atrás dele: um
+        # parágrafo a mais deixaria a marca dele no alto da página seguinte,
+        # empurrando o título para baixo, e sobraria no documento se um dia o texto
+        # de abertura sumisse. Logo depois de uma quebra de seção, não: ela já abriu
+        # a página, e a quebra a mais seria uma página em branco.
+        if ((posicao == 0 and abriu) or secao.pagina_nova) and not quebrou:
             cabecalho.paragraph_format.page_break_before = True
 
-        for tabela in secao.tabelas:
+        for ordem, tabela in enumerate(secao.tabelas):
+            if ordem and tabela.deitada != deitada:
+                _nova_secao(documento, deitada=tabela.deitada)
+                deitada = tabela.deitada
             numero_tabela += 1
             _escrever_tabela(documento, tabela, numero_tabela, estilos)
 
+        if secao.figuras and deitada:
+            _nova_secao(documento, deitada=False)
+            deitada = False
         for figura in secao.figuras:
             numero_figura += 1
             _escrever_figura(documento, figura, numero_figura, estilos)
@@ -516,7 +552,8 @@ def _escrever_tabela(
         paragrafo.paragraph_format.space_after = Pt(0)
     _repetir_cabecalho(quadro.rows[0])
 
-    for valores in tabela.linhas:
+    recuadas = frozenset(tabela.recuo)
+    for indice, valores in enumerate(tabela.linhas):
         linha = quadro.add_row()
         destaque = bool(valores) and valores[0].strip() == _ROTULO_TOTAL
         for posicao in range(tabela.largura):
@@ -524,16 +561,24 @@ def _escrever_tabela(
             if destaque:
                 _sombrear(linha.cells[posicao], FUNDO_TOTAL)
             paragrafo = linha.cells[posicao].paragraphs[0]
-            _texto(
-                paragrafo,
-                valor,
-                tamanho=_TABELA_PT,
-                negrito=destaque,
-                cor=TINTA if destaque else TINTA_SECUNDARIA,
-                estilo=estilos.corpo,
-            )
+            # A letra do teste colada ao p sai sobrescrita, nas tabelas com a legenda
+            # embaixo. A primeira coluna é rótulo: uma categoria `3b` não perde o `b`.
+            letra = ""
+            if tabela.rodape and posicao:
+                valor, letra = _letra_do_teste(valor)
+            formato = {
+                "tamanho": _TABELA_PT,
+                "negrito": destaque,
+                "cor": TINTA if destaque else TINTA_SECUNDARIA,
+                "estilo": estilos.corpo,
+            }
+            _texto(paragrafo, valor, **formato)
+            if letra:
+                _texto(paragrafo, letra, **formato).font.superscript = True
             _alinhar(paragrafo, posicao in de_texto)
             paragrafo.paragraph_format.space_after = Pt(0)
+        if indice in recuadas:
+            linha.cells[0].paragraphs[0].paragraph_format.left_indent = Cm(_RECUO_CM)
 
     # Um rótulo e números — toda tabela da descritiva — ficam na repartição de
     # sempre. Mais de uma coluna de texto é outra tabela, e reparte pelo conteúdo.
@@ -546,14 +591,43 @@ def _escrever_tabela(
         _repartir_larguras(quadro, _largura_util(documento), tabela.largura)
     else:
         _fixar_larguras(quadro, larguras)
-    _manter_junta(quadro)
+    _manter_junta(quadro, com_rodape=bool(tabela.rodape), recuo=tabela.recuo)
+    if tabela.rodape:
+        _rodape(documento, tabela.rodape, estilos)
 
     # As notas do `.csv` — os dois denominadores, a convenção de fechamento das
     # faixas — são lidas pelo `relatorio.py` e **não** são impressas: saíram na
     # revisão de formatação. Elas continuam no arquivo que a Fase 5 escreveu, e
     # os dois denominadores continuam nomeados no cabeçalho da tabela ("% dos
-    # válidos" e "% do total"), que é onde a distinção precisa mesmo aparecer.
+    # válidos" e "% do total"), que é onde a distinção precisa mesmo aparecer. O
+    # rodapé da Tabela 1, logo acima, é a exceção, e vem do manifesto.
     documento.add_paragraph().paragraph_format.space_after = Pt(4)
+
+
+def _rodape(documento, linhas: tuple[str, ...], estilos: Estilos) -> None:
+    """
+    O que sai embaixo da Tabela 1: a legenda dos testes e a frase dos percentuais, em
+    letra pequena, presos à tabela — a última linha dela se prende ao primeiro, e cada
+    um ao seguinte.
+
+    A letra de cada teste sai sobrescrita: no começo da linha ou depois de `; `, e
+    seguida de espaço — `a t de Welch; b Mann-Whitney.`, a forma que a caracterização
+    escreve.
+    """
+    for posicao, linha in enumerate(linhas):
+        paragrafo = documento.add_paragraph()
+        for ordem, trecho in enumerate(_LETRA_DA_LEGENDA.split(linha)):
+            if not trecho:
+                continue
+            escrito = _texto(
+                paragrafo, trecho, tamanho=_NOTA_PT, cor=TINTA_SECUNDARIA, estilo=estilos.corpo
+            )
+            if ordem % 2:
+                escrito.font.superscript = True
+        formato = paragrafo.paragraph_format
+        formato.space_before = Pt(3 if posicao == 0 else 0)
+        formato.space_after = Pt(0)
+        formato.keep_with_next = posicao < len(linhas) - 1
 
 
 def _repartir_larguras(quadro, largura_util: int, colunas: int) -> None:
@@ -823,6 +897,10 @@ _CELULA_NUMERICA = re.compile(
     r"^(?:[<>≤≥]\s*)?[+\-−]?\d+(?:,\d+)?%?$|^\d{2}/\d{2}/\d{4}$"
 )
 _CELULA_NEUTRA = frozenset({"", "—", "-"})
+# A letra do teste colada ao p na Tabela 1 — `0,026a`, `< 0,001b` —, e a letra de cada
+# teste na legenda embaixo dela — `a t de Welch; b Mann-Whitney.`.
+_LETRA_COLADA = re.compile(r"^(.*\d)([a-z])$")
+_LETRA_DA_LEGENDA = re.compile(r"(?:^|(?<=; ))([a-z])(?= )")
 # O que o XML 1.0 não aceita: controle C0 (menos tab, LF e CR), surrogate solto, U+FFFE/FFFF.
 _FORA_DO_XML = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\ud800-\udfff￾￿]")
 
@@ -848,10 +926,20 @@ def _colunas_de_texto(tabela: TabelaLida) -> frozenset[int]:
     for posicao in range(1, tabela.largura):
         for linha in tabela.linhas:
             celula = linha[posicao].strip() if posicao < len(linha) else ""
+            if tabela.rodape:  # na Tabela 1, o p com a letra do teste é número
+                celula = _letra_do_teste(celula)[0]
             if celula not in _CELULA_NEUTRA and not _CELULA_NUMERICA.match(celula):
                 de_texto.add(posicao)
                 break
     return frozenset(de_texto)
+
+
+def _letra_do_teste(celula: str) -> tuple[str, str]:
+    """`0,026a` → `0,026` e `a`; o que não é um número com a letra colada fica inteiro."""
+    colada = _LETRA_COLADA.match(celula)
+    if colada and _CELULA_NUMERICA.match(colada.group(1).strip()):
+        return colada.group(1), colada.group(2)
+    return celula, ""
 
 
 def _largura_util(documento):
@@ -955,7 +1043,7 @@ def _salvar_atomico(documento, caminho: Path) -> None:
 # XML que a API do python-docx não expõe
 
 
-def _manter_junta(quadro) -> None:
+def _manter_junta(quadro, com_rodape: bool = False, recuo: tuple[int, ...] = ()) -> None:
     """
     Impede que uma tabela curta se parta na quebra de página.
 
@@ -966,6 +1054,11 @@ def _manter_junta(quadro) -> None:
 
     Acima de `_LINHAS_PARA_MANTER_JUNTA` a tabela se parte de propósito, e é o
     cabeçalho repetido que resolve a leitura do outro lado.
+
+    Com rodapé — a Tabela 1 —, a última linha também se prende: o parágrafo seguinte
+    é o rodapé, e ele não pode começar sozinho no alto da página seguinte. E na
+    tabela com recuo, cada linha se prende à recuada debaixo dela: a variável não se
+    parte, e o `Não` do AVC não abre a página seguinte longe do `Sim`.
     """
     linhas = list(quadro.rows)
 
@@ -973,6 +1066,15 @@ def _manter_junta(quadro) -> None:
         for celula in linha.cells:
             for paragrafo in celula.paragraphs:
                 paragrafo.paragraph_format.keep_with_next = True
+
+    # O rodapé da Tabela 1 anda com ela: a última linha se prende a ele, e a tabela
+    # que se parte leva junto, do outro lado, a última linha e o rodapé.
+    if com_rodape:
+        prender(linhas[-1])
+    # A linha recuada `i` dos dados é a `i + 1` da tabela, debaixo do cabeçalho: a de
+    # cima dela é a `i`.
+    for indice in recuo:
+        prender(linhas[indice])
 
     if len(linhas) <= _LINHAS_PARA_MANTER_JUNTA:
         for linha in linhas[:-1]:
@@ -988,6 +1090,47 @@ def _manter_junta(quadro) -> None:
     if len(linhas) >= 4 and linhas[-1].cells[0].text.strip() == _ROTULO_TOTAL:
         prender(linhas[-2])
         prender(linhas[-3])
+
+
+def _nova_secao(documento, deitada: bool) -> None:
+    """
+    Abre uma seção do Word em página nova: em paisagem, para a tabela deitada, ou de
+    volta ao retrato, depois dela.
+
+    A quebra vai no parágrafo que fecha o que veio antes, e não num parágrafo novo,
+    como no `add_section` do `python-docx`: um parágrafo vazio a mais no pé de uma
+    página cheia é uma página em branco. A seção nova não leva referência própria de
+    cabeçalho e de rodapé — o Word usa os da seção de antes —, nem a primeira página
+    diferente, que é a da capa, nem o recomeço da numeração das páginas.
+    """
+    from docx.enum.section import WD_ORIENT, WD_SECTION
+
+    corpo = documento.element.body
+    sentinela = corpo.get_or_add_sectPr()
+    anterior = sentinela.getprevious()
+    if (
+        anterior is not None
+        and anterior.tag == qn("w:p")
+        and anterior.find(f"{qn('w:pPr')}/{qn('w:sectPr')}") is None
+    ):
+        anterior.set_sectPr(sentinela.clone())
+        for referencia in sentinela.xpath("w:headerReference|w:footerReference"):
+            sentinela.remove(referencia)
+    else:
+        corpo.add_section_break()
+
+    secao = documento.sections[-1]
+    secao.start_type = WD_SECTION.NEW_PAGE
+    secao.different_first_page_header_footer = False
+    numeracao = sentinela.find(qn("w:pgNumType"))
+    if numeracao is not None and numeracao.get(qn("w:start")) is not None:
+        del numeracao.attrib[qn("w:start")]
+
+    largura, altura = secao.page_width, secao.page_height
+    secao.orientation = WD_ORIENT.LANDSCAPE if deitada else WD_ORIENT.PORTRAIT
+    if largura is not None and altura is not None:
+        menor, maior = sorted((largura, altura))
+        secao.page_width, secao.page_height = (maior, menor) if deitada else (menor, maior)
 
 
 def _repetir_cabecalho(linha) -> None:

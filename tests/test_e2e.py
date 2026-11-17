@@ -450,6 +450,65 @@ class TestFluxoCompleto:
         assert "Welch" not in metodologia
 
 
+    def test_a_caracterizacao_do_docx_e_a_do_csv(self, tmp_path, anexo):
+        """
+        A Tabela 1 pela mesma régua, do banco ao `.docx`: ela abre a segunda página — a
+        lista a põe no fim, e o documento, no começo —, é célula por célula a do `.csv`,
+        com a letra do teste colada ao p, e a descritiva começa na página seguinte.
+        """
+        from docx import Document
+
+        with servidor_falso.subir(
+            registros=REGISTROS, anexos={"40": ("banco.csv", anexo)}
+        ) as api:
+            env = api.env(tmp_path)
+            root = tmp_path / "FlatCapRoot"
+            assert flatcap("novo", "40", "--sim", env=env).returncode == 0
+            raiz = root / "00740 - Ana Cláudia Menezes" / "Projeto 040"
+            escrever_analises(raiz, "analises: [descritiva, caracterizacao]")
+            acrescentar_a_ficha(
+                raiz, "caracterizacao:\n  - sexo: [idade, imc, escolaridade]\n"
+            )
+            for comando in (
+                ("perfil", "40", "--sim"),
+                ("analisar", "40", "--sem-graficos", "--sim"),
+                ("relatorio", "40", "--sim"),
+            ):
+                resultado = flatcap(*comando, env=env)
+                assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+        analises = raiz / "3. Análises"
+        csv = analises / "caracterizacao" / "caracterizacao_sexo.csv"
+        do_csv = [
+            linha.split(";")
+            for linha in csv.read_text(encoding="utf-8-sig").splitlines()
+            if linha and not linha.startswith("#")
+        ]
+        assert do_csv[0][0] == "Característica" and do_csv[0][-1] == "p-valor"
+        assert any(linha[-1][-1:].isalpha() for linha in do_csv[1:])  # `0,003a`
+
+        documento = Document(str(next(raiz.glob("Relatorio_*.docx"))))
+        posicao, quadro = next(
+            (posicao, t) for posicao, t in enumerate(documento.tables)
+            if [c.text.strip() for c in t.rows[0].cells] == do_csv[0]
+        )
+        assert [[c.text for c in linha.cells] for linha in quadro.rows] == do_csv
+        # Antes dela, só a caixa do aviso da primeira página, de uma célula.
+        assert all(len(t.rows) == len(t.columns) == 1 for t in documento.tables[:posicao])
+
+        textos = [p.text for p in documento.paragraphs if p.text.strip()]
+        titulo = textos.index("Metodologia Estatística (texto padrão)")
+        assert textos[titulo + 2 : titulo + 4] == [
+            "Caracterização dos participantes",
+            "Tabela 1. Características dos participantes, por sexo",
+        ]
+        descritiva = json.loads((analises / "descritiva" / "manifesto.json").read_text())
+        quebras = [p.text for p in documento.paragraphs if p.paragraph_format.page_break_before]
+        assert quebras == [
+            "Caracterização dos participantes",
+            descritiva["variaveis"][0]["rotulo"],
+        ]
+
     def test_o_lote_roda_a_lista_e_o_relatorio_a_segue(self, tmp_path, anexo):
         """
         O `analisar` pelo executável: a lista vazia recusa com o código que o shell

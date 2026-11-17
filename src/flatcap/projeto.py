@@ -743,7 +743,8 @@ _CABECALHO_YAML = """
 #   analises  as análises combinadas na reunião, na ordem das seções do
 #             relatório — [descritiva, correlacao]. O `flatcap analisar`
 #             roda as desta lista, nessa ordem; os pares e os itens de cada
-#             uma vão num bloco com o nome dela (`correlacao:`).
+#             uma vão num bloco com o nome dela (`correlacao:`). A
+#             `caracterizacao`, a Tabela 1, sai sempre na segunda página.
 #   dados     uma entrada por versão do banco, em ordem cronológica.
 """
 

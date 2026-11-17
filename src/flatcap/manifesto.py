@@ -127,7 +127,8 @@ ANALISE_AMOSTRAGEM = "amostragem"
 #
 # A caracterização vem antes de todas, antes até da descritiva: é a Tabela 1 de um
 # artigo, a que diz quem são os participantes antes de qualquer variável aparecer
-# sozinha.
+# sozinha. Aqui ela decide a ordem do lote e do registro; no documento ela sai na
+# segunda página qualquer que seja a posição dela na lista `analises:`.
 #
 # O cruzamento entra logo depois da descritiva, e não no fim nem em ordem
 # alfabética — que o poria antes dela. Sem teste, ele ainda é descrição: são as
