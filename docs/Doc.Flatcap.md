@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.24.5.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.24.6.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -651,7 +651,7 @@ Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **ú
 onde o código a lê: o `pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. O FlatCap
 não publica pacotes: quem instala pelo repositório ([seção 2](#2-instalação)) recebe o que está
 no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois. Desde a 1.24.0, cada versão
-tem uma etiqueta anotada no Git — `v1.24.5` — no merge commit do pull request que a fechou.
+tem uma etiqueta anotada no Git — `v1.24.6` — no merge commit do pull request que a fechou.
 
 Toda mudança entra no `main` por um pull request, de uma branch com o nome dela. Para fechar
 uma versão:
@@ -666,8 +666,8 @@ uma versão:
    dela — e envie-a:
 
    ```bash
-   git tag -a v1.24.5 <merge commit> -m "1.24.5 — a Tabela 1"
-   git push origin v1.24.5
+   git tag -a v1.24.6 <merge commit> -m "1.24.6 — a conta na primeira página"
+   git push origin v1.24.6
    ```
 
 **E um executável, sem Python?** Dá para empacotar o FlatCap com o PyInstaller num executável
@@ -787,7 +787,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*998 linhas.*
+*1039 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1781,6 +1781,47 @@ o `page_break_before`: nenhuma das duas sobra como página em branco.
 primeira página ganha a frase dela na metodologia — só os testes que deram p, e sem a frase do
 nível de significância quando a tabela saiu sem o p —, e a numeração das tabelas das outras
 seções anda uma casa por tabela de caracterização.
+
+### 1.24.6 — a conta na primeira página
+
+**O relatório da amostra mostra a conta, e tudo cabe na primeira página.** O documento saía
+com a primeira página quase vazia — o título, a finalidade e os objetivos — e a tabela do
+tamanho na segunda, sem a conta que levou a ele. Agora, depois dos objetivos, vem o texto de
+metodologia que o cliente leva para o artigo: o desenho e a precisão pedida, a fórmula do n₀
+com as letras e com os números do projeto, a correção pela população — com o N do
+`desenho.yaml` na frase e na conta —, a legenda das letras e o tamanho, com a perda quando
+há. A tabela vem logo embaixo, sem o título da seção, que repetia a legenda dela, e sem a
+quebra de página (`Secao.na_primeira_pagina`).
+
+**Uma frase por situação, num bloco editável.** Proporção ou média, com ou sem a população,
+com ou sem perda, o tamanho escrito à mão, o censo: as frases moram no topo do
+`amostragem.py`, com os campos entre chaves, como as do `metodologia.py`, e a fórmula curta
+no meio da frase se escreve entre cifrões — `$N = {populacao}$`. O `METODOLOGIA` vazio, que
+guardava o lugar, saiu: cada desenho tem a `metodologia` dele no registro, ao lado da conta.
+
+**A conta escrita fecha na mão.** Quem lê a conta a refaz com o z escrito, o 1,96, e não com
+o 1,959964 que o FlatCap usa: com o z exato, o n₀ de 95%, 5 pontos e 50% é 384,15; com o
+1,96, 384,16. Por isso a conta que aparece no texto e no `tamanho.csv` é feita com os
+números como estão escritos (`amostragem.ContaEscrita`), e o n₀ da tabela passa de 385,
+arredondado, a 384,16, o do texto. E ela chega sempre ao tamanho da conta exata, que não
+mudou: o z começa no valor da tabela da normal — 1,96, 1,645, 2,576, e não o 1,64 ou o 2,58,
+que dariam outro tamanho em muitos projetos — e ganha casas quando nem ele basta, como em
+N = 1072, em que o 1,96 daria 284, e o tamanho é 283; as casas dos resultados também sobem
+quando duas não bastam. O teste confere, por força bruta, de N = 1 a 3000 em doze desenhos.
+
+**Um módulo novo, `formulas.py`**: o que uma fórmula é — símbolo, número, fração, potência,
+parênteses —, sem dependência nenhuma, porque a amostragem monta o documento na simulação. O
+`documento.py` escreve a fórmula em destaque como equação do Word, com a fração empilhada, e
+o cliente a edita no artigo; o número com vírgula entra nela como texto comum, sem o espaço
+que o Word poria depois da vírgula. A fórmula no meio da frase sai como texto formatado — a
+letra em itálico, o índice embaixo, os espaços inquebráveis —, porque a equação do Word na
+linha estica a altura dela, e as linhas da legenda empurrariam a tabela para a segunda
+página. Pelo mesmo motivo, a perda é uma conta no meio da frase, e o parágrafo vazio que o
+Word exige depois da tabela encolhe a um ponto, para não abrir uma segunda página em branco.
+
+**O lado das análises não muda.** A metodologia do `Relatorio` passa a aceitar os blocos com
+fórmula, mas o relatório das análises continua só com texto; o `na_primeira_pagina` e o
+parágrafo final encolhido são só do documento que termina na tabela da amostra.
 
 ## `flatcap/config.py`
 
