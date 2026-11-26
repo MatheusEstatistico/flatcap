@@ -60,14 +60,44 @@ registro, e nenhum desenho sorteia ainda.
 ## O relatório da amostra
 
 Montado com as peças do relatório das análises: um `relatorio.Relatorio` com a seção do
-tamanho, escrito pelo `documento.escrever`, com o mesmo modelo `.docx` e a mesma primeira
-página — a finalidade e os objetivos do `projeto.yaml`. **Não recalcula nada**: a tabela
-do documento é lida, pelo `relatorio.tabela_do_texto`, do mesmo texto que vai para o
+tamanho, escrito pelo `documento.escrever`, com o mesmo modelo `.docx` e a mesma abertura
+— a finalidade e os objetivos do `projeto.yaml`. **Não recalcula nada**: a tabela do
+documento é lida, pelo `relatorio.tabela_do_texto`, do mesmo texto que vai para o
 `tamanho.csv`.
 
-O texto de metodologia sobre a amostra feita tem o lugar dele, o `METODOLOGIA`, e ele
-está vazio de propósito — a regra do `TEXTO_PADRAO` do relatório: nada de parágrafo de
-mentira guardando o lugar.
+**Tudo cabe na primeira página.** Depois dos objetivos vem o texto de metodologia, com a
+conta, e a tabela logo abaixo dele, sem título e sem quebra de página
+(`Secao.na_primeira_pagina`). O texto é o que o cliente leva para o artigo:
+
+    Para garantir a representatividade da amostra, optou-se pela amostragem aleatória
+    simples, sem reposição. O tamanho da amostra foi calculado para estimar uma
+    proporção, com nível de confiança de 95%, margem de erro de 5 pontos percentuais e
+    proporção esperada de 50%, […] Primeiro, calculou-se o tamanho para uma população
+    infinita:
+
+        n₀ = z² × p × (1 − p) / e² = 1,96² × 0,5 × 0,5 / 0,05² = 384,16
+
+    Como a população é finita, com N = 1700 unidades, esse tamanho foi corrigido para
+    ela:
+
+        n = n₀ / [1 + (n₀ − 1)/N] = 384,16 / (1 + 383,16/1700) = 313,50
+
+    Onde: z = …; p = …; e = …; N = …; n₀ = …; n = … (uma linha cada)
+
+    Arredondado para cima, o tamanho da amostra é de 314 unidades. Este procedimento […]
+
+As frases estão no bloco editável do topo deste módulo, uma por situação — proporção ou
+média, com ou sem a população, com ou sem perda, o tamanho escrito à mão, o censo —, e os
+números vêm do `desenho.yaml` e da conta. As fórmulas em destaque saem como equações do
+Word (`formulas.py` e `documento.py`), editáveis no artigo; a perda, que é uma divisão,
+entra numa conta no meio da frase.
+
+**A conta escrita fecha na mão** (`ContaEscrita`). Quem a lê a refaz com o z que está
+escrito, e por isso ela é feita com ele: com o 1,96, o n₀ é 384,16, e não o 384,15 do z
+exato. E ela chega sempre ao tamanho da tabela — o z ganha casas quando as da tabela da
+normal não bastam, como em N = 1072, em que o 1,96 daria 284, e o tamanho é 283. O
+`tamanho.csv` mostra o mesmo z e o mesmo n₀ do texto; o manifesto guarda os números sem
+arredondar.
 """
 
 from __future__ import annotations
@@ -79,6 +109,7 @@ import unicodedata
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 from typing import Any
 
@@ -86,6 +117,7 @@ from . import __version__
 from .amostral import (
     TOLERANCIA,
     Tamanho,
+    com_perda,
     para_cima,
     tamanho_aas,
     tamanho_decidido,
@@ -100,6 +132,17 @@ from .ficha import (
     numero_escrito,
 )
 from .ficha import ler as ler_ficha
+from .formulas import (
+    Bloco,
+    Equacao,
+    Formula,
+    Simbolo,
+    formula,
+    fracao,
+    paragrafo,
+    parenteses,
+    potencia,
+)
 from .manifesto import (
     ANALISE_AMOSTRAGEM,
     ARQUIVO_MANIFESTO,
@@ -174,28 +217,115 @@ TITULO_DA_AMOSTRA = "Relatório de Amostragem"
 PREFIXO_RELATORIO_DA_AMOSTRA = "Amostragem_"
 
 # ─────────────────────────────────────────────────────────────────────────────
-#  O TEXTO DE METODOLOGIA DE CADA DESENHO — é aqui que se escreve.
+#  O TEXTO DE METODOLOGIA DA AMOSTRA — é aqui que se escreve.
 #
-#  Uma linha da tupla, um parágrafo do documento. Ele entra na primeira página do
-#  relatório da amostra, depois da finalidade e dos objetivos, e cada parágrafo pode
-#  usar os campos da conta entre chaves:
+#  Ele entra na primeira página do relatório da amostra, depois da finalidade e dos
+#  objetivos, e mostra a conta: a fórmula com as letras, a mesma fórmula com os
+#  números do projeto, e o resultado, com a tabela do tamanho logo embaixo. As frases
+#  vêm daqui; as fórmulas em destaque são montadas no código (`metodologia_aas`),
+#  porque uma fração não se escreve numa linha. Qual frase entra depende da conta:
+#  proporção ou média, com ou sem a população, com ou sem perda, o tamanho escrito à
+#  mão, o censo.
 #
-#      {desenho} {populacao} {confianca} {z} {margem} {proporcao} {desvio}
-#      {n0} {n} {perda} {n_final}
+#  Em `{}`, o que o `desenho.yaml` e a conta preenchem:
 #
-#  Os campos chegam escritos como na tabela (`95%`, `5 pontos percentuais`, `1200`), e
-#  o que a conta não usou chega vazio — a média não tem `{proporcao}`, o tamanho
-#  decidido à mão não tem `{z}`. Por isso o texto de cada desenho vai precisar de uma
-#  frase por situação: proporção ou média, com ou sem N, com ou sem perda.
+#      {desenho} {populacao} {confianca} {margem} {proporcao} {desvio} {perda}
+#      {n} {n_final} {sem_teto} {z} {p} {e} {d} {n_com_perda}
 #
-#  `()` é o estado de hoje: ainda não escrito. É a regra do `TEXTO_PADRAO` do
-#  relatório — nada de parágrafo de mentira guardando o lugar: um `xxxxx` esquecido
-#  aqui chega impresso na mão do cliente.
+#  Os do `desenho.yaml` saem como na tabela (`95%`, `5 pontos percentuais`, `1200`); o
+#  `{z}`, o `{p}`, o `{e}` e o `{d}` — a perda —, como entram na conta (`1,96`, `0,5`,
+#  `0,05`, `0,1`). `{n_com_perda}` é o tamanho dividido pela fração que se espera
+#  manter, antes de arredondar (`324,44`), e `{sem_teto}`, ele arredondado, antes do
+#  teto da população. Entre cifrões, uma fórmula no meio da frase: `$N = {populacao}$`
+#  sai N = 1200, com o N em itálico e a população do `desenho.yaml`. Ver o
+#  `formulas.py`.
+#
+#  Mudar a redação é mudar as strings. Uma chave escrita errada é um `KeyError` no
+#  primeiro teste, e não um `{n}` impresso no documento do cliente.
 # ─────────────────────────────────────────────────────────────────────────────
 
-METODOLOGIA: dict[str, tuple[str, ...]] = {
-    DESENHO_AAS: (),
+# O subtítulo acima do texto, no estilo de subtítulo do documento, como o «Metodologia
+# Estatística (texto padrão)» do relatório das análises. `""`, o de hoje: o texto vem
+# logo depois dos objetivos, sem subtítulo.
+TITULO_DA_METODOLOGIA = ""
+
+# O desenho e o que a conta estima — o primeiro parágrafo. A `VARIABILIDADE_MAXIMA`
+# entra só com a proporção esperada de 50%, que é a de quem não sabe o que esperar.
+FRASE_DESENHO = (
+    "Para garantir a representatividade da amostra, optou-se pela amostragem {desenho}."
+)
+FRASE_PROPORCAO = (
+    "O tamanho da amostra foi calculado para estimar uma proporção, com nível de "
+    "confiança de {confianca}, margem de erro de {margem} e proporção esperada de "
+    "{proporcao}"
+)
+VARIABILIDADE_MAXIMA = ", a de variabilidade máxima, usada quando a proporção não é conhecida"
+FRASE_MEDIA = (
+    "O tamanho da amostra foi calculado para estimar uma média, com nível de confiança "
+    "de {confianca}, margem de erro de {e}, na unidade da variável, e desvio-padrão "
+    "esperado de {desvio}"
+)
+
+# O primeiro passo, que fecha o primeiro parágrafo: o tamanho para uma população
+# infinita. Com a população, ele é corrigido depois; sem ela, é a conta inteira.
+FRASE_INFINITA = "Primeiro, calculou-se o tamanho para uma população infinita:"
+FRASE_SEM_POPULACAO = (
+    "Como o tamanho da população não foi informado, o tamanho foi calculado para uma "
+    "população infinita, sem a correção para população finita:"
+)
+FRASE_CORRECAO = (
+    "Como a população é finita, com $N = {populacao}$ unidades, esse tamanho foi "
+    "corrigido para ela:"
+)
+
+# A perda, depois do tamanho necessário: ele dividido pela fração que se espera manter,
+# numa conta no meio da frase — ela é curta, e uma fórmula em destaque a mais empurraria
+# a tabela para a segunda página. É o passo da conta com perda e o do tamanho escrito à
+# mão com perda. Quando o resultado passa da população, a amostra é ela inteira
+# (`FRASE_PERDA_NO_CENSO`).
+FRASE_NECESSARIO = "Arredondado para cima, o tamanho necessário é de {n} unidades."
+FRASE_PERDA = (
+    "Com a perda esperada de {perda}, o tamanho da amostra passa a "
+    "${n} / (1 - {d}) = {n_com_perda}$, arredondado para cima: {n_final} unidades."
+)
+FRASE_PERDA_NO_CENSO = (
+    "Com a perda esperada de {perda}, o tamanho da amostra passaria a "
+    "${n} / (1 - {d}) = {n_com_perda}$, arredondado para cima, {sem_teto} unidades, mais "
+    "do que a população: a amostra é a população inteira, as {populacao} unidades, num "
+    "censo."
+)
+
+# O tamanho escrito à mão, no lugar da conta.
+FRASE_DECIDIDO = "O tamanho da amostra foi definido previamente em {n} unidades."
+FRASE_DECIDIDO_NA_POPULACAO = (
+    "O tamanho da amostra foi definido previamente em {n} unidades, de uma população de "
+    "{populacao}."
+)
+
+# A legenda das letras das fórmulas em destaque, uma linha cada, depois delas e na
+# ordem em que as letras aparecem. A última linha termina em ponto, e as outras, em
+# ponto e vírgula.
+ONDE = "Onde:"
+LEGENDA: dict[str, str] = {
+    "z": "$z$ = valor da distribuição normal padrão para o nível de confiança "
+    "({z} para {confianca})",
+    "p": "$p$ = proporção esperada ({p})",
+    "desvio": "$σ$ = desvio-padrão esperado ({desvio})",
+    "e": "$e$ = margem de erro ({e})",
+    "populacao": "$N$ = tamanho da população",
+    "n0": "$n_0$ = tamanho da amostra para uma população infinita",
+    "n_corrigido": "$n$ = tamanho da amostra corrigido para a população finita",
 }
+
+# O resultado, que fecha o texto. O `FECHO` sai só quando a conta foi feita e a amostra
+# não é a população inteira: no tamanho escrito à mão não há precisão definida acima, e
+# no censo não há amostra.
+FRASE_TAMANHO = "Arredondado para cima, o tamanho da amostra é de {n_final} unidades."
+FRASE_CENSO = "É a população inteira: um censo."
+FECHO = (
+    "Este procedimento garante a precisão estatística definida acima para as "
+    "inferências sobre a população de interesse, mantendo a viabilidade do estudo."
+)
 
 # O `desenho.yaml` que a primeira rodada escreve. Já vem com o caso de todo dia, para que
 # o pedido mais comum — o cliente que informa só o tamanho da população — seja preencher a
@@ -302,7 +432,8 @@ class Calculo:
     desenho e a população, a precisão pedida, e os tamanhos até o da amostra, que é
     sempre a última linha. `notas` vão para o cabeçalho do `.csv` e para o manifesto, e
     não para o documento. `campos` são os mesmos valores escritos, para o texto de
-    metodologia.
+    metodologia; `conta`, os números da conta como ela sai escrita, na tabela e no
+    texto (ver `ContaEscrita`).
     """
 
     tamanho: Tamanho
@@ -310,6 +441,44 @@ class Calculo:
     notas: tuple[str, ...] = ()
     avisos: tuple[str, ...] = ()
     campos: dict[str, str] | None = None
+    conta: ContaEscrita | None = None
+
+
+@dataclass(frozen=True)
+class ContaEscrita:
+    """
+    A conta como ela sai escrita, para se refazer à mão.
+
+    O texto de metodologia mostra a conta com os números do projeto, e quem a lê a refaz
+    na calculadora com o z que está escrito — o 1,96, e não o 1,959964 que o FlatCap usa.
+    Com o z exato, o n₀ de 95%, 5 pontos e 50% é 384,15; com o 1,96, é 384,16. Por isso a
+    conta escrita é feita **com o z escrito**: cada número dela sai dos números escritos
+    antes dele, nas casas em que estão escritos, e ela fecha na mão.
+
+    E ela chega ao tamanho da conta exata, sempre. O z escrito começa no valor da tabela
+    da normal — 1,96 para 95%, 1,645 para 90%, 2,576 para 99% — e ganha casas quando ele
+    não basta: em N = 1072, com 95%, 5 pontos e 50%, o 1,96 daria 284, e o tamanho é 283;
+    o z sai 1,95996. As casas dos resultados também sobem quando duas não bastam — um
+    165,003 escrito 165,00 se arredondaria para 165, e não para 166. Sem nenhuma
+    combinação que feche, a conta escrita é a exata (`exata`), com os números do
+    FlatCap.
+
+    Os números entram como `Decimal`, e não como `float`, para a conta escrita ser a da
+    calculadora: 1,96² × 0,25 / 0,0025 é 384,16, e não 384,15999999999997.
+
+    `z`, `n0` e `n` faltam no tamanho escrito à mão, em que não há conta, e `n` falta sem
+    a população; `n_final` é o tamanho com a perda, antes de arredondar, e falta sem ela.
+    """
+
+    z: Decimal | None = None
+    proporcao: Decimal | None = None
+    desvio: Decimal | None = None
+    margem: Decimal | None = None
+    perda: Decimal | None = None
+    n0: Decimal | None = None
+    n: Decimal | None = None
+    n_final: Decimal | None = None
+    exata: bool = False
 
 
 @dataclass(frozen=True)
@@ -318,14 +487,17 @@ class Desenho:
     Um desenho que a amostragem sabe calcular — e, um dia, sortear.
 
     O nome é o que se escreve em `desenho:`. As `chaves` são as do `desenho.yaml` que só
-    ele aceita, além das `CHAVES_COMUNS`; vazio na aleatória simples. O `sortear` chega
-    com o sorteio de uma lista, num passo seguinte, e até lá nenhum desenho sorteia.
+    ele aceita, além das `CHAVES_COMUNS`; vazio na aleatória simples. A `metodologia`
+    escreve o texto da primeira página do relatório da amostra, com a conta; sem ela, a
+    página fecha nos objetivos. O `sortear` chega com o sorteio de uma lista, num passo
+    seguinte, e até lá nenhum desenho sorteia.
     """
 
     nome: str
     titulo: str
     calcular: Callable[[Pedido], Calculo]
     chaves: frozenset[str] = frozenset()
+    metodologia: Callable[[Pedido, Calculo], tuple[Bloco, ...]] | None = None
     sortear: Callable[..., Any] | None = None
 
 
@@ -967,7 +1139,8 @@ def calcular_aas(pedido: Pedido) -> Calculo:
             perda=pedido.perda,
         )
 
-    campos = _campos(pedido, tamanho)
+    conta = conta_escrita(pedido, tamanho)
+    campos = _campos(pedido, tamanho, conta)
     avisos: list[str] = []
     if (
         pedido.estima == "proporcao"
@@ -991,20 +1164,167 @@ def calcular_aas(pedido: Pedido) -> Calculo:
     return Calculo(
         tamanho=tamanho,
         linhas=_linhas(pedido, tamanho, campos),
-        notas=_notas(pedido, tamanho),
+        notas=_notas(pedido, tamanho, conta),
         avisos=tuple(avisos),
         campos=campos,
+        conta=conta,
     )
 
 
-def _campos(pedido: Pedido, tamanho: Tamanho) -> dict[str, str]:
+# A conta escrita
+
+# As casas dos resultados da conta escrita, na ordem em que se tentam: duas, quando
+# bastam. E as do z, de duas a seis — as que mudam o número: em 95%, 1,96, 1,95996 e
+# 1,959964, porque 1,960 é o mesmo 1,96.
+_CASAS_DOS_RESULTADOS = (2, 3, 4)
+_CASAS_DO_Z = (2, 3, 4, 5, 6)
+# O z escrito começa nas primeiras casas em que ele fica a menos de 0,05% do exato: as
+# da tabela da normal — 1,96 para 95%, 1,645 para 90%, 2,576 para 99% —, e não o 1,64 ou
+# o 2,58, que fechariam a conta num projeto e não no do lado, e o mesmo nível de
+# confiança sairia com dois z diferentes.
+_ERRO_DO_Z = Decimal("0.0005")
+# As da conta exata, a de quando nenhuma combinação acima fecha: o z com seis casas, e os
+# resultados com quantas precisarem para o arredondamento para cima ser o do FlatCap.
+_CASAS_DA_EXATA = range(2, 10)
+
+
+def conta_escrita(pedido: Pedido, tamanho: Tamanho) -> ContaEscrita:
+    """
+    A conta como ela sai na tabela e no texto, refeita com os números escritos. Ver
+    `ContaEscrita`.
+
+    Tenta o z da tabela da normal e os resultados com duas casas, e sobe as casas até a
+    conta escrita chegar ao tamanho da conta exata — o `n`, e o tamanho com a perda.
+    """
+    perda = _decimal(tamanho.perda) if tamanho.perda else None
+    if tamanho.decidido:
+        for casas in _CASAS_DA_EXATA:
+            conta = ContaEscrita(
+                perda=perda, n_final=_com_perda_escrita(tamanho.n, perda, casas)
+            )
+            if _fecha(conta, tamanho):
+                break
+        return conta
+
+    # O `calcular_aas` só chega aqui com a confiança, a margem e a proporção ou o desvio.
+    if tamanho.z is None or pedido.margem is None:
+        raise ValueError("a conta escrita precisa do z e da margem")
+    margem = _decimal(pedido.margem)
+    proporcao = None if pedido.proporcao is None else _decimal(pedido.proporcao)
+    desvio = None if pedido.desvio is None else _decimal(pedido.desvio)
+    if proporcao is not None:
+        variancia = proporcao * (1 - proporcao)
+    elif desvio is not None:
+        variancia = desvio * desvio
+    else:
+        raise ValueError("a conta escrita precisa da proporção ou do desvio")
+
+    exato = Decimal(repr(tamanho.z))
+    for z in _zs_escritos(exato):
+        for casas in _CASAS_DOS_RESULTADOS:
+            n0 = _nas_casas(z * z * variancia / (margem * margem), casas)
+            conta = ContaEscrita(
+                z=z,
+                proporcao=proporcao,
+                desvio=desvio,
+                margem=margem,
+                perda=perda,
+                n0=n0,
+                n=None if tamanho.populacao is None else _corrigido(n0, tamanho.populacao, casas),
+                n_final=_com_perda_escrita(tamanho.n, perda, casas),
+            )
+            if _fecha(conta, tamanho):
+                return conta
+
+    # Nenhuma fechou — a conta exata, com os números do FlatCap. Não se viu acontecer:
+    # pede o tamanho exato a menos de um décimo de milésimo de um inteiro.
+    for casas in _CASAS_DA_EXATA:
+        conta = ContaEscrita(
+            z=_nas_casas(exato, _CASAS_DO_Z[-1]),
+            proporcao=proporcao,
+            desvio=desvio,
+            margem=margem,
+            perda=perda,
+            n0=_nas_casas(Decimal(repr(tamanho.n0)), casas),
+            n=(
+                None
+                if tamanho.n_corrigido is None
+                else _nas_casas(Decimal(repr(tamanho.n_corrigido)), casas)
+            ),
+            n_final=_com_perda_escrita(tamanho.n, perda, casas),
+            exata=True,
+        )
+        if _fecha(conta, tamanho):
+            break
+    return conta
+
+
+def _zs_escritos(z: Decimal) -> list[Decimal]:
+    """
+    O z com as casas da tabela da normal e, depois, com mais, até seis — só as que mudam
+    o número. Ver o `_ERRO_DO_Z`.
+    """
+    escritos: list[Decimal] = []
+    for casas in _CASAS_DO_Z:
+        escrito = _nas_casas(z, casas)
+        if not escritos and abs(escrito / z - 1) >= _ERRO_DO_Z and casas < _CASAS_DO_Z[-1]:
+            continue
+        if not escritos or escrito != escritos[-1]:
+            escritos.append(escrito)
+    return escritos
+
+
+def _corrigido(n0: Decimal, populacao: int, casas: int) -> Decimal:
+    """O n₀ escrito, corrigido pela população: n₀ / [1 + (n₀ − 1)/N]."""
+    return _nas_casas(n0 / (1 + (n0 - 1) / populacao), casas)
+
+
+def _com_perda_escrita(n: int, perda: Decimal | None, casas: int) -> Decimal | None:
+    """O `n` dividido pela fração que se espera manter, antes de arredondar."""
+    if perda is None:
+        return None
+    return _nas_casas(Decimal(n) / (1 - perda), casas)
+
+
+def _fecha(conta: ContaEscrita, tamanho: Tamanho) -> bool:
+    """
+    A conta escrita chega ao tamanho da exata: o arredondamento para cima do que está
+    escrito dá o `n` do FlatCap, e o da perda, o tamanho com a perda antes do teto de N.
+    """
+    if conta.n0 is not None:
+        necessario = conta.n if conta.n is not None else conta.n0
+        if para_cima(float(necessario)) != tamanho.n:
+            return False
+    if conta.n_final is not None:
+        return para_cima(float(conta.n_final)) == com_perda(tamanho.n, tamanho.perda)
+    return True
+
+
+def _nas_casas(valor: Decimal, casas: int) -> Decimal:
+    """Arredondado como na escola, metade para cima — o arredondamento de quem refaz a conta."""
+    return valor.quantize(Decimal(1).scaleb(-casas), rounding=ROUND_HALF_UP)
+
+
+def _decimal(valor: float) -> Decimal:
+    """O número como ele é escrito: `0.05` é 0,05, e não 0,05000000000000000277."""
+    return Decimal(_formatar(valor).replace(",", "."))
+
+
+def _escrito(valor: Decimal | int) -> str:
+    """O número da conta escrita com vírgula decimal: `384,16`, `0,5`, `1700`."""
+    if isinstance(valor, int):
+        return str(valor)
+    return format(valor, "f").replace(".", ",")
+
+
+def _campos(pedido: Pedido, tamanho: Tamanho, conta: ContaEscrita) -> dict[str, str]:
     """Os valores escritos como na tabela, para a tabela e para o texto de metodologia."""
     media = pedido.estima == "media"
     return {
         "desenho": DESENHOS[pedido.desenho].titulo,
         "populacao": "" if pedido.populacao is None else str(pedido.populacao),
         "confianca": "" if pedido.confianca is None else _percentual(pedido.confianca),
-        "z": "" if tamanho.z is None else f"{tamanho.z:.2f}".replace(".", ","),
+        "z": "" if conta.z is None else _escrito(conta.z),
         "margem": (
             ""
             if pedido.margem is None
@@ -1016,7 +1336,7 @@ def _campos(pedido: Pedido, tamanho: Tamanho) -> dict[str, str]:
         ),
         "proporcao": "" if pedido.proporcao is None else _percentual(pedido.proporcao),
         "desvio": "" if pedido.desvio is None else _formatar(pedido.desvio),
-        "n0": "" if tamanho.n0 is None else str(para_cima(tamanho.n0)),
+        "n0": "" if conta.n0 is None else _escrito(conta.n0),
         "n": str(tamanho.n),
         "perda": _percentual(tamanho.perda) if tamanho.perda else "",
         "n_final": str(tamanho.n_final),
@@ -1055,7 +1375,9 @@ def _linhas(
             if tamanho.perda:
                 linhas.append(("Tamanho com a correção (n)", campos["n"]))
         elif tamanho.perda:
-            linhas.append(("Tamanho para população grande (n₀)", campos["n"]))
+            # O n₀ como no texto, e o necessário, que é o que a perda divide.
+            linhas.append(("Tamanho para população grande (n₀)", campos["n0"]))
+            linhas.append(("Tamanho necessário (n)", campos["n"]))
 
     if tamanho.perda:
         linhas.append(("Perda esperada", campos["perda"]))
@@ -1067,7 +1389,7 @@ def _linhas(
     return tuple(linhas)
 
 
-def _notas(pedido: Pedido, tamanho: Tamanho) -> tuple[str, ...]:
+def _notas(pedido: Pedido, tamanho: Tamanho, conta: ContaEscrita) -> tuple[str, ...]:
     """O como da conta, para quem abrir o `.csv` sozinho. Não vai para o documento."""
     titulo = DESENHOS[pedido.desenho].titulo
     if tamanho.decidido:
@@ -1083,6 +1405,13 @@ def _notas(pedido: Pedido, tamanho: Tamanho) -> tuple[str, ...]:
             f"n = N·z²·{v} / [(N − 1)·e² + z²·{v}] — o n₀ corrigido, na forma do OpenEpi",
             "z: o quantil bilateral da normal, o qnorm(1 − α/2) do R",
         ]
+        if not conta.exata:
+            notas.append(
+                f"conta escrita: o z = {_escrito(conta.z or Decimal(0))} e o n₀ desta tabela e "
+                "do relatório são os da conta refeita com o z escrito, para ela fechar na "
+                "mão; ela chega ao mesmo tamanho que o z exato, e os números sem "
+                "arredondar estão no manifesto"
+            )
     if tamanho.perda:
         notas.append("perda: tamanho da amostra = ⌈n / (1 − perda)⌉, no máximo N")
     notas.append(
@@ -1113,6 +1442,167 @@ def _pontos(valor: float) -> str:
     return f"{_formatar(valor)} {'ponto percentual' if singular else 'pontos percentuais'}"
 
 
+# O texto de metodologia da aleatória simples
+
+
+def metodologia_aas(pedido: Pedido, calculo: Calculo) -> tuple[Bloco, ...]:
+    """
+    O texto da primeira página do relatório da amostra, com a conta.
+
+    A ordem é a de quem refaz a conta: o desenho e a precisão pedida; o tamanho para uma
+    população infinita; a correção pela população, quando há uma; a legenda das letras,
+    depois das fórmulas; e o resultado, com a perda, quando há, numa conta no meio da
+    frase. As frases são as do bloco editável do topo do módulo, e os números das
+    fórmulas, os da conta escrita (`ContaEscrita`), que fecha na mão e chega ao tamanho
+    da tabela.
+
+    O tamanho escrito à mão não tem conta: o texto diz que ele foi definido antes e, com
+    perda, mostra só a dela.
+    """
+    tamanho = calculo.tamanho
+    conta = calculo.conta or conta_escrita(pedido, tamanho)
+    campos = _campos_do_texto(pedido, calculo, conta)
+
+    def frase(modelo: str) -> str:
+        return modelo.format(**campos)
+
+    if tamanho.decidido:
+        partes = [
+            frase(FRASE_DESENHO),
+            frase(FRASE_DECIDIDO if tamanho.populacao is None else FRASE_DECIDIDO_NA_POPULACAO),
+            *_resultado(tamanho, frase, com_o_necessario=False),
+        ]
+        return (paragrafo(" ".join(partes)),)
+
+    if pedido.estima == "proporcao":
+        estima = frase(FRASE_PROPORCAO)
+        if pedido.proporcao is not None and abs(pedido.proporcao - 0.5) < TOLERANCIA:
+            estima += VARIABILIDADE_MAXIMA
+        legenda = ["z", "p", "e", "n0"]
+    else:
+        estima = frase(FRASE_MEDIA)
+        legenda = ["z", "desvio", "e", "n0"]
+    passo = FRASE_INFINITA if tamanho.populacao is not None else FRASE_SEM_POPULACAO
+    blocos: list[Bloco] = [
+        paragrafo(" ".join([frase(FRASE_DESENHO), estima + ".", frase(passo)])),
+        Equacao(_formula_do_n0(pedido, conta)),
+    ]
+    if tamanho.populacao is not None:
+        blocos.append(paragrafo(frase(FRASE_CORRECAO)))
+        blocos.append(Equacao(_formula_da_correcao(tamanho.populacao, conta)))
+        legenda[3:3] = ["populacao"]
+        legenda.append("n_corrigido")
+
+    blocos.append(paragrafo(ONDE, junto=True))
+    for posicao, chave in enumerate(legenda):
+        fim = "." if posicao == len(legenda) - 1 else ";"
+        blocos.append(paragrafo(frase(LEGENDA[chave]) + fim, junto=True))
+
+    fecho = list(_resultado(tamanho, frase, com_o_necessario=True))
+    if not tamanho.censo:
+        fecho.append(frase(FECHO))
+    blocos.append(paragrafo(" ".join(fecho)))
+    return tuple(blocos)
+
+
+def _resultado(
+    tamanho: Tamanho, frase: Callable[[str], str], com_o_necessario: bool
+) -> list[str]:
+    """
+    As frases do tamanho que vai a campo: arredondado e, com perda, compensado — e o
+    censo, quando a amostra é a população inteira. No tamanho escrito à mão, o
+    necessário é o escrito, e a frase dele já foi dita.
+    """
+    if not tamanho.perda:
+        if not com_o_necessario:
+            return [frase(FRASE_CENSO)] if tamanho.censo else []
+        frases = [frase(FRASE_TAMANHO)]
+        if tamanho.censo:
+            frases.append(frase(FRASE_CENSO))
+        return frases
+
+    frases = [frase(FRASE_NECESSARIO)] if com_o_necessario else []
+    if tamanho.censo and com_perda(tamanho.n, tamanho.perda) > tamanho.n_final:
+        frases.append(frase(FRASE_PERDA_NO_CENSO))
+    else:
+        frases.append(frase(FRASE_PERDA))
+        if tamanho.censo:
+            frases.append(frase(FRASE_CENSO))
+    return frases
+
+
+def _campos_do_texto(pedido: Pedido, calculo: Calculo, conta: ContaEscrita) -> dict[str, str]:
+    """
+    Os campos das frases: os da tabela, e os números como entram na conta — o `{p}` e o
+    `{e}` em fração, `0,5` e `0,05`; na média, o `{e}` na unidade da variável.
+    """
+    tamanho = calculo.tamanho
+    campos = dict(calculo.campos or {})
+    campos["p"] = "" if conta.proporcao is None else _escrito(conta.proporcao)
+    campos["e"] = "" if conta.margem is None else _escrito(conta.margem)
+    campos["d"] = "" if conta.perda is None else _escrito(conta.perda)
+    campos["n_com_perda"] = "" if conta.n_final is None else _escrito(conta.n_final)
+    campos["sem_teto"] = str(com_perda(tamanho.n, tamanho.perda))
+    return campos
+
+
+# As letras das fórmulas.
+_Z = Simbolo("z")
+_P = Simbolo("p")
+_SIGMA = Simbolo("σ")
+_E = Simbolo("e")
+_N_POPULACAO = Simbolo("N")
+_N0 = Simbolo("n", "0")
+_N = Simbolo("n")
+
+
+def _formula_do_n0(pedido: Pedido, conta: ContaEscrita) -> Formula:
+    """
+    `n₀ = z² × p × (1 − p) / e² = 1,96² × 0,5 × 0,5 / 0,05² = 384,16`; na média, com σ² no
+    lugar de p × (1 − p).
+    """
+    if conta.z is None or conta.margem is None or conta.n0 is None:
+        raise ValueError("a fórmula do n₀ precisa da conta")
+    z = potencia(_escrito(conta.z), "2")
+    if pedido.estima == "proporcao" and conta.proporcao is not None:
+        letras = formula(potencia(_Z, "2"), "×", _P, "×", parenteses("1", "−", _P))
+        numeros = formula(
+            z, "×", _escrito(conta.proporcao), "×", _escrito(1 - conta.proporcao)
+        )
+    elif conta.desvio is not None:
+        letras = formula(potencia(_Z, "2"), "×", potencia(_SIGMA, "2"))
+        numeros = formula(z, "×", potencia(_escrito(conta.desvio), "2"))
+    else:
+        raise ValueError("a fórmula do n₀ precisa da proporção ou do desvio")
+    return formula(
+        _N0,
+        "=",
+        fracao(letras, potencia(_E, "2")),
+        "=",
+        fracao(numeros, potencia(_escrito(conta.margem), "2")),
+        "=",
+        _escrito(conta.n0),
+    )
+
+
+def _formula_da_correcao(populacao: int, conta: ContaEscrita) -> Formula:
+    """`n = n₀ / [1 + (n₀ − 1)/N] = 384,16 / (1 + 383,16/1700) = 313,50`."""
+    if conta.n0 is None or conta.n is None:
+        raise ValueError("a fórmula da correção precisa da conta com a população")
+    return formula(
+        _N,
+        "=",
+        fracao(_N0, formula("1", "+", fracao(formula(_N0, "−", "1"), _N_POPULACAO))),
+        "=",
+        fracao(
+            _escrito(conta.n0),
+            formula("1", "+", fracao(_escrito(conta.n0 - 1), str(populacao))),
+        ),
+        "=",
+        _escrito(conta.n),
+    )
+
+
 # O registro. Depois das funções, que ele nomeia.
 
 DESENHOS: dict[str, Desenho] = {
@@ -1120,6 +1610,7 @@ DESENHOS: dict[str, Desenho] = {
         nome=DESENHO_AAS,
         titulo="aleatória simples, sem reposição",
         calcular=calcular_aas,
+        metodologia=metodologia_aas,
     ),
 }
 
@@ -1229,9 +1720,11 @@ def montar_relatorio(
     O relatório da amostra, com as peças do relatório das análises.
 
     A primeira página é a dele — a finalidade e os objetivos da ficha, com o marcador e
-    o alerta quando estão em branco —, e o texto de metodologia entra depois, quando
-    existir. A tabela é lida do texto do `tamanho.csv` pelo `tabela_do_texto`, a mesma
-    função que lê o arquivo do disco.
+    o alerta quando estão em branco —, e o texto de metodologia, com a conta, vem
+    depois deles, no lugar da metodologia do relatório das análises. A tabela fecha a
+    página, logo abaixo da conta, sem título e sem quebra (`Secao.na_primeira_pagina`):
+    a legenda dela já diz o que ela é. É lida do texto do `tamanho.csv` pelo
+    `tabela_do_texto`, a mesma função que lê o arquivo do disco.
     """
     ficha = amostragem.ficha
     tabela = amostragem.tabela
@@ -1243,6 +1736,7 @@ def montar_relatorio(
         n=amostragem.tamanho.populacao or 0,
         faltantes=0,
         tabelas=(lida,),
+        na_primeira_pagina=True,
     )
     alerta = conferir_texto(ficha)
     return Relatorio(
@@ -1250,7 +1744,9 @@ def montar_relatorio(
         manifesto=manifesto,
         titulo=titulo,
         secoes=(secao,),
-        texto=montar_abertura(ficha) + texto_de_metodologia(amostragem),
+        texto=montar_abertura(ficha),
+        metodologia=texto_de_metodologia(amostragem),
+        titulo_da_metodologia=TITULO_DA_METODOLOGIA,
         alertas=(alerta,) if alerta is not None else (),
         quando=amostragem.quando,
         rodadas=(
@@ -1261,13 +1757,15 @@ def montar_relatorio(
     )
 
 
-def texto_de_metodologia(amostragem: Amostragem) -> tuple[str, ...]:
-    """Os parágrafos do `METODOLOGIA` do desenho, com os campos da conta preenchidos."""
-    campos = amostragem.calculo.campos or {}
-    return tuple(
-        paragrafo.format(**campos)
-        for paragrafo in METODOLOGIA.get(amostragem.desenho.nome, ())
-    )
+def texto_de_metodologia(amostragem: Amostragem) -> tuple[Bloco, ...]:
+    """
+    O texto de metodologia do desenho, com a conta: os parágrafos e as fórmulas em
+    destaque. Vazio para o desenho que ainda não tem o dele.
+    """
+    escrever = amostragem.desenho.metodologia
+    if escrever is None:
+        return ()
+    return escrever(amostragem.pedido, amostragem.calculo)
 
 
 def nome_do_relatorio_da_amostra(matricula: str, quando: date) -> str:
@@ -1407,16 +1905,17 @@ __all__ = [
     "DESENHOS",
     "DESENHO_AAS",
     "ESPECIE_TAMANHO",
-    "METODOLOGIA",
     "MODELO_DO_DESENHO",
     "PREFIXO_RELATORIO_DA_AMOSTRA",
     "PREVISTOS",
     "ROTULO_DO_TAMANHO",
     "TITULO_DA_AMOSTRA",
+    "TITULO_DA_METODOLOGIA",
     "Amostragem",
     "AmostragemError",
     "Arquivamento",
     "Calculo",
+    "ContaEscrita",
     "Desenho",
     "DesenhoExistenteError",
     "DesenhoInvalidoError",
@@ -1424,8 +1923,10 @@ __all__ = [
     "PlanoAmostragem",
     "ResultadoAmostragem",
     "calcular_aas",
+    "conta_escrita",
     "executar_amostragem",
     "ler_desenho",
+    "metodologia_aas",
     "montar_manifesto",
     "montar_relatorio",
     "montar_tabela",

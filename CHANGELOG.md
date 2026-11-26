@@ -7,6 +7,26 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.6] — a conta na primeira página
+
+### Mudado
+- O relatório da amostra mostra a conta, na primeira página, depois dos objetivos: o
+  desenho e a precisão pedida, a fórmula do n₀ com as letras e com os números do projeto, a
+  correção pela população — com o N do `desenho.yaml` —, a legenda das letras e o tamanho,
+  com a perda quando há. As fórmulas saem como equações do Word, editáveis no artigo.
+- A tabela do tamanho vem logo abaixo da conta, na mesma página, sem o título da seção e sem
+  a quebra de página.
+- A conta escrita usa o z escrito — 1,96, 1,645, 2,576 — e fecha na mão: o n₀ da tabela
+  passa de 385 a 384,16, o mesmo do texto. O tamanho é o de antes; quando o z da tabela da
+  normal não chegaria a ele, o z sai com mais casas.
+- Sem população e com perda, a tabela ganha a linha do tamanho necessário, que é o que a
+  perda divide.
+
+### Acrescentado
+- O texto de metodologia da amostra, num bloco editável do `amostragem.py`, com uma frase
+  por situação: proporção ou média, com ou sem população, com ou sem perda, o tamanho escrito
+  à mão e o censo.
+
 ## [1.24.5] — a Tabela 1
 
 ### Acrescentado

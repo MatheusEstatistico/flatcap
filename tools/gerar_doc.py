@@ -81,6 +81,7 @@ ORDEM = (
     "caracterizacao",
     "regressao",
     "analises",
+    "formulas",
     "metodologia",
     "relatorio",
     "documento",

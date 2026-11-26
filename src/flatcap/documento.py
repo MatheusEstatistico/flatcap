@@ -69,6 +69,17 @@ metodologia.** Nessa ordem: o alerta vem antes do texto de abertura porque ele �
 metodologia fecha a página, com o subtítulo dela no mesmo estilo da linha
 `matrícula - nome`.
 
+**A metodologia do relatório da amostra traz a conta.** As fórmulas em destaque saem
+como equações do Word — o XML de equação (OMML), com a fração empilhada e o expoente no
+alto —, e não como imagem: o cliente as copia para o artigo e as edita lá. O número com
+vírgula decimal entra na equação como texto comum, porque, como símbolo matemático, a
+vírgula ganharia um espaço depois dela. A fórmula curta no meio da frase — `N = 1700` —
+sai como texto, com a letra em itálico e o índice embaixo: a equação do Word na linha
+esticaria a altura dela, e a legenda das letras, uma fórmula por linha, empurraria a
+tabela para a segunda página. E a tabela da amostra continua a primeira página, sem
+título nem quebra (`Secao.na_primeira_pagina`); o parágrafo vazio que o Word exige
+depois dela encolhe a um ponto, para não abrir uma segunda página em branco.
+
 **A segunda página é a Tabela 1, quando há.** A primeira seção começa em página nova,
 como sempre, e a seção marcada `pagina_nova` — a primeira depois da caracterização —
 também. A tabela da caracterização é a única com apresentação própria, que vem do
@@ -102,11 +113,24 @@ from typing import TYPE_CHECKING, Any
 
 from docx import Document
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_LINE_SPACING
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
+from .formulas import (
+    Delimitada,
+    Elemento,
+    Equacao,
+    Formula,
+    Fracao,
+    Paragrafo,
+    Potencia,
+    Simbolo,
+    Texto,
+    tem_fracao,
+    trechos_de,
+)
 from .projeto import ARQUIVO_TEMPLATE
 
 if TYPE_CHECKING:  # só para as anotações: importar `relatorio` aqui criaria um ciclo
@@ -303,27 +327,31 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
             _nova_secao(documento, deitada=pede)
             deitada = pede
 
-        cabecalho = _paragrafo(
-            documento,
-            secao.rotulo,
-            estilos.secao,
-            tamanho=14,
-            negrito=True,
-            cor=TINTA,
-            espaco_antes=14,
-            espaco_depois=2,
-        )
-        cabecalho.paragraph_format.keep_with_next = True
+        # A seção que continua a primeira página — a tabela do relatório da amostra,
+        # logo depois da conta escrita — não tem título nem quebra: a legenda da tabela
+        # já diz o que ela é, e o título repetiria a legenda.
+        if not secao.na_primeira_pagina:
+            cabecalho = _paragrafo(
+                documento,
+                secao.rotulo,
+                estilos.secao,
+                tamanho=14,
+                negrito=True,
+                cor=TINTA,
+                espaco_antes=14,
+                espaco_depois=2,
+            )
+            cabecalho.paragraph_format.keep_with_next = True
 
-        # A primeira variável começa em página nova, para que a abertura fique
-        # sozinha na primeira, e a primeira depois da Tabela 1 também. É
-        # `page_break_before` no título, e não um parágrafo de quebra atrás dele: um
-        # parágrafo a mais deixaria a marca dele no alto da página seguinte,
-        # empurrando o título para baixo, e sobraria no documento se um dia o texto
-        # de abertura sumisse. Logo depois de uma quebra de seção, não: ela já abriu
-        # a página, e a quebra a mais seria uma página em branco.
-        if ((posicao == 0 and abriu) or secao.pagina_nova) and not quebrou:
-            cabecalho.paragraph_format.page_break_before = True
+            # A primeira variável começa em página nova, para que a abertura fique
+            # sozinha na primeira, e a primeira depois da Tabela 1 também. É
+            # `page_break_before` no título, e não um parágrafo de quebra atrás dele:
+            # um parágrafo a mais deixaria a marca dele no alto da página seguinte,
+            # empurrando o título para baixo, e sobraria no documento se um dia o
+            # texto de abertura sumisse. Logo depois de uma quebra de seção, não: ela
+            # já abriu a página, e a quebra a mais seria uma página em branco.
+            if ((posicao == 0 and abriu) or secao.pagina_nova) and not quebrou:
+                cabecalho.paragraph_format.page_break_before = True
 
         for ordem, tabela in enumerate(secao.tabelas):
             if ordem and tabela.deitada != deitada:
@@ -339,8 +367,39 @@ def escrever(relatorio: Relatorio, caminho: Path, template: Path | None = None) 
             numero_figura += 1
             _escrever_figura(documento, figura, numero_figura, estilos)
 
+    if relatorio.secoes and relatorio.secoes[-1].na_primeira_pagina:
+        _encolher_o_fim(documento)
+
     _salvar_atomico(documento, caminho)
     return caminho
+
+
+def _encolher_o_fim(documento) -> None:
+    """
+    O parágrafo vazio do fim do documento, encolhido a um ponto.
+
+    O Word exige um parágrafo depois da última tabela, e o `_escrever_tabela` deixa um, com
+    o respiro de 4 pt. No relatório da amostra, a tabela fecha a primeira página, às vezes
+    rente ao pé dela, e esse parágrafo vazio passaria para a seguinte: uma segunda página
+    em branco. Encolhido — a linha de um ponto, sem respiro —, ele cabe embaixo da
+    tabela. Só no documento que termina numa seção da primeira página: no das análises,
+    nada muda.
+    """
+    ultimo = documento.paragraphs[-1] if documento.paragraphs else None
+    if ultimo is None or ultimo.text or ultimo._element.getnext() is None:
+        return
+    if ultimo._element.getnext().tag != qn("w:sectPr"):
+        return
+    formato = ultimo.paragraph_format
+    formato.space_before = Pt(0)
+    formato.space_after = Pt(0)
+    formato.line_spacing_rule = WD_LINE_SPACING.EXACTLY
+    formato.line_spacing = Pt(1)
+    marca = OxmlElement("w:rPr")
+    tamanho = OxmlElement("w:sz")
+    tamanho.set(qn("w:val"), "2")
+    marca.append(tamanho)
+    ultimo._p.get_or_add_pPr().append(marca)
 
 
 def _abrir(template: Path | None):
@@ -451,9 +510,14 @@ def _metodologia(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
     sem nada embaixo é o tipo de sobra que só aparece no papel.
 
     O parágrafo é texto corrido, como o da abertura. O que ele diz é decisão do
-    `metodologia.py`; aqui, só a forma.
+    `metodologia.py`, ou do `amostragem.py` no relatório da amostra; aqui, só a forma.
+
+    A metodologia da amostra traz a conta: parágrafos com fórmula no meio da linha e
+    fórmulas em destaque, que saem como equações do Word (`_equacao`). A frase que
+    apresenta uma fórmula em destaque fica presa a ela, e a legenda do «Onde:», presa a
+    si mesma: nenhuma das duas termina uma página separada do que explica.
     """
-    paragrafos = [paragrafo for paragrafo in relatorio.metodologia if paragrafo.strip()]
+    paragrafos = [bloco for bloco in relatorio.metodologia if _tem_conteudo(bloco)]
     if not paragrafos:
         return False
     if relatorio.titulo_da_metodologia.strip():
@@ -467,9 +531,32 @@ def _metodologia(documento, relatorio: Relatorio, estilos: Estilos) -> bool:
             espaco_depois=6,
         )
         titulo.paragraph_format.keep_with_next = True
-    for paragrafo in paragrafos:
-        _corrido(documento, paragrafo, estilos)
+    for posicao, bloco in enumerate(paragrafos):
+        seguinte = paragrafos[posicao + 1] if posicao + 1 < len(paragrafos) else None
+        if isinstance(bloco, Equacao):
+            _equacao(documento, bloco, estilos)
+        elif isinstance(bloco, Paragrafo):
+            escrito = _corrido_com_formulas(
+                documento,
+                bloco,
+                estilos,
+                colado=bloco.junto and isinstance(seguinte, Paragrafo) and seguinte.junto,
+            )
+            if isinstance(seguinte, Equacao) or (
+                isinstance(seguinte, Paragrafo) and seguinte.junto
+            ):
+                escrito.paragraph_format.keep_with_next = True
+            if isinstance(seguinte, Equacao):
+                # A frase que apresenta a fórmula termina em dois-pontos, e a fórmula
+                # continua a frase: o respiro entre as duas é metade do de um parágrafo.
+                escrito.paragraph_format.space_after = Pt(4)
+        else:
+            _corrido(documento, bloco, estilos)
     return True
+
+
+def _tem_conteudo(bloco: str | Paragrafo | Equacao) -> bool:
+    return bool(bloco.strip()) if isinstance(bloco, str) else bool(bloco)
 
 
 def _corrido(documento, texto: str, estilos: Estilos):
@@ -481,6 +568,169 @@ def _corrido(documento, texto: str, estilos: Estilos):
     escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     escrito.paragraph_format.space_after = Pt(8)
     return escrito
+
+
+# As fórmulas
+
+# A fonte das equações do Word. Fica fora do modelo de propósito: é a que o próprio Word
+# usa nas equações, e a fonte do corpo — a Arial — não tem os sinais matemáticos com o
+# desenho certo.
+FONTE_DA_FORMULA = "Cambria Math"
+
+
+def _corrido_com_formulas(
+    documento, paragrafo: Paragrafo, estilos: Estilos, colado: bool = False
+):
+    """
+    Um parágrafo de texto corrido com fórmula no meio da linha — `com N = 1700 unidades`.
+
+    O texto é o do `_corrido`. A fórmula sem fração sai como texto formatado, no lugar
+    dela — a letra em itálico, o índice embaixo —, e não como equação do Word, que
+    esticaria a altura da linha (ver o `formulas.py`); a que tem fração sai como equação
+    na linha. A linha de uma lista (`junto`) sai à esquerda, e `colado` tira o respiro
+    de baixo, quando a linha seguinte é da mesma lista.
+    """
+    escrito = documento.add_paragraph()
+    if estilos.corpo:
+        escrito.style = estilos.corpo
+    ultima = len(paragrafo.partes) - 1
+    for posicao, parte in enumerate(paragrafo.partes):
+        if isinstance(parte, Formula):
+            if tem_fracao(parte):
+                escrito._p.append(_equacao_na_linha(parte))
+                continue
+            for trecho in trechos_de(parte):
+                corrida = _texto(escrito, trecho.texto, italico=trecho.italico,
+                                 aplicar_estilo=False)
+                # Um só dos dois: no Word, índice e expoente são o mesmo atributo, e
+                # desligar um apaga o outro.
+                if trecho.posicao == "indice":
+                    corrida.font.subscript = True
+                elif trecho.posicao == "expoente":
+                    corrida.font.superscript = True
+            continue
+        # O texto de dentro guarda os espaços: são eles que separam a fórmula das
+        # palavras em volta. Só as pontas do parágrafo se aparam, como no `_corrido`.
+        texto = parte.lstrip() if posicao == 0 else parte
+        texto = texto.rstrip() if posicao == ultima else texto
+        if texto:
+            _texto(escrito, texto, aplicar_estilo=False)
+    formato = escrito.paragraph_format
+    if paragrafo.junto:
+        escrito.alignment = WD_ALIGN_PARAGRAPH.LEFT
+        formato.space_after = Pt(1 if colado else 8)
+    else:
+        escrito.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        formato.space_after = Pt(8)
+    return escrito
+
+
+def _equacao(documento, equacao: Equacao, estilos: Estilos):
+    """
+    Uma fórmula em destaque: um parágrafo só dela, com a equação do Word centralizada.
+
+    É o «Equação em exibição» do Word (`m:oMathPara`), e não uma equação na linha num
+    parágrafo centralizado: em exibição, a fração sai na altura inteira, e não espremida
+    na altura de uma linha de texto.
+    """
+    escrito = documento.add_paragraph()
+    if estilos.corpo:
+        escrito.style = estilos.corpo
+    escrito.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    escrito.paragraph_format.space_before = Pt(0)
+    escrito.paragraph_format.space_after = Pt(6)
+
+    exibida = OxmlElement("m:oMathPara")
+    propriedades = _filho(exibida, "m:oMathParaPr")
+    _filho(propriedades, "m:jc").set(qn("m:val"), "center")
+    exibida.append(_equacao_na_linha(equacao.formula))
+    escrito._p.append(exibida)
+    return escrito
+
+
+def _equacao_na_linha(formula: Formula):
+    """A fórmula como equação do Word, o `m:oMath`."""
+    equacao = OxmlElement("m:oMath")
+    _encher(equacao, formula)
+    return equacao
+
+
+def _encher(pai, formula: Formula) -> None:
+    for elemento in formula.elementos:
+        pai.append(_omml(elemento))
+
+
+def _omml(elemento: Elemento):
+    """
+    Uma peça da fórmula no XML de equação do Word (OMML). Cada peça tem a sua estrutura
+    lá — a fração (`m:f`), a potência (`m:sSup`), o índice (`m:sSub`), os parênteses
+    (`m:d`) —, e é ela que faz o Word desenhar a fração empilhada e o expoente no alto.
+    """
+    if isinstance(elemento, Simbolo):
+        letra = _corrida(elemento.letra)
+        if not elemento.indice:
+            return letra
+        indexado = OxmlElement("m:sSub")
+        _filho(indexado, "m:e").append(letra)
+        _filho(indexado, "m:sub").append(_corrida(elemento.indice))
+        return indexado
+    if isinstance(elemento, Texto):
+        return _corrida(elemento.texto, em_pe=True)
+    if isinstance(elemento, Fracao):
+        fracao = OxmlElement("m:f")
+        _encher(_filho(fracao, "m:num"), elemento.numerador)
+        _encher(_filho(fracao, "m:den"), elemento.denominador)
+        return fracao
+    if isinstance(elemento, Potencia):
+        potencia = OxmlElement("m:sSup")
+        _encher(_filho(potencia, "m:e"), elemento.base)
+        _encher(_filho(potencia, "m:sup"), elemento.expoente)
+        return potencia
+    if isinstance(elemento, Delimitada):
+        delimitada = OxmlElement("m:d")
+        propriedades = _filho(delimitada, "m:dPr")
+        # Os parênteses são o padrão do Word, e só os outros se escrevem.
+        if elemento.abre != "(":
+            _filho(propriedades, "m:begChr").set(qn("m:val"), elemento.abre)
+        if elemento.fecha != ")":
+            _filho(propriedades, "m:endChr").set(qn("m:val"), elemento.fecha)
+        _encher(_filho(delimitada, "m:e"), elemento.conteudo)
+        return delimitada
+    raise TypeError(f"não é uma peça de fórmula: {elemento!r}")
+
+
+# O número sai como texto comum dentro da equação, e não como símbolo matemático: como
+# símbolo, a vírgula decimal é pontuação, e o Word põe um espaço depois dela — `384, 15`.
+_TEM_ALGARISMO = re.compile(r"\d")
+
+
+def _corrida(texto: str, em_pe: bool = False):
+    """
+    Um trecho da equação, o `m:r`. A letra sai em itálico, que é o padrão da equação do
+    Word; o que vem `em_pe` — operador e palavra — leva o estilo «normal» (`m:sty p`), e o
+    número, o texto comum (`m:nor`).
+    """
+    corrida = OxmlElement("m:r")
+    if em_pe:
+        propriedades = _filho(corrida, "m:rPr")
+        if _TEM_ALGARISMO.search(texto):
+            _filho(propriedades, "m:nor")
+        else:
+            _filho(propriedades, "m:sty").set(qn("m:val"), "p")
+    fontes = _filho(_filho(corrida, "w:rPr"), "w:rFonts")
+    fontes.set(qn("w:ascii"), FONTE_DA_FORMULA)
+    fontes.set(qn("w:hAnsi"), FONTE_DA_FORMULA)
+    escrito = _filho(corrida, "m:t")
+    escrito.text = _FORA_DO_XML.sub("", texto)
+    if escrito.text != escrito.text.strip():
+        escrito.set(qn("xml:space"), "preserve")
+    return corrida
+
+
+def _filho(pai, etiqueta: str):
+    filho = OxmlElement(etiqueta)
+    pai.append(filho)
+    return filho
 
 
 def _caixa_de_aviso(documento, alerta: Any, estilos: Estilos) -> None:

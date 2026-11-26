@@ -26,6 +26,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     regressao.py   ajusta modelos: linear simples, linear múltipla e logística
     caracterizacao.py a Tabela 1: as variáveis por grupo, pela comparação e pela associação
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
+    formulas.py    o que uma fórmula do documento é, antes de virar equação do Word
     metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
@@ -36,12 +37,13 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
 `projeto`, `painel` conhece só `ficha` e `projeto`, `perfil` conhece `banco` e `dicionario`,
-`descritiva` conhece `banco`, `dicionario` e `manifesto`, `metodologia` conhece só o
-`manifesto`, `relatorio` conhece `manifesto`, `metodologia`, `dicionario`, `dados` e `ficha`,
-e nenhuma delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento`
-conhece o `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
-e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
+`descritiva` conhece `banco`, `dicionario` e `manifesto`, `formulas` não conhece ninguém,
+`metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`, `metodologia`,
+`formulas`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é o
+par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe e as `formulas`
+que ele traz, e o `relatorio` só chama o `documento` de dentro do `executar_relatorio`. A
+`amostragem` conhece `amostral`, `formulas`, `ficha`, `manifesto` e `relatorio`, e chama o
+`documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.
@@ -991,6 +993,47 @@ o `page_break_before`: nenhuma das duas sobra como página em branco.
 primeira página ganha a frase dela na metodologia — só os testes que deram p, e sem a frase do
 nível de significância quando a tabela saiu sem o p —, e a numeração das tabelas das outras
 seções anda uma casa por tabela de caracterização.
+
+## 1.24.6 — a conta na primeira página
+
+**O relatório da amostra mostra a conta, e tudo cabe na primeira página.** O documento saía
+com a primeira página quase vazia — o título, a finalidade e os objetivos — e a tabela do
+tamanho na segunda, sem a conta que levou a ele. Agora, depois dos objetivos, vem o texto de
+metodologia que o cliente leva para o artigo: o desenho e a precisão pedida, a fórmula do n₀
+com as letras e com os números do projeto, a correção pela população — com o N do
+`desenho.yaml` na frase e na conta —, a legenda das letras e o tamanho, com a perda quando
+há. A tabela vem logo embaixo, sem o título da seção, que repetia a legenda dela, e sem a
+quebra de página (`Secao.na_primeira_pagina`).
+
+**Uma frase por situação, num bloco editável.** Proporção ou média, com ou sem a população,
+com ou sem perda, o tamanho escrito à mão, o censo: as frases moram no topo do
+`amostragem.py`, com os campos entre chaves, como as do `metodologia.py`, e a fórmula curta
+no meio da frase se escreve entre cifrões — `$N = {populacao}$`. O `METODOLOGIA` vazio, que
+guardava o lugar, saiu: cada desenho tem a `metodologia` dele no registro, ao lado da conta.
+
+**A conta escrita fecha na mão.** Quem lê a conta a refaz com o z escrito, o 1,96, e não com
+o 1,959964 que o FlatCap usa: com o z exato, o n₀ de 95%, 5 pontos e 50% é 384,15; com o
+1,96, 384,16. Por isso a conta que aparece no texto e no `tamanho.csv` é feita com os
+números como estão escritos (`amostragem.ContaEscrita`), e o n₀ da tabela passa de 385,
+arredondado, a 384,16, o do texto. E ela chega sempre ao tamanho da conta exata, que não
+mudou: o z começa no valor da tabela da normal — 1,96, 1,645, 2,576, e não o 1,64 ou o 2,58,
+que dariam outro tamanho em muitos projetos — e ganha casas quando nem ele basta, como em
+N = 1072, em que o 1,96 daria 284, e o tamanho é 283; as casas dos resultados também sobem
+quando duas não bastam. O teste confere, por força bruta, de N = 1 a 3000 em doze desenhos.
+
+**Um módulo novo, `formulas.py`**: o que uma fórmula é — símbolo, número, fração, potência,
+parênteses —, sem dependência nenhuma, porque a amostragem monta o documento na simulação. O
+`documento.py` escreve a fórmula em destaque como equação do Word, com a fração empilhada, e
+o cliente a edita no artigo; o número com vírgula entra nela como texto comum, sem o espaço
+que o Word poria depois da vírgula. A fórmula no meio da frase sai como texto formatado — a
+letra em itálico, o índice embaixo, os espaços inquebráveis —, porque a equação do Word na
+linha estica a altura dela, e as linhas da legenda empurrariam a tabela para a segunda
+página. Pelo mesmo motivo, a perda é uma conta no meio da frase, e o parágrafo vazio que o
+Word exige depois da tabela encolhe a um ponto, para não abrir uma segunda página em branco.
+
+**O lado das análises não muda.** A metodologia do `Relatorio` passa a aceitar os blocos com
+fórmula, mas o relatório das análises continua só com texto; o `na_primeira_pagina` e o
+parágrafo final encolhido são só do documento que termina na tabela da amostra.
 """
 
-__version__ = "1.24.5"
+__version__ = "1.24.6"
