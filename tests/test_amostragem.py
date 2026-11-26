@@ -17,10 +17,13 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+from dataclasses import replace
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from docx import Document
+from docx.oxml.ns import qn
 
 from conftest import AGORA, escrever_ficha, linhas_do_historico
 from flatcap.amostragem import (
@@ -31,16 +34,23 @@ from flatcap.amostragem import (
     PREVISTOS,
     ROTULO_DO_TAMANHO,
     TITULO_DA_AMOSTRA,
+    TITULO_DA_METODOLOGIA,
     AmostragemError,
     DesenhoExistenteError,
     DesenhoInvalidoError,
+    Pedido,
+    calcular_aas,
+    conta_escrita,
     executar_amostragem,
     ler_desenho,
     nome_do_relatorio_da_amostra,
     preparar_amostragem,
     resumo_do_tamanho,
+    texto_de_metodologia,
 )
+from flatcap.amostral import com_perda, para_cima, tamanho_aas, variancia_da_proporcao
 from flatcap.ficha import ler_yaml
+from flatcap.formulas import ESPACO_DA_FORMULA, Equacao, Paragrafo, texto_de
 from flatcap.manifesto import ARQUIVO_MANIFESTO
 from flatcap.projeto import (
     ARQUIVO_DESENHO,
@@ -78,6 +88,19 @@ def recusa(raiz: Path, texto: str) -> str:
 
 def linhas(plano) -> dict[str, str]:
     return dict(plano.amostragem.calculo.linhas)
+
+
+def texto_da_metodologia(plano) -> list[str]:
+    """O texto da primeira página, bloco por bloco, numa linha cada, com o `=` das
+    fórmulas em destaque marcado: é o que se lê no documento, letra por letra."""
+    return [
+        ("» " if isinstance(bloco, Equacao) else "") + texto_de(bloco)
+        for bloco in plano.relatorio.metodologia
+    ]
+
+
+def calculado(**pedido):
+    return calcular_aas(Pedido(desenho=DESENHO_AAS, **pedido))
 
 
 # ── A primeira rodada: o modelo ─────────────────────────────────────────────
@@ -167,7 +190,7 @@ class TestConta:
             ("Nível de confiança", "95% (z = 1,96)"),
             ("Margem de erro", "5 pontos percentuais"),
             ("Proporção esperada", "50%"),
-            ("Tamanho sem a correção (n₀)", "385"),
+            ("Tamanho sem a correção (n₀)", "384,16"),
             ("Tamanho com a correção (n)", "292"),
             ("Perda esperada", "10%"),
             ("Tamanho da amostra", "325"),
@@ -189,6 +212,19 @@ class TestConta:
         assert tabela["População (N)"].startswith("não informada")
         assert tabela[ROTULO_DO_TAMANHO] == "385"
         assert "Tamanho sem a correção (n₀)" not in tabela
+
+    def test_sem_populacao_e_com_perda_o_n0_e_o_necessario(self, projeto_vazio):
+        """O n₀ como no texto, e o necessário, que é o que a perda divide."""
+        escrever_desenho(
+            projeto_vazio,
+            "desenho: aas\nconfianca: 95\nmargem: 5\nproporcao: 50\nperda: 10\n",
+        )
+        assert preparar_amostragem(projeto_vazio, agora=AGORA).amostragem.calculo.linhas[-4:] == (
+            ("Tamanho para população grande (n₀)", "384,16"),
+            ("Tamanho necessário (n)", "385"),
+            ("Perda esperada", "10%"),
+            ("Tamanho da amostra", "428"),
+        )
 
     def test_a_media(self, projeto_vazio):
         escrever_desenho(projeto_vazio, "desenho: aas\nconfianca: 95\nmargem: 2\ndesvio: 10\n")
@@ -421,6 +457,7 @@ class TestSaidas:
         assert texto == plano.amostragem.tabela.texto()
         assert texto.startswith("\ufeff# Tamanho da amostra\n")
         assert "# fórmula: n₀ = z²·p(1−p) / e²" in texto
+        assert "# conta escrita: o z = 1,96 e o n₀ desta tabela" in texto
         assert texto.rstrip().endswith("Tamanho da amostra;325")
 
     def test_o_manifesto(self, rodada):
@@ -456,11 +493,45 @@ class TestSaidas:
         textos = [p.text for p in doc.paragraphs if p.text.strip()]
         assert textos[0] == TITULO_DA_AMOSTRA
         assert textos[1] == "00742 - José Antônio de Sá"
-        assert ROTULO_DO_TAMANHO in textos
+        assert f"Tabela 1. {ROTULO_DO_TAMANHO}" in textos
         (tabela,) = doc.tables
         celulas = [[celula.text for celula in linha.cells] for linha in tabela.rows]
         assert celulas[0] == ["parâmetro", "valor"]
         assert [tuple(linha) for linha in celulas[1:]] == list(plano.amostragem.calculo.linhas)
+
+    def test_tudo_na_primeira_pagina(self, rodada):
+        """
+        A conta e a tabela logo depois dos objetivos: sem o título da seção, que repetiria
+        a legenda da tabela, e sem quebra de página nenhuma.
+        """
+        _, plano, _ = rodada
+        doc = Document(str(plano.destino))
+        corpo = doc.element.body
+        assert not corpo.findall(f".//{qn('w:pageBreakBefore')}")
+        assert not corpo.findall(f".//{qn('w:br')}")
+        assert ROTULO_DO_TAMANHO not in [p.text for p in doc.paragraphs]
+        assert plano.relatorio.secoes[0].na_primeira_pagina
+
+    def test_a_conta_esta_no_documento(self, rodada):
+        """As duas fórmulas em destaque são equações do Word, e a frase da correção traz
+        o N do `desenho.yaml`, escrito como texto, no meio da linha."""
+        _, plano, _ = rodada
+        doc = Document(str(plano.destino))
+        exibidas = doc.element.body.findall(f".//{qn('m:oMathPara')}")
+        assert len(exibidas) == 2
+        textos = [p.text for p in doc.paragraphs]
+        assert (
+            f"Como a população é finita, com N{ESPACO_DA_FORMULA}={ESPACO_DA_FORMULA}1200 "
+            "unidades, esse tamanho foi corrigido para ela:"
+        ) in textos
+        assert textos.index("Onde:") < textos.index(f"Tabela 1. {ROTULO_DO_TAMANHO}")
+
+    def test_a_ultima_pagina_nao_sobra_em_branco(self, rodada):
+        """O parágrafo que o Word exige depois da tabela encolhe a um ponto."""
+        _, plano, _ = rodada
+        ultimo = Document(str(plano.destino)).paragraphs[-1]
+        assert ultimo.text == ""
+        assert ultimo.paragraph_format.line_spacing.pt == 1
 
     def test_o_documento_e_o_csv_dizem_o_mesmo(self, rodada):
         """O `.docx` não recalcula: a tabela dele é a do texto do `tamanho.csv`."""
@@ -519,32 +590,320 @@ class TestSaidas:
             preparar_amostragem(projeto_vazio, agora=AGORA, template=tmp_path / "nao.docx")
 
 
+# O primeiro parágrafo de toda conta de proporção com 50%, até o passo de cada uma.
+DESENHO_E_PRECISAO = (
+    "Para garantir a representatividade da amostra, optou-se pela amostragem aleatória "
+    "simples, sem reposição. O tamanho da amostra foi calculado para estimar uma "
+    "proporção, com nível de confiança de 95%, margem de erro de 5 pontos percentuais e "
+    "proporção esperada de 50%, a de variabilidade máxima, usada quando a proporção não é "
+    "conhecida."
+)
+FECHO = (
+    "Este procedimento garante a precisão estatística definida acima para as inferências "
+    "sobre a população de interesse, mantendo a viabilidade do estudo."
+)
+LEGENDA_DA_PROPORCAO = [
+    "Onde:",
+    "z = valor da distribuição normal padrão para o nível de confiança (1,96 para 95%);",
+    "p = proporção esperada (0,5);",
+    "e = margem de erro (0,05);",
+]
+
+
 class TestMetodologia:
-    def test_o_lugar_existe_e_esta_vazio(self):
-        """A regra do `TEXTO_PADRAO`: nada de parágrafo de mentira guardando o lugar."""
-        from flatcap.amostragem import METODOLOGIA
+    """
+    O texto da primeira página, letra por letra, em cada situação. Mudar a redação no
+    bloco editável do `amostragem.py` faz estes testes falharem de propósito: são eles
+    que mostram o texto novo inteiro, para conferir antes de ajustá-los.
+    """
 
-        assert set(METODOLOGIA) == set(DESENHOS)
-        assert METODOLOGIA[DESENHO_AAS] == ()
+    def test_o_caso_de_todo_dia(self, projeto_vazio):
+        """A população do `desenho.yaml` na frase da correção e na conta: `N = 1700`."""
+        escrever_desenho(projeto_vazio, COM_POPULACAO.replace("1200", "1700"))
+        plano = preparar_amostragem(projeto_vazio, agora=AGORA)
+        assert texto_da_metodologia(plano) == [
+            DESENHO_E_PRECISAO + " Primeiro, calculou-se o tamanho para uma população infinita:",
+            "» n₀ = (z² × p × (1 − p)) / e² = (1,96² × 0,5 × 0,5) / 0,05² = 384,16",
+            "Como a população é finita, com N = 1700 unidades, esse tamanho foi corrigido "
+            "para ela:",
+            "» n = n₀ / (1 + (n₀ − 1) / N) = 384,16 / (1 + 383,16 / 1700) = 313,50",
+            *LEGENDA_DA_PROPORCAO,
+            "N = tamanho da população;",
+            "n₀ = tamanho da amostra para uma população infinita;",
+            "n = tamanho da amostra corrigido para a população finita.",
+            "Arredondado para cima, o tamanho da amostra é de 314 unidades. " + FECHO,
+        ]
 
-    def test_o_texto_entra_depois_dos_objetivos_com_os_campos(self, projeto_vazio, monkeypatch):
-        import flatcap.amostragem as modulo
+    def test_a_populacao_vem_do_desenho(self, projeto_vazio):
+        """Outra população no `desenho.yaml`, outra frase e outra conta."""
+        escrever_desenho(projeto_vazio, COM_POPULACAO.replace("1200", "2500"))
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert texto[2].startswith("Como a população é finita, com N = 2500 unidades")
+        # 384,16 / (1 + 383,16 / 2500) = 384,16 / 1,153264 = 333,1065…
+        assert texto[3].endswith("= 384,16 / (1 + 383,16 / 2500) = 333,11")
+        assert texto[-1].startswith("Arredondado para cima, o tamanho da amostra é de 334 ")
+
+    def test_com_perda_a_conta_no_meio_da_frase(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, COM_POPULACAO + "perda: 10\n")
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert texto[3] == "» n = n₀ / (1 + (n₀ − 1) / N) = 384,16 / (1 + 383,16 / 1200) = 291,18"
+        assert texto[-1] == (
+            "Arredondado para cima, o tamanho necessário é de 292 unidades. Com a perda "
+            "esperada de 10%, o tamanho da amostra passa a 292 / (1 − 0,1) = 324,44, "
+            "arredondado para cima: 325 unidades. " + FECHO
+        )
+
+    def test_sem_populacao(self, projeto_vazio):
+        escrever_desenho(
+            projeto_vazio, "desenho: aas\npopulacao:\nconfianca: 95\nmargem: 5\nproporcao: 50\n"
+        )
+        assert texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA)) == [
+            DESENHO_E_PRECISAO + " Como o tamanho da população não foi informado, o tamanho "
+            "foi calculado para uma população infinita, sem a correção para população finita:",
+            "» n₀ = (z² × p × (1 − p)) / e² = (1,96² × 0,5 × 0,5) / 0,05² = 384,16",
+            *LEGENDA_DA_PROPORCAO,
+            "n₀ = tamanho da amostra para uma população infinita.",
+            "Arredondado para cima, o tamanho da amostra é de 385 unidades. " + FECHO,
+        ]
+
+    def test_a_media(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, "desenho: aas\nconfianca: 95\nmargem: 2\ndesvio: 10\n")
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert texto[0].startswith(
+            "Para garantir a representatividade da amostra, optou-se pela amostragem "
+            "aleatória simples, sem reposição. O tamanho da amostra foi calculado para "
+            "estimar uma média, com nível de confiança de 95%, margem de erro de 2, na "
+            "unidade da variável, e desvio-padrão esperado de 10. Como"
+        )
+        assert texto[1] == "» n₀ = (z² × σ²) / e² = (1,96² × 10²) / 2² = 96,04"
+        assert texto[2:6] == [
+            "Onde:",
+            "z = valor da distribuição normal padrão para o nível de confiança (1,96 para 95%);",
+            "σ = desvio-padrão esperado (10);",
+            "e = margem de erro (2);",
+        ]
+        assert texto[-1].startswith("Arredondado para cima, o tamanho da amostra é de 97 ")
+
+    def test_a_variabilidade_maxima_so_com_50(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, COM_POPULACAO.replace("proporcao: 50", "proporcao: 30"))
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert "proporção esperada de 30%. Primeiro" in texto[0]
+        assert "variabilidade" not in texto[0]
+        assert "(1,96² × 0,3 × 0,7)" in texto[1]
+
+    def test_o_tamanho_decidido_a_mao(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, "desenho: aas\nn: 300\n")
+        plano = preparar_amostragem(projeto_vazio, agora=AGORA)
+        assert texto_da_metodologia(plano) == [
+            "Para garantir a representatividade da amostra, optou-se pela amostragem "
+            "aleatória simples, sem reposição. O tamanho da amostra foi definido "
+            "previamente em 300 unidades."
+        ]
+
+    def test_o_tamanho_decidido_com_perda_e_populacao(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, "desenho: aas\npopulacao: 1000\nn: 300\nperda: 10\n")
+        assert texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA)) == [
+            "Para garantir a representatividade da amostra, optou-se pela amostragem "
+            "aleatória simples, sem reposição. O tamanho da amostra foi definido "
+            "previamente em 300 unidades, de uma população de 1000. Com a perda esperada de "
+            "10%, o tamanho da amostra passa a 300 / (1 − 0,1) = 333,33, arredondado para "
+            "cima: 334 unidades."
+        ]
+
+    def test_o_censo_sem_o_fecho(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, COM_POPULACAO.replace("1200", "2"))
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert texto[-1] == (
+            "Arredondado para cima, o tamanho da amostra é de 2 unidades. É a população "
+            "inteira: um censo."
+        )
+
+    def test_o_censo_pela_perda(self, projeto_vazio):
+        escrever_desenho(projeto_vazio, COM_POPULACAO.replace("1200", "300") + "perda: 50\n")
+        texto = texto_da_metodologia(preparar_amostragem(projeto_vazio, agora=AGORA))
+        assert texto[-1] == (
+            "Arredondado para cima, o tamanho necessário é de 169 unidades. Com a perda "
+            "esperada de 50%, o tamanho da amostra passaria a 169 / (1 − 0,5) = 338,00, "
+            "arredondado para cima, 338 unidades, mais do que a população: a amostra é a "
+            "população inteira, as 300 unidades, num censo."
+        )
+
+    @pytest.mark.parametrize(
+        "desenho",
+        [
+            COM_POPULACAO,
+            COM_POPULACAO + "perda: 10\n",
+            COM_POPULACAO.replace("1200", "2") + "perda: 50\n",
+            "desenho: aas\nconfianca: 90\nmargem: 3\nproporcao: 20\nperda: 5\n",
+            "desenho: aas\npopulacao: 800\nconfianca: 99\nmargem: 2,5\ndesvio: 7,5\n",
+            "desenho: aas\nn: 50\n",
+            "desenho: aas\npopulacao: 50\nn: 50\nperda: 20\n",
+        ],
+    )
+    def test_o_texto_e_a_tabela_dizem_o_mesmo(self, projeto_vazio, desenho):
+        """
+        O z, o n₀ e o tamanho do texto são os da tabela, e nenhum campo sobra escrito
+        entre chaves.
+        """
+        escrever_desenho(projeto_vazio, desenho)
+        plano = preparar_amostragem(projeto_vazio, agora=AGORA)
+        tabela = linhas(plano)
+        texto = " ".join(texto_da_metodologia(plano))
+        assert "{" not in texto and "}" not in texto
+        assert f" {plano.amostragem.tamanho.n_final} unidades" in texto
+        if "Nível de confiança" in tabela:
+            z = tabela["Nível de confiança"].split("z = ")[1].rstrip(")")
+            assert f"({z} para " in texto
+            assert f"= {tabela.get('Tamanho sem a correção (n₀)', '')}" in texto
+
+    def test_a_metodologia_e_o_lugar_dela_no_relatorio(self, projeto_vazio):
+        """Depois dos objetivos, no lugar da metodologia do relatório das análises, e
+        sem subtítulo."""
         from conftest import OBJETIVOS
 
+        escrever_desenho(projeto_vazio, COM_POPULACAO)
+        relatorio = preparar_amostragem(projeto_vazio, agora=AGORA).relatorio
+        assert relatorio.texto[-1] == OBJETIVOS
+        assert relatorio.titulo_da_metodologia == TITULO_DA_METODOLOGIA == ""
+        assert isinstance(relatorio.metodologia[1], Equacao)
+        assert all(isinstance(bloco, Paragrafo | Equacao) for bloco in relatorio.metodologia)
+
+    def test_o_desenho_sem_texto_fecha_a_pagina_nos_objetivos(self, projeto_vazio, monkeypatch):
+        import flatcap.amostragem as modulo
+
         monkeypatch.setitem(
-            modulo.METODOLOGIA,
-            DESENHO_AAS,
-            ("Amostra {desenho} de {n_final} em {populacao}, com {confianca} e "
-             "margem de {margem}.",),
+            modulo.DESENHOS, DESENHO_AAS, replace(DESENHOS[DESENHO_AAS], metodologia=None)
         )
-        escrever_desenho(projeto_vazio, COM_POPULACAO + "perda: 10\n")
+        escrever_desenho(projeto_vazio, COM_POPULACAO)
         plano = preparar_amostragem(projeto_vazio, agora=AGORA)
-        texto = plano.relatorio.texto
-        assert texto[-1] == (
-            "Amostra aleatória simples, sem reposição de 325 em 1200, com 95% e margem "
-            "de 5 pontos percentuais."
+        assert plano.relatorio.metodologia == ()
+        assert texto_de_metodologia(plano.amostragem) == ()
+
+
+# ── A conta escrita: a que se refaz à mão ───────────────────────────────────
+
+
+def refeita(conta, populacao) -> tuple[Decimal, Decimal | None]:
+    """A conta refeita na calculadora, com os números como estão escritos."""
+    casas = Decimal(1).scaleb(conta.n0.as_tuple().exponent)
+    variancia = (
+        conta.proporcao * (1 - conta.proporcao)
+        if conta.proporcao is not None
+        else conta.desvio**2
+    )
+    n0 = (conta.z**2 * variancia / conta.margem**2).quantize(casas, rounding="ROUND_HALF_UP")
+    if populacao is None:
+        return n0, None
+    n = (n0 / (1 + (n0 - 1) / populacao)).quantize(casas, rounding="ROUND_HALF_UP")
+    return n0, n
+
+
+class TestContaEscrita:
+    def test_com_o_1_96_a_conta_fecha_na_mao(self):
+        """Com o z exato, 384,15; com o 1,96 escrito, 384,16 — e é este que se escreve."""
+        calculo = calculado(populacao=1700, confianca=0.95, margem=0.05, proporcao=0.5)
+        conta = calculo.conta
+        assert (conta.z, conta.n0, conta.n) == (
+            Decimal("1.96"), Decimal("384.16"), Decimal("313.50")
         )
-        assert texto.index(OBJETIVOS) < len(texto) - 1
+        assert calculo.tamanho.n0 == pytest.approx(384.1458820694123)
+        assert refeita(conta, 1700) == (conta.n0, conta.n)
+
+    @pytest.mark.parametrize(
+        ("confianca", "z"), [(0.90, "1.645"), (0.95, "1.96"), (0.99, "2.576"), (0.80, "1.282")]
+    )
+    def test_o_z_e_o_da_tabela_da_normal(self, confianca, z):
+        """O 1,645 e o 2,576, e não o 1,64 e o 2,58, que dariam outro tamanho."""
+        calculo = calculado(populacao=1700, confianca=confianca, margem=0.05, proporcao=0.5)
+        assert calculo.conta.z == Decimal(z)
+        assert dict(calculo.linhas)["Nível de confiança"].endswith(f"(z = {z.replace('.', ',')})")
+
+    def test_quando_o_1_96_nao_basta_o_z_ganha_casas(self):
+        """
+        N = 1072: o tamanho exato é 282,9987 → 283. Com o 1,96, a conta daria 283,006 → 284,
+        e o texto diria um tamanho e a tabela outro. O z sai com cinco casas.
+        """
+        calculo = calculado(populacao=1072, confianca=0.95, margem=0.05, proporcao=0.5)
+        conta = calculo.conta
+        assert calculo.tamanho.n == 283
+        assert (conta.z, conta.n0, conta.n) == (
+            Decimal("1.95996"), Decimal("384.14"), Decimal("283.00")
+        )
+        assert refeita(conta, 1072) == (conta.n0, conta.n)
+
+    def test_quando_duas_casas_nao_bastam_os_resultados_ganham_uma(self):
+        """N = 195, margem de 3: o n escrito 165,00 se arredondaria para 165, e o tamanho
+        é 166. Com três casas, 165,003."""
+        calculo = calculado(populacao=195, confianca=0.95, margem=0.03, proporcao=0.5)
+        conta = calculo.conta
+        assert calculo.tamanho.n == 166
+        assert (conta.z, conta.n0, conta.n) == (
+            Decimal("1.96"), Decimal("1067.111"), Decimal("165.003")
+        )
+
+    def test_a_perda_escrita(self):
+        conta = calculado(
+            populacao=1200, confianca=0.95, margem=0.05, proporcao=0.5, perda=0.1
+        ).conta
+        assert (conta.perda, conta.n_final) == (Decimal("0.1"), Decimal("324.44"))
+
+    def test_o_tamanho_decidido_so_tem_a_perda(self):
+        conta = calculado(n=300, perda=0.1).conta
+        assert (conta.z, conta.n0, conta.n) == (None, None, None)
+        assert conta.n_final == Decimal("333.33")
+        assert calculado(n=300).conta.n_final is None
+
+    def test_sem_combinacao_que_feche_a_conta_e_a_exata(self, monkeypatch):
+        """
+        A saída que nunca se viu acontecer: com um z escrito que não fecha em casa
+        nenhuma, a conta escrita é a do FlatCap, com o z de seis casas.
+        """
+        import flatcap.amostragem as modulo
+
+        monkeypatch.setattr(modulo, "_zs_escritos", lambda z: [Decimal("2.5")])
+        calculo = calculado(populacao=1700, confianca=0.95, margem=0.05, proporcao=0.5)
+        conta = calculo.conta
+        assert conta.exata
+        assert (conta.z, conta.n0, conta.n) == (
+            Decimal("1.959964"), Decimal("384.15"), Decimal("313.49")
+        )
+        assert not any(nota.startswith("conta escrita") for nota in calculo.notas)
+
+    @pytest.mark.parametrize("confianca", [0.90, 0.95, 0.99])
+    @pytest.mark.parametrize(
+        ("margem", "proporcao", "perda"),
+        [(0.05, 0.5, 0.0), (0.03, 0.5, 0.1), (0.05, 0.2, 0.2), (0.1, 0.5, 0.05)],
+    )
+    def test_a_conta_escrita_chega_sempre_ao_tamanho(self, confianca, margem, proporcao, perda):
+        """
+        A garantia, por força bruta: de N = 1 a 3000, e sem N, a conta escrita arredondada
+        para cima é o tamanho do FlatCap, e a da perda, o tamanho com a perda — e ela se
+        refaz à mão com os números escritos.
+        """
+        variancia = variancia_da_proporcao(proporcao)
+        for populacao in [*range(1, 3001), None]:
+            tamanho = tamanho_aas(
+                confianca=confianca,
+                margem=margem,
+                variancia=variancia,
+                populacao=populacao,
+                perda=perda,
+            )
+            pedido = Pedido(
+                desenho=DESENHO_AAS,
+                populacao=populacao,
+                confianca=confianca,
+                margem=margem,
+                proporcao=proporcao,
+                perda=perda,
+            )
+            conta = conta_escrita(pedido, tamanho)
+            assert not conta.exata, populacao
+            necessario = conta.n if conta.n is not None else conta.n0
+            assert para_cima(float(necessario)) == tamanho.n, populacao
+            assert refeita(conta, populacao) == (conta.n0, conta.n), populacao
+            if perda:
+                assert para_cima(float(conta.n_final)) == com_perda(tamanho.n, perda)
 
 
 # ── As versões antigas, dentro da pasta da amostra ──────────────────────────

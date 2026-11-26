@@ -293,12 +293,15 @@ proporcao: 50       # em %; para uma média, `desvio:` no lugar dela
 perda: 10           # a perda esperada, em %
 ```
 
-Com esse desenho, n₀ = 385, n = 292 com a correção para N = 1200, e 325 com a perda. As
+Com esse desenho, n₀ = 384,16, n = 292 com a correção para N = 1200, e 325 com a perda. As
 rodadas seguintes escrevem o `tamanho.csv` (a conta, linha por linha), o `manifesto.json` e o
-`Amostragem_<matrícula>_AAAA-MM-DD.docx`. Rodar de novo arquiva a rodada anterior em
-`4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então, e avisa se o tamanho mudou. O
-`desenho.yaml` nunca é sobrescrito, e um tamanho já decidido entra em `n:`, no lugar da conta.
-Por enquanto, o único desenho é a aleatória simples.
+`Amostragem_<matrícula>_AAAA-MM-DD.docx`, que traz tudo na primeira página: depois dos
+objetivos, o texto de metodologia com a conta — as fórmulas como equações do Word, com os
+números do projeto, para o cliente levar para o artigo — e a tabela logo abaixo. As frases do
+texto ficam num bloco editável no topo do `amostragem.py`. Rodar de novo arquiva a rodada
+anterior em `4. Amostragem/Versões antigas/`, com o `desenho.yaml` de então, e avisa se o
+tamanho mudou. O `desenho.yaml` nunca é sobrescrito, e um tamanho já decidido entra em `n:`,
+no lugar da conta. Por enquanto, o único desenho é a aleatória simples.
 
 ```bash
 flatcap amostragem 23 --sim    # a primeira vez: cria 4. Amostragem/ e o desenho.yaml

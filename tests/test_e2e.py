@@ -726,6 +726,16 @@ class TestFluxoDaAmostragem:
         assert do_docx == do_csv
         assert do_docx[-1] == ["Tamanho da amostra", "292"]
 
+        # e a conta está na primeira página, antes da tabela: as duas fórmulas em
+        # destaque, e a população do `desenho.yaml` na frase da correção
+        from docx.oxml.ns import qn
+
+        documento_lido = Document(str(documento))
+        assert len(documento_lido.element.body.findall(f".//{qn('m:oMathPara')}")) == 2
+        textos = [p.text.replace("\u00a0", " ") for p in documento_lido.paragraphs]
+        assert any(t.startswith("Como a população é finita, com N = 1200 unidades") for t in textos)
+        assert "Arredondado para cima, o tamanho da amostra é de 292 unidades." in " ".join(textos)
+
         # o `desenho.yaml` é o que você escreveu, e o histórico tem as três linhas
         assert desenho.read_text(encoding="utf-8").count("populacao: 1200") == 1
         historico = (raiz / "historico.md").read_text(encoding="utf-8")

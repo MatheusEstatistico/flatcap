@@ -357,7 +357,7 @@ FLATCAP_ROOT/                                    fora do Git · backup próprio
         └── 4. Amostragem/                            só com amostragem: nasce no primeiro `flatcap amostragem`
             ├── desenho.yaml                          o plano da amostra — seu, nunca sobrescrito
             ├── tamanho.csv · manifesto.json          a conta e o índice da rodada
-            ├── Amostragem_00742_2026-09-05.docx      o relatório da amostra
+            ├── Amostragem_00742_2026-09-05.docx      o relatório da amostra, numa página: a conta e a tabela
             └── Versões antigas/                      as rodadas anteriores, cada uma com o desenho.yaml de então
 ```
 
@@ -550,7 +550,17 @@ A conta é a do OpenEpi: n₀ = z²·V/e², com V = p(1 − p) ou σ²; com a po
 n = N·z²·V/[(N − 1)·e² + z²·V], que é o n₀ corrigido; com a perda, ⌈n/(1 − perda)⌉. Cada passo
 arredonda para cima, e o tamanho nunca passa de N — quando chega a ele, é um censo, e o comando
 avisa. O z é o `qnorm(1 − α/2)` do R. Com N = 1200, 95%, 5 pontos, 50% e perda de 10%, o
-`tamanho.csv` diz n₀ = 385, n = 292 e 325.
+`tamanho.csv` diz n₀ = 384,16, n = 292 e 325.
+
+O relatório da amostra traz tudo na primeira página: depois da finalidade e dos objetivos, o
+texto de metodologia com a conta — a fórmula do n₀ com as letras e com os números do projeto,
+a correção com o N do `desenho.yaml`, a legenda das letras e o tamanho, com a perda quando há
+—, para o cliente levar para o artigo, e a tabela logo abaixo, sem título e sem quebra. As
+fórmulas em destaque são equações do Word, editáveis. **A conta escrita fecha na mão**: ela é
+feita com o z como está escrito — o 1,96, e não o 1,959964 —, e por isso o n₀ é 384,16, e não
+384,15; e ela chega sempre ao mesmo tamanho da conta exata — quando o z da tabela da normal
+(1,96, 1,645, 2,576) não chegaria a ele, o z sai com mais casas. As frases do texto ficam num
+bloco editável no topo do `amostragem.py`, uma por situação.
 
 As recusas são as do engano que muda o número em silêncio, e saem todas de uma vez: `12.000`,
 que no YAML é doze; a confiança ou a proporção escritas como fração (`0.95`, `0.5`); a
@@ -18735,7 +18745,7 @@ inteira.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1436 linhas.*
+*1937 linhas.*
 
 A amostragem — o plano da amostra de um projeto, na pasta dela, com o relatório dela.
 
@@ -18796,24 +18806,54 @@ registro, e nenhum desenho sorteia ainda.
 ### O relatório da amostra
 
 Montado com as peças do relatório das análises: um `relatorio.Relatorio` com a seção do
-tamanho, escrito pelo `documento.escrever`, com o mesmo modelo `.docx` e a mesma primeira
-página — a finalidade e os objetivos do `projeto.yaml`. **Não recalcula nada**: a tabela
-do documento é lida, pelo `relatorio.tabela_do_texto`, do mesmo texto que vai para o
+tamanho, escrito pelo `documento.escrever`, com o mesmo modelo `.docx` e a mesma abertura
+— a finalidade e os objetivos do `projeto.yaml`. **Não recalcula nada**: a tabela do
+documento é lida, pelo `relatorio.tabela_do_texto`, do mesmo texto que vai para o
 `tamanho.csv`.
 
-O texto de metodologia sobre a amostra feita tem o lugar dele, o `METODOLOGIA`, e ele
-está vazio de propósito — a regra do `TEXTO_PADRAO` do relatório: nada de parágrafo de
-mentira guardando o lugar.
+**Tudo cabe na primeira página.** Depois dos objetivos vem o texto de metodologia, com a
+conta, e a tabela logo abaixo dele, sem título e sem quebra de página
+(`Secao.na_primeira_pagina`). O texto é o que o cliente leva para o artigo:
+
+    Para garantir a representatividade da amostra, optou-se pela amostragem aleatória
+    simples, sem reposição. O tamanho da amostra foi calculado para estimar uma
+    proporção, com nível de confiança de 95%, margem de erro de 5 pontos percentuais e
+    proporção esperada de 50%, […] Primeiro, calculou-se o tamanho para uma população
+    infinita:
+
+        n₀ = z² × p × (1 − p) / e² = 1,96² × 0,5 × 0,5 / 0,05² = 384,16
+
+    Como a população é finita, com N = 1700 unidades, esse tamanho foi corrigido para
+    ela:
+
+        n = n₀ / [1 + (n₀ − 1)/N] = 384,16 / (1 + 383,16/1700) = 313,50
+
+    Onde: z = …; p = …; e = …; N = …; n₀ = …; n = … (uma linha cada)
+
+    Arredondado para cima, o tamanho da amostra é de 314 unidades. Este procedimento […]
+
+As frases estão no bloco editável do topo deste módulo, uma por situação — proporção ou
+média, com ou sem a população, com ou sem perda, o tamanho escrito à mão, o censo —, e os
+números vêm do `desenho.yaml` e da conta. As fórmulas em destaque saem como equações do
+Word (`formulas.py` e `documento.py`), editáveis no artigo; a perda, que é uma divisão,
+entra numa conta no meio da frase.
+
+**A conta escrita fecha na mão** (`ContaEscrita`). Quem a lê a refaz com o z que está
+escrito, e por isso ela é feita com ele: com o 1,96, o n₀ é 384,16, e não o 384,15 do z
+exato. E ela chega sempre ao tamanho da tabela — o z ganha casas quando as da tabela da
+normal não bastam, como em N = 1072, em que o 1,96 daria 284, e o tamanho é 283. O
+`tamanho.csv` mostra o mesmo z e o mesmo n₀ do texto; o manifesto guarda os números sem
+arredondar.
 
 ### `DESENHO_AAS`
 
-*linha 132*
+*linha 175*
 
 > O nome do único desenho de hoje, como se escreve no `desenho.yaml`.
 
 ### `PREVISTOS`
 
-*linha 135*
+*linha 178*
 
 > Os desenhos que vêm depois, na ordem do `claude/amostragem-tipos.md`. Escrever um deles
 > no `desenho.yaml` recusa dizendo que ainda não existe — e não que não é conhecido, que
@@ -18821,19 +18861,19 @@ mentira guardando o lugar.
 
 ### `CHAVES_COMUNS`
 
-*linha 146*
+*linha 189*
 
 > As chaves que todo desenho aceita. Cada desenho acrescenta as dele (`Desenho.chaves`).
 
 ### `CHAVES_DA_CONTA`
 
-*linha 158*
+*linha 201*
 
 > As que fazem a conta. Com o `n` escrito à mão, elas ficam em branco.
 
 ### `MARGEM_QUE_PARECE_FRACAO`
 
-*linha 161*
+*linha 204*
 
 > A margem de uma proporção que, escrita em pontos, parece uma fração: `0.05` é a margem de 5%
 > escrita como fração, e é 0,05 ponto. Até 0,2 — a fração de uma margem de 20% —, a conta sai
@@ -18841,36 +18881,98 @@ mentira guardando o lugar.
 
 ### `PREFIXO_RELATORIO_DA_AMOSTRA`
 
-*linha 172*
+*linha 215*
 
 > O prefixo do relatório da amostra, como o `Relatorio_` do relatório das análises. Os
 > dois nunca se encontram: este mora em `4. Amostragem/`, e aquele na raiz do projeto.
 
-*No módulo, linha 176:*
+*No módulo, linha 219:*
 
 > ─────────────────────────────────────────────────────────────────────────────
->  O TEXTO DE METODOLOGIA DE CADA DESENHO — é aqui que se escreve.
+>  O TEXTO DE METODOLOGIA DA AMOSTRA — é aqui que se escreve.
 >
->  Uma linha da tupla, um parágrafo do documento. Ele entra na primeira página do
->  relatório da amostra, depois da finalidade e dos objetivos, e cada parágrafo pode
->  usar os campos da conta entre chaves:
+>  Ele entra na primeira página do relatório da amostra, depois da finalidade e dos
+>  objetivos, e mostra a conta: a fórmula com as letras, a mesma fórmula com os
+>  números do projeto, e o resultado, com a tabela do tamanho logo embaixo. As frases
+>  vêm daqui; as fórmulas em destaque são montadas no código (`metodologia_aas`),
+>  porque uma fração não se escreve numa linha. Qual frase entra depende da conta:
+>  proporção ou média, com ou sem a população, com ou sem perda, o tamanho escrito à
+>  mão, o censo.
 >
->      {desenho} {populacao} {confianca} {z} {margem} {proporcao} {desvio}
->      {n0} {n} {perda} {n_final}
+>  Em `{}`, o que o `desenho.yaml` e a conta preenchem:
 >
->  Os campos chegam escritos como na tabela (`95%`, `5 pontos percentuais`, `1200`), e
->  o que a conta não usou chega vazio — a média não tem `{proporcao}`, o tamanho
->  decidido à mão não tem `{z}`. Por isso o texto de cada desenho vai precisar de uma
->  frase por situação: proporção ou média, com ou sem N, com ou sem perda.
+>      {desenho} {populacao} {confianca} {margem} {proporcao} {desvio} {perda}
+>      {n} {n_final} {sem_teto} {z} {p} {e} {d} {n_com_perda}
 >
->  `()` é o estado de hoje: ainda não escrito. É a regra do `TEXTO_PADRAO` do
->  relatório — nada de parágrafo de mentira guardando o lugar: um `xxxxx` esquecido
->  aqui chega impresso na mão do cliente.
+>  Os do `desenho.yaml` saem como na tabela (`95%`, `5 pontos percentuais`, `1200`); o
+>  `{z}`, o `{p}`, o `{e}` e o `{d}` — a perda —, como entram na conta (`1,96`, `0,5`,
+>  `0,05`, `0,1`). `{n_com_perda}` é o tamanho dividido pela fração que se espera
+>  manter, antes de arredondar (`324,44`), e `{sem_teto}`, ele arredondado, antes do
+>  teto da população. Entre cifrões, uma fórmula no meio da frase: `$N = {populacao}$`
+>  sai N = 1200, com o N em itálico e a população do `desenho.yaml`. Ver o
+>  `formulas.py`.
+>
+>  Mudar a redação é mudar as strings. Uma chave escrita errada é um `KeyError` no
+>  primeiro teste, e não um `{n}` impresso no documento do cliente.
 > ─────────────────────────────────────────────────────────────────────────────
+
+### `TITULO_DA_METODOLOGIA`
+
+*linha 247*
+
+> O subtítulo acima do texto, no estilo de subtítulo do documento, como o «Metodologia
+> Estatística (texto padrão)» do relatório das análises. `""`, o de hoje: o texto vem
+> logo depois dos objetivos, sem subtítulo.
+
+### `FRASE_DESENHO`
+
+*linha 252*
+
+> O desenho e o que a conta estima — o primeiro parágrafo. A `VARIABILIDADE_MAXIMA`
+> entra só com a proporção esperada de 50%, que é a de quem não sabe o que esperar.
+
+### `FRASE_INFINITA`
+
+*linha 269*
+
+> O primeiro passo, que fecha o primeiro parágrafo: o tamanho para uma população
+> infinita. Com a população, ele é corrigido depois; sem ela, é a conta inteira.
+
+### `FRASE_NECESSARIO`
+
+*linha 281*
+
+> A perda, depois do tamanho necessário: ele dividido pela fração que se espera manter,
+> numa conta no meio da frase — ela é curta, e uma fórmula em destaque a mais empurraria
+> a tabela para a segunda página. É o passo da conta com perda e o do tamanho escrito à
+> mão com perda. Quando o resultado passa da população, a amostra é ela inteira
+> (`FRASE_PERDA_NO_CENSO`).
+
+### `FRASE_DECIDIDO`
+
+*linha 298*
+
+> O tamanho escrito à mão, no lugar da conta.
+
+### `ONDE`
+
+*linha 305*
+
+> A legenda das letras das fórmulas em destaque, uma linha cada, depois delas e na
+> ordem em que as letras aparecem. A última linha termina em ponto, e as outras, em
+> ponto e vírgula.
+
+### `FRASE_TAMANHO`
+
+*linha 320*
+
+> O resultado, que fecha o texto. O `FECHO` sai só quando a conta foi feita e a amostra
+> não é a população inteira: no tamanho escrito à mão não há precisão definida acima, e
+> no censo não há amostra.
 
 ### `MODELO_DO_DESENHO`
 
-*linha 200*
+*linha 330*
 
 > O `desenho.yaml` que a primeira rodada escreve. Já vem com o caso de todo dia, para que
 > o pedido mais comum — o cliente que informa só o tamanho da população — seja preencher a
@@ -18881,7 +18983,7 @@ mentira guardando o lugar.
 
 ### `class AmostragemError(RuntimeError)`
 
-*linha 239*
+*linha 369*
 
 Falha da amostragem, já traduzida para o usuário.
 
@@ -18890,13 +18992,13 @@ Qualquer outra exceção é bug de verdade e deve subir com o traceback inteiro.
 
 ### `class DesenhoInvalidoError(AmostragemError)`
 
-*linha 248*
+*linha 378*
 
 O `desenho.yaml` tem o que não serve. A mensagem lista **todos** os problemas.
 
 ### `class DesenhoExistenteError(AmostragemError)`
 
-*linha 254*
+*linha 384*
 
 O `desenho.yaml` apareceu entre a simulação e a execução, e o modelo não o
 sobrescreve: o arquivo é seu.
@@ -18905,7 +19007,7 @@ sobrescreve: o arquivo é seu.
 
 ### `class Pedido`
 
-*linha 265*
+*linha 395*
 
 O `desenho.yaml` lido, conferido e convertido.
 
@@ -18918,13 +19020,13 @@ ela for para as versões antigas.
 
 #### `def estima(self)`
 
-*linha 289*
+*linha 419*
 
 `proporcao`, `media`, ou vazio quando o tamanho foi decidido à mão.
 
 ### `class Calculo`
 
-*linha 297*
+*linha 427*
 
 O tamanho, e a tabela que o apresenta.
 
@@ -18932,35 +19034,64 @@ O tamanho, e a tabela que o apresenta.
 desenho e a população, a precisão pedida, e os tamanhos até o da amostra, que é
 sempre a última linha. `notas` vão para o cabeçalho do `.csv` e para o manifesto, e
 não para o documento. `campos` são os mesmos valores escritos, para o texto de
-metodologia.
+metodologia; `conta`, os números da conta como ela sai escrita, na tabela e no
+texto (ver `ContaEscrita`).
+
+### `class ContaEscrita`
+
+*linha 448*
+
+A conta como ela sai escrita, para se refazer à mão.
+
+O texto de metodologia mostra a conta com os números do projeto, e quem a lê a refaz
+na calculadora com o z que está escrito — o 1,96, e não o 1,959964 que o FlatCap usa.
+Com o z exato, o n₀ de 95%, 5 pontos e 50% é 384,15; com o 1,96, é 384,16. Por isso a
+conta escrita é feita **com o z escrito**: cada número dela sai dos números escritos
+antes dele, nas casas em que estão escritos, e ela fecha na mão.
+
+E ela chega ao tamanho da conta exata, sempre. O z escrito começa no valor da tabela
+da normal — 1,96 para 95%, 1,645 para 90%, 2,576 para 99% — e ganha casas quando ele
+não basta: em N = 1072, com 95%, 5 pontos e 50%, o 1,96 daria 284, e o tamanho é 283;
+o z sai 1,95996. As casas dos resultados também sobem quando duas não bastam — um
+165,003 escrito 165,00 se arredondaria para 165, e não para 166. Sem nenhuma
+combinação que feche, a conta escrita é a exata (`exata`), com os números do
+FlatCap.
+
+Os números entram como `Decimal`, e não como `float`, para a conta escrita ser a da
+calculadora: 1,96² × 0,25 / 0,0025 é 384,16, e não 384,15999999999997.
+
+`z`, `n0` e `n` faltam no tamanho escrito à mão, em que não há conta, e `n` falta sem
+a população; `n_final` é o tamanho com a perda, antes de arredondar, e falta sem ela.
 
 ### `class Desenho`
 
-*linha 316*
+*linha 485*
 
 Um desenho que a amostragem sabe calcular — e, um dia, sortear.
 
 O nome é o que se escreve em `desenho:`. As `chaves` são as do `desenho.yaml` que só
-ele aceita, além das `CHAVES_COMUNS`; vazio na aleatória simples. O `sortear` chega
-com o sorteio de uma lista, num passo seguinte, e até lá nenhum desenho sorteia.
+ele aceita, além das `CHAVES_COMUNS`; vazio na aleatória simples. A `metodologia`
+escreve o texto da primeira página do relatório da amostra, com a conta; sem ela, a
+página fecha nos objetivos. O `sortear` chega com o sorteio de uma lista, num passo
+seguinte, e até lá nenhum desenho sorteia.
 
 ### `class Amostragem`
 
-*linha 333*
+*linha 505*
 
 A rodada inteira, decidida. É daqui que saem os arquivos e o terminal.
 
 #### `def raiz(self)`
 
-*linha 345*
+*linha 517*
 
 #### `def tamanho(self)`
 
-*linha 349*
+*linha 521*
 
 ### `class Arquivamento`
 
-*linha 354*
+*linha 526*
 
 A rodada anterior, a caminho de `4. Amostragem/Versões antigas/`.
 
@@ -18975,7 +19106,7 @@ um manifesto legível, a rodada vai sem ele, e não com o errado.
 
 ### `class PlanoAmostragem`
 
-*linha 374*
+*linha 546*
 
 Tudo o que a amostragem faria, decidido e ainda não escrito.
 
@@ -18984,21 +19115,21 @@ modelo do `desenho.yaml`; preenchido, é a rodada que calcula e escreve o relat�
 
 #### `def so_o_modelo(self)`
 
-*linha 397*
+*linha 569*
 
 A primeira rodada: o `desenho.yaml` ainda não existe.
 
 #### `def desenho_yaml(self)`
 
-*linha 402*
+*linha 574*
 
 #### `def arquivos(self)`
 
-*linha 406*
+*linha 578*
 
 ### `class ResultadoAmostragem`
 
-*linha 413*
+*linha 585*
 
 O que a execução de fato escreveu.
 
@@ -19006,7 +19137,7 @@ O que a execução de fato escreveu.
 
 ### `def preparar_amostragem(raiz, titulo, template, agora)`
 
-*linha 424*
+*linha 596*
 
 Lê o `desenho.yaml`, faz a conta e monta o relatório da amostra. Não escreve nada.
 
@@ -19029,7 +19160,7 @@ Raises:
 
 ### `def executar_amostragem(plano)`
 
-*linha 498*
+*linha 670*
 
 Escreve o plano no disco. Não decide mais nada.
 
@@ -19045,7 +19176,7 @@ ele.
 
 ### `def _executar_modelo(plano)`
 
-*linha 561*
+*linha 733*
 
 A primeira rodada: a pasta, se faltar, e o modelo do `desenho.yaml`.
 
@@ -19054,7 +19185,7 @@ simulação e a execução: o arquivo é seu.
 
 ### `def _arquivar(arquivamento, passos)`
 
-*linha 606*
+*linha 778*
 
 Move a rodada anterior para `Versões antigas/`, com o `desenho.yaml` de então.
 
@@ -19066,7 +19197,7 @@ a única forma de ela sair.
 
 ### `def ler_desenho(caminho)`
 
-*linha 638*
+*linha 810*
 
 Lê e confere o `desenho.yaml`. Recusa listando **todos** os problemas de uma vez.
 
@@ -19080,43 +19211,43 @@ Raises:
     DesenhoInvalidoError: com todos os problemas — e também quando o arquivo não é
         um YAML válido, com o diagnóstico da ficha.
 
-*linha 689*
+*linha 861*
 
 > Sem desenho, `problemas` já tem a frase dele; o `is None` é para quem lê o tipo.
 
-*linha 709*
+*linha 881*
 
 > Já se sabe que é UTF-8: o `ler_yaml` acabou de ler o mesmo arquivo.
 
 ### `def _desenho_escrito(valor, problemas)`
 
-*linha 715*
+*linha 887*
 
 O desenho pelo nome, sem caixa nem acento: `AAS`, `aas` e `Aleatória simples` são o
 mesmo. Previsto e ainda não feito recusa dizendo isso.
 
 ### `def _chaves_desconhecidas(bruto, desenho, problemas)`
 
-*linha 747*
+*linha 919*
 
 ### `def _conferir_n(bruto, n, populacao, problemas)`
 
-*linha 769*
+*linha 941*
 
 Com o tamanho escrito à mão, a conta fica em branco, e o `n` cabe na população.
 
 ### `def _conferir_conta(bruto, confianca, margem, proporcao, desvio, problemas)`
 
-*linha 784*
+*linha 956*
 
 A precisão pedida: confiança, margem, e a proporção ou o desvio — um dos dois.
 
-*linha 812*
+*linha 984*
 
 > O α escrito no lugar da confiança: `confianca: 5` querendo 95% daria z = 0,06 e
 > uma amostra de uma unidade, sem erro nenhum.
 
-*linha 845*
+*linha 1017*
 
 > A margem é em pontos percentuais. Maior que a proporção, o intervalo passaria
 > de 0% — e é assim que o `proporcao: 0.5` escrito querendo 50% se denuncia,
@@ -19126,29 +19257,29 @@ A precisão pedida: confiança, margem, e a proporção ou o desvio — um dos d
 
 ### `_APELIDOS`
 
-*linha 860*
+*linha 1032*
 
 > Os nomes por extenso que querem dizer um desenho que existe.
 
 ### `def _chave(texto)`
 
-*linha 869*
+*linha 1041*
 
 `Aleatória Simples` → `aleatoria_simples`: sem acento, sem caixa, com sublinhado.
 
 ### `def _vazio(valor)`
 
-*linha 875*
+*linha 1047*
 
 ### `def _numero(bruto, chave, problemas)`
 
-*linha 879*
+*linha 1051*
 
 O número da chave, ou `None` quando ela falta ou está em branco.
 
 ### `def _inteiro(bruto, chave, problemas)`
 
-*linha 893*
+*linha 1065*
 
 Um inteiro, escrito como inteiro.
 
@@ -19157,62 +19288,155 @@ Estrito de propósito. No YAML o ponto é a casa decimal, e o `12.000` que em po
 
 ### `def _texto(valor)`
 
-*linha 919*
+*linha 1091*
 
 O valor como ele aparece na mensagem: o que está no arquivo.
 
 ### `def _simples(valor)`
 
-*linha 924*
+*linha 1096*
 
 O valor escrito, para o manifesto: o escalar do YAML como escalar do Python.
 
 ### `def _em_texto(nomes)`
 
-*linha 935*
+*linha 1107*
 
 ### A conta da aleatória simples
 
 ### `def calcular_aas(pedido)`
 
-*linha 944*
+*linha 1116*
 
 O tamanho da aleatória simples, sem reposição, e a tabela dele.
 
 Com o `n` escrito, não há conta: o tamanho é o escrito, com a perda somada.
 
-*linha 953*
+*linha 1125*
 
 > O `ler_desenho` garante os três; um `Pedido` montado à mão sem eles é bug.
 
-*linha 977*
+*linha 1150*
 
 > Aviso, e não recusa: uma margem pequena existe, nas pesquisas grandes. Mas é
 > também como chega a margem escrita em fração — `0.05` querendo 5% —, que passa
 > por todas as conferências e dá uma amostra cem vezes maior.
 
-### `def _campos(pedido, tamanho)`
+### A conta escrita
 
-*linha 1000*
+### `_CASAS_DOS_RESULTADOS`
+
+*linha 1176*
+
+> As casas dos resultados da conta escrita, na ordem em que se tentam: duas, quando
+> bastam. E as do z, de duas a seis — as que mudam o número: em 95%, 1,96, 1,95996 e
+> 1,959964, porque 1,960 é o mesmo 1,96.
+
+### `_ERRO_DO_Z`
+
+*linha 1181*
+
+> O z escrito começa nas primeiras casas em que ele fica a menos de 0,05% do exato: as
+> da tabela da normal — 1,96 para 95%, 1,645 para 90%, 2,576 para 99% —, e não o 1,64 ou
+> o 2,58, que fechariam a conta num projeto e não no do lado, e o mesmo nível de
+> confiança sairia com dois z diferentes.
+
+### `_CASAS_DA_EXATA`
+
+*linha 1186*
+
+> As da conta exata, a de quando nenhuma combinação acima fecha: o z com seis casas, e os
+> resultados com quantas precisarem para o arredondamento para cima ser o do FlatCap.
+
+### `def conta_escrita(pedido, tamanho)`
+
+*linha 1191*
+
+A conta como ela sai na tabela e no texto, refeita com os números escritos. Ver
+`ContaEscrita`.
+
+Tenta o z da tabela da normal e os resultados com duas casas, e sobe as casas até a
+conta escrita chegar ao tamanho da conta exata — o `n`, e o tamanho com a perda.
+
+*linha 1209*
+
+> O `calcular_aas` só chega aqui com a confiança, a margem e a proporção ou o desvio.
+
+*linha 1239*
+
+> Nenhuma fechou — a conta exata, com os números do FlatCap. Não se viu acontecer:
+> pede o tamanho exato a menos de um décimo de milésimo de um inteiro.
+
+### `def _zs_escritos(z)`
+
+*linha 1262*
+
+O z com as casas da tabela da normal e, depois, com mais, até seis — só as que mudam
+o número. Ver o `_ERRO_DO_Z`.
+
+### `def _corrigido(n0, populacao, casas)`
+
+*linha 1277*
+
+O n₀ escrito, corrigido pela população: n₀ / [1 + (n₀ − 1)/N].
+
+### `def _com_perda_escrita(n, perda, casas)`
+
+*linha 1282*
+
+O `n` dividido pela fração que se espera manter, antes de arredondar.
+
+### `def _fecha(conta, tamanho)`
+
+*linha 1289*
+
+A conta escrita chega ao tamanho da exata: o arredondamento para cima do que está
+escrito dá o `n` do FlatCap, e o da perda, o tamanho com a perda antes do teto de N.
+
+### `def _nas_casas(valor, casas)`
+
+*linha 1303*
+
+Arredondado como na escola, metade para cima — o arredondamento de quem refaz a conta.
+
+### `def _decimal(valor)`
+
+*linha 1308*
+
+O número como ele é escrito: `0.05` é 0,05, e não 0,05000000000000000277.
+
+### `def _escrito(valor)`
+
+*linha 1313*
+
+O número da conta escrita com vírgula decimal: `384,16`, `0,5`, `1700`.
+
+### `def _campos(pedido, tamanho, conta)`
+
+*linha 1320*
 
 Os valores escritos como na tabela, para a tabela e para o texto de metodologia.
 
 ### `def _linhas(pedido, tamanho, campos)`
 
-*linha 1026*
+*linha 1346*
 
 As linhas da tabela, do que se pediu ao que saiu. A última é sempre o tamanho da
 amostra, que é a resposta — quem procura o número procura no fim.
 
-### `def _notas(pedido, tamanho)`
+*linha 1378*
 
-*linha 1070*
+> O n₀ como no texto, e o necessário, que é o que a perda divide.
+
+### `def _notas(pedido, tamanho, conta)`
+
+*linha 1392*
 
 O como da conta, para quem abrir o `.csv` sozinho. Não vai para o documento.
 
 ### `def _formatar(valor)`
 
-*linha 1095*
+*linha 1424*
 
 Um número como se escreve numa tabela em português: `95`, `2,5`, `0,001`.
 
@@ -19221,15 +19445,71 @@ amostragem da v1 não abre banco nenhum.
 
 ### `def _percentual(fracao)`
 
-*linha 1106*
+*linha 1435*
 
 ### `def _pontos(valor)`
 
-*linha 1110*
+*linha 1439*
 
 `5 pontos percentuais`, e `1,5 ponto percentual`: abaixo de dois, no singular.
 
-*No módulo, linha 1116:*
+### O texto de metodologia da aleatória simples
+
+### `def metodologia_aas(pedido, calculo)`
+
+*linha 1448*
+
+O texto da primeira página do relatório da amostra, com a conta.
+
+A ordem é a de quem refaz a conta: o desenho e a precisão pedida; o tamanho para uma
+população infinita; a correção pela população, quando há uma; a legenda das letras,
+depois das fórmulas; e o resultado, com a perda, quando há, numa conta no meio da
+frase. As frases são as do bloco editável do topo do módulo, e os números das
+fórmulas, os da conta escrita (`ContaEscrita`), que fecha na mão e chega ao tamanho
+da tabela.
+
+O tamanho escrito à mão não tem conta: o texto diz que ele foi definido antes e, com
+perda, mostra só a dela.
+
+#### `def frase(modelo)`
+
+*linha 1466*
+
+### `def _resultado(tamanho, frase, com_o_necessario)`
+
+*linha 1508*
+
+As frases do tamanho que vai a campo: arredondado e, com perda, compensado — e o
+censo, quando a amostra é a população inteira. No tamanho escrito à mão, o
+necessário é o escrito, e a frase dele já foi dita.
+
+### `def _campos_do_texto(pedido, calculo, conta)`
+
+*linha 1534*
+
+Os campos das frases: os da tabela, e os números como entram na conta — o `{p}` e o
+`{e}` em fração, `0,5` e `0,05`; na média, o `{e}` na unidade da variável.
+
+### `_Z`
+
+*linha 1549*
+
+> As letras das fórmulas.
+
+### `def _formula_do_n0(pedido, conta)`
+
+*linha 1559*
+
+`n₀ = z² × p × (1 − p) / e² = 1,96² × 0,5 × 0,5 / 0,05² = 384,16`; na média, com σ² no
+lugar de p × (1 − p).
+
+### `def _formula_da_correcao(populacao, conta)`
+
+*linha 1588*
+
+`n = n₀ / [1 + (n₀ − 1)/N] = 384,16 / (1 + 383,16/1700) = 313,50`.
+
+*No módulo, linha 1606:*
 
 > O registro. Depois das funções, que ele nomeia.
 
@@ -19237,13 +19517,13 @@ amostragem da v1 não abre banco nenhum.
 
 ### `def montar_tabela(desenho, calculo)`
 
-*linha 1130*
+*linha 1621*
 
 O `tamanho.csv`. Duas colunas, e a última linha é a resposta.
 
 ### `def montar_manifesto(amostragem)`
 
-*linha 1143*
+*linha 1634*
 
 O índice da rodada, no formato do das análises.
 
@@ -19255,24 +19535,27 @@ rodada quando ela for para as versões antigas.
 
 ### `def montar_relatorio(amostragem, manifesto, pasta, titulo)`
 
-*linha 1225*
+*linha 1716*
 
 O relatório da amostra, com as peças do relatório das análises.
 
 A primeira página é a dele — a finalidade e os objetivos da ficha, com o marcador e
-o alerta quando estão em branco —, e o texto de metodologia entra depois, quando
-existir. A tabela é lida do texto do `tamanho.csv` pelo `tabela_do_texto`, a mesma
-função que lê o arquivo do disco.
+o alerta quando estão em branco —, e o texto de metodologia, com a conta, vem
+depois deles, no lugar da metodologia do relatório das análises. A tabela fecha a
+página, logo abaixo da conta, sem título e sem quebra (`Secao.na_primeira_pagina`):
+a legenda dela já diz o que ela é. É lida do texto do `tamanho.csv` pelo
+`tabela_do_texto`, a mesma função que lê o arquivo do disco.
 
 ### `def texto_de_metodologia(amostragem)`
 
-*linha 1264*
+*linha 1760*
 
-Os parágrafos do `METODOLOGIA` do desenho, com os campos da conta preenchidos.
+O texto de metodologia do desenho, com a conta: os parágrafos e as fórmulas em
+destaque. Vazio para o desenho que ainda não tem o dele.
 
 ### `def nome_do_relatorio_da_amostra(matricula, quando)`
 
-*linha 1273*
+*linha 1771*
 
 `Amostragem_123465_2026-10-26.docx`, como o `relatorio.nome_do_relatorio`.
 
@@ -19281,7 +19564,7 @@ pessoa, em outro sistema, e o que vem de fora não monta caminho.
 
 ### `def resumo_do_tamanho(tamanho)`
 
-*linha 1284*
+*linha 1782*
 
 `325 de 1200`, `385` ou `120 de 120 — a população inteira`: a linha do terminal.
 
@@ -19289,7 +19572,7 @@ pessoa, em outro sistema, e o que vem de fora não monta caminho.
 
 ### `def _arquivamento(pasta, quando, anterior)`
 
-*linha 1295*
+*linha 1793*
 
 O que a rodada vigente escreveu, e para onde vai quando ela for refeita.
 
@@ -19301,7 +19584,7 @@ então, e a falta dele não impede o arquivamento.
 
 ### `def _rodada_vigente(pasta)`
 
-*linha 1332*
+*linha 1830*
 
 O manifesto da rodada que está no alto da pasta, quando há um legível e da amostragem.
 
@@ -19311,7 +19594,7 @@ a rodada nova: ela sai sem o aviso e sem a cópia.
 
 ### `def _mudanca(anterior, tamanho)`
 
-*linha 1349*
+*linha 1847*
 
 O aviso de quando o tamanho muda em relação à rodada vigente.
 
@@ -19322,7 +19605,7 @@ o vigente.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1372*
+*linha 1870*
 
 ## `flatcap/cli.py`
 
