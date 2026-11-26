@@ -162,6 +162,7 @@ from .ficha import (
     versao_vigente,
 )
 from .ficha import ler as ler_ficha
+from .formulas import Equacao, Paragrafo
 from .manifesto import (
     ANALISE_CARACTERIZACAO,
     ANALISE_DESCRITIVA,
@@ -337,6 +338,10 @@ class Secao:
 
     `pagina_nova` marca a primeira seção depois da Tabela 1, que começa em página
     nova como a primeira de todas começa depois da primeira página.
+
+    `na_primeira_pagina` é o contrário: a seção continua a primeira página, sem título
+    e sem quebra. É a tabela do relatório da amostra, que fecha a conta escrita logo
+    acima dela; o relatório das análises não a usa.
     """
 
     variavel: str
@@ -347,6 +352,7 @@ class Secao:
     tabelas: tuple[TabelaLida, ...] = ()
     figuras: tuple[Figura, ...] = ()
     pagina_nova: bool = False
+    na_primeira_pagina: bool = False
 
     @property
     def preenchidos(self) -> int:
@@ -403,8 +409,9 @@ class Relatorio:
     texto: tuple[str, ...] = ()
     # A metodologia da primeira página: os parágrafos e o subtítulo acima deles. Fora
     # do `texto` porque o subtítulo é um título, e não texto corrido; vazios, a
-    # página fecha nos objetivos, como antes da 1.16.0.
-    metodologia: tuple[str, ...] = ()
+    # página fecha nos objetivos, como antes da 1.16.0. O das análises é texto; o da
+    # amostra traz a conta, com parágrafos que têm fórmula e fórmulas em destaque.
+    metodologia: tuple[str | Paragrafo | Equacao, ...] = ()
     titulo_da_metodologia: str = ""
     fora: tuple[ForaDoRelatorio, ...] = ()
     alertas: tuple[Alerta, ...] = ()

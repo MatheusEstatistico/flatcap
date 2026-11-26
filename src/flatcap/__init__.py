@@ -26,6 +26,7 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
     regressao.py   ajusta modelos: linear simples, linear múltipla e logística
     caracterizacao.py a Tabela 1: as variáveis por grupo, pela comparação e pela associação
     analises.py    o lote: roda as análises da lista `analises:` da ficha, em ordem
+    formulas.py    o que uma fórmula do documento é, antes de virar equação do Word
     metodologia.py o parágrafo de metodologia da primeira página, a partir dos manifestos
     relatorio.py   lê o manifesto e monta o conteúdo do documento
     documento.py   escreve o .docx a partir do conteúdo já montado
@@ -36,12 +37,13 @@ FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabi
 
 A dependência anda sempre para cima nessa lista: `dados` conhece `ficha`, `ficha` conhece
 `projeto`, `painel` conhece só `ficha` e `projeto`, `perfil` conhece `banco` e `dicionario`,
-`descritiva` conhece `banco`, `dicionario` e `manifesto`, `metodologia` conhece só o
-`manifesto`, `relatorio` conhece `manifesto`, `metodologia`, `dicionario`, `dados` e `ficha`,
-e nenhuma delas conhece a `cli`. A exceção é o par `relatorio`–`documento`: o `documento`
-conhece o `Relatorio` que recebe, e o `relatorio` só chama o `documento` de dentro do
-`executar_relatorio`. A `amostragem` conhece `amostral`, `ficha`, `manifesto` e `relatorio`,
-e chama o `documento` do mesmo jeito, de dentro do `executar_amostragem`.
+`descritiva` conhece `banco`, `dicionario` e `manifesto`, `formulas` não conhece ninguém,
+`metodologia` conhece só o `manifesto`, `relatorio` conhece `manifesto`, `metodologia`,
+`formulas`, `dicionario`, `dados` e `ficha`, e nenhuma delas conhece a `cli`. A exceção é o
+par `relatorio`–`documento`: o `documento` conhece o `Relatorio` que recebe e as `formulas`
+que ele traz, e o `relatorio` só chama o `documento` de dentro do `executar_relatorio`. A
+`amostragem` conhece `amostral`, `formulas`, `ficha`, `manifesto` e `relatorio`, e chama o
+`documento` do mesmo jeito, de dentro do `executar_amostragem`.
 
 É o que permite testar tudo sem simular terminal — e trocar a implementação de `ficha.py` sem
 que nenhum outro módulo perceba.

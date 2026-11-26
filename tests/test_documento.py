@@ -684,6 +684,196 @@ class TestSegundaPagina:
         assert _colunas_de_texto(com) == frozenset({0, 1})
 
 
+# ── As fórmulas da metodologia da amostra ───────────────────────────────────
+
+
+def _com_formulas(plano, tmp_path, *blocos, secoes=None):
+    """O relatório das análises com a metodologia trocada pelos `blocos` — o caminho
+    por onde a conta da amostra chega ao documento."""
+    from dataclasses import replace
+
+    from flatcap.documento import escrever
+
+    relatorio = replace(plano.relatorio, metodologia=blocos)
+    if secoes is not None:
+        relatorio = replace(relatorio, secoes=secoes)
+    return Document(str(escrever(relatorio, tmp_path / "formulas.docx")))
+
+
+def _n0():
+    from flatcap.formulas import Simbolo, formula, fracao, parenteses, potencia
+
+    z, p, e = Simbolo("z"), Simbolo("p"), Simbolo("e")
+    return formula(
+        Simbolo("n", "0"),
+        "=",
+        fracao(formula(potencia(z, "2"), "×", p, "×", parenteses("1", "−", p)), potencia(e, "2")),
+        "=",
+        "384,16",
+    )
+
+
+class TestFormulas:
+    def test_a_formula_em_destaque_e_equacao_do_word(self, documento, tmp_path):
+        """A equação em exibição (`m:oMathPara`), centralizada, com a fração empilhada,
+        o expoente, o índice e os parênteses que crescem."""
+        from docx.oxml.ns import qn
+
+        from flatcap.formulas import Equacao
+
+        _, plano = documento()
+        doc = _com_formulas(plano, tmp_path, Equacao(_n0()))
+        (exibida,) = doc.element.body.findall(f".//{qn('m:oMathPara')}")
+        assert exibida.find(f"{qn('m:oMathParaPr')}/{qn('m:jc')}").get(qn("m:val")) == "center"
+        for estrutura in ("m:f", "m:sSup", "m:sSub", "m:d"):
+            assert exibida.findall(f".//{qn(estrutura)}"), estrutura
+        paragrafo = exibida.getparent()
+        assert paragrafo.find(f"{qn('w:pPr')}/{qn('w:jc')}").get(qn("w:val")) == "center"
+
+    def test_o_numero_e_texto_comum_e_o_operador_fica_em_pe(self, documento, tmp_path):
+        """
+        O número com vírgula decimal sai como texto comum (`m:nor`): como símbolo
+        matemático, a vírgula é pontuação, e o Word poria um espaço depois dela. O
+        operador leva o estilo normal (`m:sty p`), e a letra, o itálico das equações.
+        """
+        from docx.oxml.ns import qn
+
+        from flatcap.formulas import Equacao
+
+        _, plano = documento()
+        doc = _com_formulas(plano, tmp_path, Equacao(_n0()))
+        corridas = {
+            corrida.find(qn("m:t")).text: corrida
+            for corrida in doc.element.body.iter(qn("m:r"))
+        }
+        assert corridas["384,16"].find(f"{qn('m:rPr')}/{qn('m:nor')}") is not None
+        assert corridas["="].find(f"{qn('m:rPr')}/{qn('m:sty')}").get(qn("m:val")) == "p"
+        assert corridas["z"].find(qn("m:rPr")) is None
+        fonte = corridas["z"].find(f"{qn('w:rPr')}/{qn('w:rFonts')}")
+        assert fonte.get(qn("w:ascii")) == "Cambria Math"
+
+    def test_o_teto_escreve_os_colchetes_dele(self, documento, tmp_path):
+        from docx.oxml.ns import qn
+
+        from flatcap.formulas import Equacao, formula, teto
+
+        _, plano = documento()
+        doc = _com_formulas(plano, tmp_path, Equacao(formula(teto("348,89"))))
+        (propriedades,) = doc.element.body.findall(f".//{qn('m:dPr')}")
+        assert propriedades.find(qn("m:begChr")).get(qn("m:val")) == "⌈"
+        assert propriedades.find(qn("m:endChr")).get(qn("m:val")) == "⌉"
+
+    def test_a_formula_da_linha_sai_como_texto(self, documento, tmp_path):
+        """
+        `com N = 1700 unidades`: o N em itálico e os espaços inquebráveis, e nenhuma
+        equação do Word, que esticaria a altura da linha. Os espaços em volta da fórmula
+        ficam.
+        """
+        from docx.oxml.ns import qn
+
+        from flatcap.formulas import ESPACO_DA_FORMULA, paragrafo
+
+        _, plano = documento()
+        doc = _com_formulas(plano, tmp_path, paragrafo("Com $N = 1700$ unidades, e $n_0$."))
+        escrito = next(p for p in doc.paragraphs if p.text.startswith("Com "))
+        espaco = ESPACO_DA_FORMULA
+        assert escrito.text == f"Com N{espaco}={espaco}1700 unidades, e n0."
+        assert not escrito._p.findall(f".//{qn('m:oMath')}")
+        italicos = [corrida.text for corrida in escrito.runs if corrida.italic]
+        assert italicos == ["N", "n"]
+        (indice,) = [corrida for corrida in escrito.runs if corrida.font.subscript]
+        assert indice.text == "0" and not indice.italic
+        assert not any(corrida.font.superscript for corrida in escrito.runs)
+
+    def test_a_formula_da_linha_com_fracao_e_equacao(self, documento, tmp_path):
+        from docx.oxml.ns import qn
+
+        from flatcap.formulas import Paragrafo, formula, fracao
+
+        _, plano = documento()
+        doc = _com_formulas(
+            plano, tmp_path, Paragrafo(("vale ", formula(fracao("1", "2")), " da amostra"))
+        )
+        escrito = next(p for p in doc.paragraphs if p.text.startswith("vale "))
+        assert escrito._p.findall(f".//{qn('m:oMath')}")
+        assert not escrito._p.findall(f".//{qn('m:oMathPara')}")
+        assert escrito.text == "vale  da amostra"  # a equação não entra no `text`
+
+    def test_a_frase_e_a_legenda_presas_ao_que_explicam(self, documento, tmp_path):
+        """A frase que apresenta a fórmula fica presa a ela, com metade do respiro; a
+        legenda do «Onde:», à esquerda, colada e presa a si mesma."""
+        from flatcap.formulas import Equacao, paragrafo
+
+        _, plano = documento()
+        doc = _com_formulas(
+            plano,
+            tmp_path,
+            paragrafo("Primeiro, calculou-se:"),
+            Equacao(_n0()),
+            paragrafo("Onde:", junto=True),
+            paragrafo("$z$ = o z;", junto=True),
+            paragrafo("$e$ = a margem.", junto=True),
+            paragrafo("Arredondado para cima, 385."),
+        )
+        por_texto = {p.text: p for p in doc.paragraphs if p.text}
+        apresenta = por_texto["Primeiro, calculou-se:"].paragraph_format
+        assert apresenta.keep_with_next is True
+        assert apresenta.space_after == Pt(4)
+        onde = por_texto["Onde:"]
+        assert onde.paragraph_format.keep_with_next is True
+        assert onde.alignment == 0  # à esquerda
+        primeira, ultima = por_texto["z = o z;"], por_texto["e = a margem."]
+        assert primeira.paragraph_format.space_after == Pt(1)
+        assert primeira.paragraph_format.keep_with_next is True
+        assert ultima.paragraph_format.space_after == Pt(8)
+        assert not ultima.paragraph_format.keep_with_next
+        assert por_texto["Arredondado para cima, 385."].alignment == 3  # justificado
+
+    def test_o_texto_da_metodologia_das_analises_nao_muda(self, documento):
+        """O relatório das análises não tem fórmula nenhuma."""
+        from docx.oxml.ns import qn
+
+        doc, _ = documento()
+        assert not doc.element.body.findall(f".//{qn('m:oMath')}")
+
+
+class TestSecaoDaPrimeiraPagina:
+    def test_sem_titulo_e_sem_quebra(self, documento, tmp_path):
+        """A tabela da amostra continua a primeira página: a legenda dela já diz o que
+        ela é."""
+        from dataclasses import replace
+
+        _, plano = documento()
+        primeira = replace(plano.secoes[0], na_primeira_pagina=True)
+        doc = _com_formulas(
+            plano, tmp_path, *plano.relatorio.metodologia, secoes=(primeira,)
+        )
+        assert primeira.rotulo not in _textos(doc)
+        assert _quebras(doc) == []
+        assert any(texto.startswith("Tabela 1. ") for texto in _textos(doc))
+
+    def test_o_fim_encolhe_so_no_documento_da_primeira_pagina(self, documento, tmp_path):
+        """O parágrafo vazio depois da última tabela encolhe a um ponto, para não abrir
+        uma segunda página em branco — e só no documento que termina nela."""
+        from dataclasses import replace
+
+        doc, plano = documento()
+        assert doc.paragraphs[-1].paragraph_format.line_spacing is None
+
+        primeira = replace(plano.secoes[0], na_primeira_pagina=True, figuras=())
+        doc = _com_formulas(
+            plano, tmp_path, *plano.relatorio.metodologia, secoes=(primeira,)
+        )
+        ultimo = doc.paragraphs[-1]
+        assert ultimo.text == ""
+        assert ultimo.paragraph_format.line_spacing == Pt(1)
+        assert ultimo.paragraph_format.space_after == Pt(0)
+
+    def test_o_relatorio_das_analises_nao_usa(self, documento):
+        _, plano = documento()
+        assert not any(secao.na_primeira_pagina for secao in plano.secoes)
+
+
 # ── O contrato com o template ───────────────────────────────────────────────
 
 
