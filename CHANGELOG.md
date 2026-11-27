@@ -7,6 +7,12 @@ com as decisões e os defeitos que elas evitam — está no docstring de
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/), e as versões, o
 [versionamento semântico](https://semver.org/lang/pt-BR/).
 
+## [1.24.7] — o tamanho em verde
+
+### Mudado
+- No relatório da amostra, a última linha da tabela — o tamanho da amostra — sai no verde
+  da linha `Total` das tabelas das análises, em negrito.
+
 ## [1.24.6] — a conta na primeira página
 
 ### Mudado
