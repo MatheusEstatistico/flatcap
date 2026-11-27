@@ -1034,6 +1034,15 @@ Word exige depois da tabela encolhe a um ponto, para não abrir uma segunda pág
 **O lado das análises não muda.** A metodologia do `Relatorio` passa a aceitar os blocos com
 fórmula, mas o relatório das análises continua só com texto; o `na_primeira_pagina` e o
 parágrafo final encolhido são só do documento que termina na tabela da amostra.
+
+## 1.24.7 — o tamanho em verde
+
+**A última linha da tabela da amostra, o tamanho da amostra, sai no verde do FlatCap** — o
+`FUNDO_TOTAL` da linha `Total` das tabelas das análises, com o texto em preto e em negrito.
+É a resposta do documento, e é onde o olho deve parar. O destaque da linha `Total` é lido do
+rótulo da célula; o desta é dito pelo relatório da amostra, que sabe que a resposta é a
+última linha: um campo novo da `TabelaLida`, `ultima_em_destaque`. Ele não vem do `.csv`
+nem do manifesto, e nas outras tabelas fica desligado — o relatório das análises não muda.
 """
 
-__version__ = "1.24.6"
+__version__ = "1.24.7"
