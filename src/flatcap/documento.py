@@ -177,6 +177,10 @@ TINTA_LINHA = "0B0B0B"  # as réguas da tabela, na mesma tinta do texto
 # ela é `Q3`, e a banda pintaria o desvio-padrão de verde. O destaque depende do
 # **conteúdo** da célula, e conteúdo é justamente o que o estilo não enxerga.
 #
+# A outra linha que leva este verde é a última da tabela da amostra, o tamanho da
+# amostra (`TabelaLida.ultima_em_destaque`): ali o destaque é dito pelo relatório da
+# amostra, que sabe que a resposta é a última linha, e não lido do rótulo.
+#
 # O texto por cima é escrito em `TINTA`, e isso também precisa ser dito. Sem cor
 # explícita o Word usa a cor «automática», que ele inverte para branco sobre
 # fundo escuro — e branco sobre este verde dá contraste 3,4:1, abaixo dos 4,5:1
@@ -805,7 +809,9 @@ def _escrever_tabela(
     recuadas = frozenset(tabela.recuo)
     for indice, valores in enumerate(tabela.linhas):
         linha = quadro.add_row()
-        destaque = bool(valores) and valores[0].strip() == _ROTULO_TOTAL
+        destaque = (bool(valores) and valores[0].strip() == _ROTULO_TOTAL) or (
+            tabela.ultima_em_destaque and indice == tabela.total - 1
+        )
         for posicao in range(tabela.largura):
             valor = valores[posicao] if posicao < len(valores) else ""
             if destaque:

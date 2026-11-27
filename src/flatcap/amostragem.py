@@ -107,7 +107,7 @@ import re
 import sys
 import unicodedata
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
@@ -1724,11 +1724,16 @@ def montar_relatorio(
     depois deles, no lugar da metodologia do relatório das análises. A tabela fecha a
     página, logo abaixo da conta, sem título e sem quebra (`Secao.na_primeira_pagina`):
     a legenda dela já diz o que ela é. É lida do texto do `tamanho.csv` pelo
-    `tabela_do_texto`, a mesma função que lê o arquivo do disco.
+    `tabela_do_texto`, a mesma função que lê o arquivo do disco, e a última linha, o
+    tamanho da amostra, sai no verde da linha `Total` (`ultima_em_destaque`).
     """
     ficha = amostragem.ficha
     tabela = amostragem.tabela
-    lida = tabela_do_texto(tabela.texto(), tabela.especie, tabela.titulo, pasta / tabela.nome)
+    # A última linha, o tamanho da amostra, sai no verde da linha `Total`: é a resposta.
+    lida = replace(
+        tabela_do_texto(tabela.texto(), tabela.especie, tabela.titulo, pasta / tabela.nome),
+        ultima_em_destaque=True,
+    )
     secao = Secao(
         variavel="",
         rotulo=ROTULO_DO_TAMANHO,

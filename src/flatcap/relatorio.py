@@ -294,6 +294,10 @@ class TabelaLida:
     `recuo`, `rodape` e `deitada` vêm do artefato do manifesto, e não do `.csv`:
     são a apresentação da Tabela 1 — as linhas recuadas, o que sai impresso embaixo
     dela e a página em paisagem. Nas outras tabelas ficam vazios.
+
+    `ultima_em_destaque` pinta a última linha com o verde da linha `Total`, qualquer
+    que seja o rótulo dela. É a tabela do relatório da amostra, em que a última linha
+    — o tamanho da amostra — é a resposta.
     """
 
     arquivo: str
@@ -305,6 +309,7 @@ class TabelaLida:
     recuo: tuple[int, ...] = ()
     rodape: tuple[str, ...] = ()
     deitada: bool = False
+    ultima_em_destaque: bool = False
 
     @property
     def largura(self) -> int:

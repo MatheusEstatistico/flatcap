@@ -539,7 +539,31 @@ class TestSaidas:
 
         pasta, plano, _ = rodada
         do_disco = ler_tabela(pasta / ARQUIVO_TAMANHO, "tamanho", ROTULO_DO_TAMANHO)
-        assert plano.relatorio.secoes[0].tabelas[0] == do_disco
+        assert plano.relatorio.secoes[0].tabelas[0] == replace(
+            do_disco, ultima_em_destaque=True
+        )
+
+    def test_o_tamanho_da_amostra_sai_em_verde(self, rodada):
+        """A última linha, a resposta, no verde e no negrito da linha `Total`; as outras,
+        sem fundo."""
+        from flatcap.documento import FUNDO_TOTAL
+
+        _, plano, _ = rodada
+        (tabela,) = Document(str(plano.destino)).tables
+
+        def fundos(linha):
+            return {
+                sombra.get(qn("w:fill"))
+                for celula in linha.cells
+                for sombra in celula._tc.iter(qn("w:shd"))
+            }
+
+        *demais, ultima = tabela.rows
+        assert ultima.cells[0].text == ROTULO_DO_TAMANHO
+        assert fundos(ultima) == {FUNDO_TOTAL}
+        assert all(corrida.bold for celula in ultima.cells
+                   for corrida in celula.paragraphs[0].runs)
+        assert all(fundos(linha) == set() for linha in demais)
 
     def test_os_metadados_dizem_sem_banco(self, rodada):
         _, plano, _ = rodada
