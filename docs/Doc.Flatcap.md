@@ -1,6 +1,6 @@
 # FlatCap — a documentação
 
-> **Versão 1.24.6.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
+> **Versão 1.24.7.** Este documento tem duas partes. A **Parte I** é escrita à mão: o que o
 > FlatCap é, como se instala, configura e usa, como as pastas se organizam, como o código se
 > divide, e como se testa e se fecha uma versão. A **Parte II** é gerada a partir do código:
 > todo docstring e todo comentário de `src/flatcap/`, módulo por módulo, na ordem do arquivo.
@@ -555,7 +555,8 @@ avisa. O z é o `qnorm(1 − α/2)` do R. Com N = 1200, 95%, 5 pontos, 50% e per
 O relatório da amostra traz tudo na primeira página: depois da finalidade e dos objetivos, o
 texto de metodologia com a conta — a fórmula do n₀ com as letras e com os números do projeto,
 a correção com o N do `desenho.yaml`, a legenda das letras e o tamanho, com a perda quando há
-—, para o cliente levar para o artigo, e a tabela logo abaixo, sem título e sem quebra. As
+—, para o cliente levar para o artigo, e a tabela logo abaixo, sem título e sem quebra,
+com o tamanho da amostra, a última linha, no verde da linha `Total`. As
 fórmulas em destaque são equações do Word, editáveis. **A conta escrita fecha na mão**: ela é
 feita com o z como está escrito — o 1,96, e não o 1,959964 —, e por isso o n₀ é 384,16, e não
 384,15; e ela chega sempre ao mesmo tamanho da conta exata — quando o z da tabela da normal
@@ -651,7 +652,7 @@ Uma versão é o número em `src/flatcap/__init__.py` (`__version__`) — o **ú
 onde o código a lê: o `pyproject.toml` o lê de lá, e o `flatcap --version` o mostra. O FlatCap
 não publica pacotes: quem instala pelo repositório ([seção 2](#2-instalação)) recebe o que está
 no `main`, e o `uv tool upgrade flatcap` traz o que entrou depois. Desde a 1.24.0, cada versão
-tem uma etiqueta anotada no Git — `v1.24.6` — no merge commit do pull request que a fechou.
+tem uma etiqueta anotada no Git — `v1.24.7` — no merge commit do pull request que a fechou.
 
 Toda mudança entra no `main` por um pull request, de uma branch com o nome dela. Para fechar
 uma versão:
@@ -666,8 +667,8 @@ uma versão:
    dela — e envie-a:
 
    ```bash
-   git tag -a v1.24.6 <merge commit> -m "1.24.6 — a conta na primeira página"
-   git push origin v1.24.6
+   git tag -a v1.24.7 <merge commit> -m "1.24.7 — o tamanho em verde"
+   git push origin v1.24.7
    ```
 
 **E um executável, sem Python?** Dá para empacotar o FlatCap com o PyInstaller num executável
@@ -787,7 +788,7 @@ Tudo o que o código de `src/flatcap/` diz de si mesmo: o docstring de cada mód
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1039 linhas.*
+*1048 linhas.*
 
 FlatCap — o pacote é organizado em camadas finas, cada uma com uma responsabilidade:
 
@@ -1822,6 +1823,15 @@ Word exige depois da tabela encolhe a um ponto, para não abrir uma segunda pág
 **O lado das análises não muda.** A metodologia do `Relatorio` passa a aceitar os blocos com
 fórmula, mas o relatório das análises continua só com texto; o `na_primeira_pagina` e o
 parágrafo final encolhido são só do documento que termina na tabela da amostra.
+
+### 1.24.7 — o tamanho em verde
+
+**A última linha da tabela da amostra, o tamanho da amostra, sai no verde do FlatCap** — o
+`FUNDO_TOTAL` da linha `Total` das tabelas das análises, com o texto em preto e em negrito.
+É a resposta do documento, e é onde o olho deve parar. O destaque da linha `Total` é lido do
+rótulo da célula; o desta é dito pelo relatório da amostra, que sabe que a resposta é a
+última linha: um campo novo da `TabelaLida`, `ultima_em_destaque`. Ele não vem do `.csv`
+nem do manifesto, e nas outras tabelas fica desligado — o relatório das análises não muda.
 
 ## `flatcap/config.py`
 
@@ -16700,7 +16710,7 @@ Depois do primeiro «pelo teste», os outros ficam «pelo de Mann-Whitney».
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1650 linhas.*
+*1655 linhas.*
 
 O relatório — o passo final do fluxo, e o que a Fase 6 automatiza.
 
@@ -16936,23 +16946,27 @@ fluxo, exatamente o arredondamento que a Fase 5 já resolveu.
 são a apresentação da Tabela 1 — as linhas recuadas, o que sai impresso embaixo
 dela e a página em paisagem. Nas outras tabelas ficam vazios.
 
+`ultima_em_destaque` pinta a última linha com o verde da linha `Total`, qualquer
+que seja o rótulo dela. É a tabela do relatório da amostra, em que a última linha
+— o tamanho da amostra — é a resposta.
+
 #### `def largura(self)`
 
-*linha 310*
+*linha 315*
 
 #### `def total(self)`
 
-*linha 314*
+*linha 319*
 
 ### `class Figura`
 
-*linha 319*
+*linha 324*
 
 Um `.png` da descritiva, com o caminho já conferido.
 
 ### `class Secao`
 
-*linha 331*
+*linha 336*
 
 Uma variável no documento: o que ela mostra, na ordem em que mostra.
 
@@ -16969,11 +16983,11 @@ acima dela; o relatório das análises não a usa.
 
 #### `def preenchidos(self)`
 
-*linha 358*
+*linha 363*
 
 ### `class Rodada`
 
-*linha 363*
+*linha 368*
 
 Uma rodada de análise encontrada em `3. Análises/`, já lida.
 
@@ -16985,7 +16999,7 @@ manifesto antigo não declara a análise dele.
 
 ### `class ForaDoRelatorio`
 
-*linha 381*
+*linha 386*
 
 Uma variável do dicionário que não gerou nada, e por quê.
 
@@ -16995,25 +17009,25 @@ aparece no terminal pelo mesmo motivo da Fase 5: "não está no relatório" e
 
 ### `class Relatorio`
 
-*linha 396*
+*linha 401*
 
 O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
-*linha 402*
+*linha 407*
 
 > O manifesto que responde pelo documento quando a pergunta é uma só — a
 > data da rodada nas propriedades do `.docx`, o banco no cabeçalho do
 > terminal. É o da descritiva quando ela existe; ver `_manifesto_principal`.
 > As rodadas todas estão em `rodadas`.
 
-*linha 410*
+*linha 415*
 
 > A metodologia da primeira página: os parágrafos e o subtítulo acima deles. Fora
 > do `texto` porque o subtítulo é um título, e não texto corrido; vazios, a
 > página fecha nos objetivos, como antes da 1.16.0. O das análises é texto; o da
 > amostra traz a conta, com parágrafos que têm fórmula e fórmulas em destaque.
 
-*linha 419*
+*linha 424*
 
 > Sem `type: ignore`: o campo tem default e o default é `None`, então o tipo
 > é `datetime | None`. Declarar `datetime` e atribuir `None` era pedir ao
@@ -17021,17 +17035,17 @@ O documento inteiro, decidido. É daqui que saem o `.docx` e o terminal.
 
 #### `def raiz(self)`
 
-*linha 426*
+*linha 431*
 
 #### `def analises(self)`
 
-*linha 430*
+*linha 435*
 
 As análises que entraram no documento, na ordem em que entraram.
 
 #### `def subtitulo(self)`
 
-*linha 437*
+*linha 442*
 
 `00742 - José Antônio de Sá`, embaixo do título.
 
@@ -17046,15 +17060,15 @@ sai só com a matrícula, em vez de sair com um separador solto no fim.
 
 #### `def tabelas(self)`
 
-*linha 454*
+*linha 459*
 
 #### `def figuras(self)`
 
-*linha 458*
+*linha 463*
 
 ### `class PlanoRelatorio`
 
-*linha 463*
+*linha 468*
 
 Tudo o que o `relatorio` faria, decidido e ainda não escrito.
 
@@ -17062,40 +17076,40 @@ Imutável como os planos das outras fases, e pela mesma razão: entre a
 simulação e a execução ninguém altera um caminho em trânsito. A árvore que
 aparece no terminal é lida deste objeto.
 
-*linha 476*
+*linha 481*
 
 > A ficha passa para `pronto` depois do documento? Falso quando ela já está: um
 > arquivo que não muda não é reescrito.
 
 #### `def raiz(self)`
 
-*linha 481*
+*linha 486*
 
 #### `def secoes(self)`
 
-*linha 485*
+*linha 490*
 
 #### `def total_tabelas(self)`
 
-*linha 489*
+*linha 494*
 
 #### `def total_figuras(self)`
 
-*linha 493*
+*linha 498*
 
 ### `class ResultadoRelatorio`
 
-*linha 498*
+*linha 503*
 
 O que a execução de fato escreveu.
 
-- *linha 506* — `status_trocado: bool = False` — a ficha passou para `pronto` nesta execução
+- *linha 511* — `status_trocado: bool = False` — a ficha passou para `pronto` nesta execução
 
 ### Casos de uso
 
 ### `def preparar_relatorio(raiz, template, conferir, agora, titulo)`
 
-*linha 512*
+*linha 517*
 
 Lê as rodadas de análise da pasta e monta o documento inteiro. Não escreve nada.
 
@@ -17118,26 +17132,26 @@ Raises:
     TabelaIlegivelError: um `.csv` da rodada não abre.
     ModeloAusenteError: o `--template` indicado não existe.
 
-*linha 570*
+*linha 575*
 
 > Análise combinada na reunião e ainda não rodada. Aviso de terminal, e não
 > `Alerta`: quem precisa saber é você, agora, antes de enviar — e o que está
 > escrito no documento continua verdadeiro sem ela. Pôr isto dentro do
 > `.docx` seria contar ao cliente uma combinação que é sua com ele.
 
-*linha 582*
+*linha 587*
 
 > Por último de propósito: os quatro alertas acima falam da validade dos
 > números, e este fala do acabamento do documento. Um alerta de dado errado
 > não deve ficar abaixo de um alerta de texto por preencher.
 
-*linha 589*
+*linha 594*
 
 > A metodologia sai das rodadas, e não da ficha: o que ela afirma é o que os
 > manifestos registraram. Análise com rodada e sem frase é aviso de terminal —
 > o parágrafo sai sem ela, e quem precisa saber disso antes de enviar é você.
 
-*linha 607*
+*linha 612*
 
 > O texto entra no `Relatorio` como dado, e o `documento.py` não lê
 > constante nenhuma. É o que mantém a divisão da fase — e é o que fez
@@ -17147,7 +17161,7 @@ Raises:
 
 ### `def executar_relatorio(plano)`
 
-*linha 630*
+*linha 635*
 
 Escreve o documento no disco. Não decide mais nada.
 
@@ -17168,7 +17182,7 @@ O `documento.py` entra aqui dentro, e não no topo do arquivo, pelo mesmo
 motivo que o `matplotlib` entra dentro do `executar_descritiva`: a simulação
 não desenha documento nenhum e não deve pagar pelo `python-docx`.
 
-*linha 683*
+*linha 688*
 
 > `Exception`, como no `executar_*` de cada análise, e não só `OSError` e
 > `RelatorioError`: até a 1.13.0 um `.png` ilegível estourava o `python-docx`
@@ -17177,7 +17191,7 @@ não desenha documento nenhum e não deve pagar pelo `python-docx`.
 
 ### `def _marcar_pronto(raiz, avisos, passos)`
 
-*linha 699*
+*linha 704*
 
 Passa a ficha para `pronto`, depois de o documento estar no disco. Devolve se
 passou.
@@ -17188,7 +17202,7 @@ simulação e a execução — vira aviso, com o que escrever à mão, e o relat
 É a regra do somente-leitura do `flatcap novo`: perder a marca é aceitável,
 perder o produto por causa dela não.
 
-*linha 712*
+*linha 717*
 
 > `newline=""` para o desfazer devolver o arquivo como estava, até o `\r\n` de
 > uma ficha editada no Windows.
@@ -17197,7 +17211,7 @@ perder o produto por causa dela não.
 
 ### `def nome_do_relatorio(matricula, quando)`
 
-*linha 731*
+*linha 736*
 
 Monta `Relatorio_00742_2026-09-20.docx`, como o roteiro pede.
 
@@ -17207,7 +17221,7 @@ caminho.
 
 ### `def relatorios_na_pasta(raiz)`
 
-*linha 744*
+*linha 749*
 
 Os relatórios que já estão na raiz do projeto, em ordem.
 
@@ -17216,11 +17230,11 @@ um desvio deliberado do apêndice A do roteiro, já registrado no `projeto.py`:
 o relatório é o produto que se entrega, e ele fica onde a mão alcança
 primeiro ao abrir a pasta.
 
-- *linha 763* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
+- *linha 768* — `and not arquivo.name.startswith("~$")` — o lixo que o Word deixa aberto
 
 ### `def _arquivamentos(raiz)`
 
-*linha 768*
+*linha 773*
 
 O que sai da raiz e vai para `2. Versões antigas/`.
 
@@ -17240,7 +17254,7 @@ dizer está na docstring, que é onde se diz.
 
 ### `def localizar_template(raiz, template)`
 
-*linha 801*
+*linha 806*
 
 Qual `.docx` empresta os estilos, e nesta ordem.
 
@@ -17269,7 +17283,7 @@ Pública desde a 1.15.0, com o apelido privado de antes: o relatório da amostra
 procura o modelo pelos mesmos degraus, e dois caminhos de busca é como um dos
 dois relatórios sai sem o logotipo.
 
-*linha 841*
+*linha 846*
 
 > O terceiro degrau só existe quando há um terceiro nível acima: numa raiz
 > de teste montada direto em `tmp_path`, `parent.parent` sairia da árvore.
@@ -17278,7 +17292,7 @@ dois relatórios sai sem o logotipo.
 
 ### `def _rodadas(raiz, ficha)`
 
-*linha 858*
+*linha 863*
 
 As rodadas de `3. Análises/`, na ordem do documento.
 
@@ -17298,7 +17312,7 @@ Raises:
 
 ### `def _ordenar(rodadas, analises_da_ficha)`
 
-*linha 906*
+*linha 911*
 
 A ordem das seções do documento: a ficha primeiro, o padrão depois.
 
@@ -17320,7 +17334,7 @@ documento, e não uma seção entre as outras.
 
 ### `def _secoes_do_documento(rodadas)`
 
-*linha 945*
+*linha 950*
 
 As seções de todas as rodadas, na ordem delas — e, depois da Tabela 1, a primeira
 seção das outras marcada para começar em página nova.
@@ -17331,7 +17345,7 @@ depois da primeira página quando não havia Tabela 1.
 
 ### `def _manifesto_principal(rodadas)`
 
-*linha 962*
+*linha 967*
 
 O manifesto que responde pelo documento quando a pergunta é uma só.
 
@@ -17344,7 +17358,7 @@ primeira rodada da ordem — que é a que o documento apresenta primeiro.
 
 ### `def _variaveis_de_fora(rodadas)`
 
-*linha 979*
+*linha 984*
 
 As variáveis do dicionário que **nenhuma** rodada descreveu.
 
@@ -17356,11 +17370,11 @@ aparece em rodada nenhuma.
 
 ### `def _mensagem_sem_rodada(raiz)`
 
-*linha 1006*
+*linha 1011*
 
 ### `def _analises_em_texto(analises)`
 
-*linha 1017*
+*linha 1022*
 
 `["descritiva", "normalidade"]` → «`descritiva` e `normalidade`».
 
@@ -17370,7 +17384,7 @@ manifesto é escrito por quem escreveu a análise.
 
 ### `def _secoes(pasta, manifesto)`
 
-*linha 1031*
+*linha 1036*
 
 Uma seção por variável do manifesto, na ordem dele.
 
@@ -17381,7 +17395,7 @@ reversível em um comando que não roda.
 
 ### `def ler_tabela(caminho, especie, titulo)`
 
-*linha 1087*
+*linha 1092*
 
 Lê um `.csv` de uma análise sem o `pandas` e sem converter valor nenhum.
 
@@ -17399,7 +17413,7 @@ que está no arquivo. Aqui o texto atravessa intacto.
 
 ### `def tabela_do_texto(texto, especie, titulo, caminho)`
 
-*linha 1117*
+*linha 1122*
 
 O miolo do `ler_tabela`: o texto de um `.csv` de análise, já lido, virando tabela.
 
@@ -17412,14 +17426,14 @@ tabela não têm como dizer números diferentes.
 O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM que o
 `manifesto.Tabela.texto` escreve é tirado aqui, como o `utf-8-sig` o tira na leitura.
 
-*linha 1135*
+*linha 1140*
 
 > Os comentários são só os do começo, como no `dicionario.csv`: depois do
 > cabeçalho das colunas, uma linha começada por `#` é uma categoria — o `#N/D`
 > que o Excel deixa numa célula com erro de fórmula. Até a 1.13.0 ela saía da
 > tabela do documento e virava nota, e o `Total` deixava de somar.
 
-*linha 1157*
+*linha 1162*
 
 > O primeiro comentário é o título do arquivo; o título do manifesto é o
 > mesmo texto e tem precedência, para que o documento e o índice não possam
@@ -17429,7 +17443,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `_MARCADOR`
 
-*linha 1181*
+*linha 1186*
 
 > O que ocupa o lugar de um campo que veio em branco.
 >
@@ -17445,7 +17459,7 @@ O `caminho` só dá o nome ao arquivo e às mensagens; nada é lido dele. O BOM 
 
 ### `def montar_abertura(ficha, texto_padrao)`
 
-*linha 1198*
+*linha 1203*
 
 Os parágrafos da primeira página: o texto fixo, a finalidade, os objetivos.
 
@@ -17466,7 +17480,7 @@ estiver escrito na constante hoje.
 
 ### `def _paragrafos(texto)`
 
-*linha 1230*
+*linha 1235*
 
 Cada quebra de linha do campo `notes` vira um parágrafo do documento.
 
@@ -17480,7 +17494,7 @@ linha aqui".
 
 ### `def conferir_texto(ficha)`
 
-*linha 1246*
+*linha 1251*
 
 Quais campos da primeira página vieram em branco.
 
@@ -17494,7 +17508,7 @@ abre com a mesma primeira página, e o campo em branco precisa do mesmo aviso l�
 
 ### `def _conferir_banco(raiz, ficha, rodadas, conferir)`
 
-*linha 1287*
+*linha 1292*
 
 As rodadas ainda descrevem a versão vigente do banco?
 
@@ -17517,11 +17531,11 @@ versões diferentes são dois — que é a informação que interessa, porque a�
 documento está misturando números de dois bancos e as análises que ele nomeia
 são as que precisam ser refeitas.
 
-- *linha 1353* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
+- *linha 1358* — `except OSError:` — pragma: no cover - o disco já foi lido várias vezes até aqui
 
 ### `def _conferir_dicionario(raiz, rodadas)`
 
-*linha 1391*
+*linha 1396*
 
 O `dicionario.csv` de hoje é o que dirigiu as rodadas?
 
@@ -17555,13 +17569,13 @@ Perguntar a pergunta a todas as rodadas faria toda categórica do dicionário
 ser dada como «entrou depois» em um projeto que só rodou a normalidade —
 um alerta dentro do documento do cliente, sobre nada.
 
-- *linha 1429* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
+- *linha 1434* — `except Exception as erro:` — noqa: BLE001 - ver a justificativa acima
 
-*linha 1451*
+*linha 1456*
 
 > Quais colunas do banco cada rodada tocou, e qual rodada tocou primeiro.
 
-*linha 1457*
+*linha 1462*
 
 > Os itens que **são** uma variável. O tipo, o rótulo, as faixas e as categorias só existem
 > para eles: uma seção que fala de doze colunas não tem um tipo do
@@ -17569,7 +17583,7 @@ um alerta dentro do documento do cliente, sobre nada.
 
 ### `def _faixas_mudaram(faixas, detalhes)`
 
-*linha 1535*
+*linha 1540*
 
 Compara os cortes do dicionário com os que a rodada usou.
 
@@ -17577,11 +17591,11 @@ O manifesto guarda `origem` (`dicionario` ou `quartis`) e os `cortes` já
 arredondados. As três formas de divergir são: faixas preenchidas depois de a
 rodada ter usado quartis, faixas apagadas, e cortes diferentes.
 
-- *linha 1559* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
+- *linha 1564* — `except ValueError:` — pragma: no cover - o dicionario.py já validou na leitura
 
 ### `def _categorias_mudaram(linha, detalhes)`
 
-*linha 1570*
+*linha 1575*
 
 Compara o `categorias_ordem` do dicionário com o que a rodada usou.
 
@@ -17594,13 +17608,13 @@ antes de a chave existir não é comparado: ausência ali não é «sem rótulo�
 
 ### `def _mensagem_ilegivel(caminho, erro)`
 
-*linha 1594*
+*linha 1599*
 
 ### `def _acao_do_historico(plano, status_trocado)`
 
-*linha 1605*
+*linha 1610*
 
-*linha 1622*
+*linha 1627*
 
 > A mesma frase do `flatcap status <id> --pronto`: quem lê o histórico procura uma.
 
@@ -17608,7 +17622,7 @@ antes de a chave existir não é comparado: ausência ali não é «sem rótulo�
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1860 linhas.*
+*1866 linhas.*
 
 O `.docx` do relatório.
 
@@ -17764,6 +17778,10 @@ fixo.
 > ela é `Q3`, e a banda pintaria o desvio-padrão de verde. O destaque depende do
 > **conteúdo** da célula, e conteúdo é justamente o que o estilo não enxerga.
 >
+> A outra linha que leva este verde é a última da tabela da amostra, o tamanho da
+> amostra (`TabelaLida.ultima_em_destaque`): ali o destaque é dito pelo relatório da
+> amostra, que sabe que a resposta é a última linha, e não lido do rótulo.
+>
 > O texto por cima é escrito em `TINTA`, e isso também precisa ser dito. Sem cor
 > explícita o Word usa a cor «automática», que ele inverte para branco sobre
 > fundo escuro — e branco sobre este verde dá contraste 3,4:1, abaixo dos 4,5:1
@@ -17771,23 +17789,23 @@ fixo.
 
 ### `_REGUA_GROSSA`
 
-*linha 186*
+*linha 190*
 
 > As três linhas da tabela: topo, sob o cabeçalho, base. Nenhuma vertical.
 
-- *linha 187* — `_REGUA_GROSSA = 12` — oitavos de ponto — topo e base
+- *linha 191* — `_REGUA_GROSSA = 12` — oitavos de ponto — topo e base
 
-- *linha 188* — `_REGUA_FINA = 4` — sob o cabeçalho
+- *linha 192* — `_REGUA_FINA = 4` — sob o cabeçalho
 
 ### `_RECUO_CM`
 
-*linha 195*
+*linha 199*
 
 > O recuo das categorias debaixo da variável, na Tabela 1.
 
 ### `FONTE`
 
-*linha 200*
+*linha 204*
 
 > A fonte do documento padrão. Escrita explicitamente, e não herdada do tema do
 > `.docx`, porque o tema é o que muda quando o arquivo passa por outra versão do
@@ -17800,7 +17818,7 @@ fixo.
 
 ### `CABECALHO_PADRAO`
 
-*linha 210*
+*linha 214*
 
 > O que vai escrito no cabeçalho do modelo padrão. Uma linha, discreta, no canto
 > direito — é onde a identidade institucional entra sem custar uma página inteira.
@@ -17808,7 +17826,7 @@ fixo.
 
 ### `_LINHAS_PARA_MANTER_JUNTA`
 
-*linha 215*
+*linha 219*
 
 > Até este tamanho, a tabela não se parte na quebra de página. Acima dele, ela
 > se parte e o cabeçalho se repete — uma distribuição no tempo de dois anos tem
@@ -17817,7 +17835,7 @@ fixo.
 
 ### `_FATIA_DO_ROTULO`
 
-*linha 221*
+*linha 225*
 
 > A largura da primeira coluna das tabelas, em fração da mancha. A primeira
 > coluna é rótulo — `(abaixo da primeira faixa)`, `Ensino fundamental` — e as
@@ -17826,21 +17844,21 @@ fixo.
 
 ### `_EMU_POR_CM`
 
-*linha 228*
+*linha 232*
 
 > A repartição pelo conteúdo, das tabelas com mais de uma coluna de texto. São
 > estimativas para Arial 9,5 — a fonte das tabelas —, com folga: um número que
 > quebra no meio é pior do que uma coluna um pouco mais larga do que precisava.
 
-- *linha 233* — `_RESPIRO_CM = 0.4` — as margens da célula, 0,12 de cada lado, e um fio de ar
+- *linha 237* — `_RESPIRO_CM = 0.4` — as margens da célula, 0,12 de cada lado, e um fio de ar
 
-- *linha 234* — `_MINIMO_NUMERICO_CM = 1.2` — para a coluna `n` não virar um fio
+- *linha 238* — `_MINIMO_NUMERICO_CM = 1.2` — para a coluna `n` não virar um fio
 
-- *linha 235* — `_TEXTO_NATURAL = 40` — caracteres: acima disto, a coluna de texto aceita quebrar
+- *linha 239* — `_TEXTO_NATURAL = 40` — caracteres: acima disto, a coluna de texto aceita quebrar
 
 ### `_FOLGA_DA_PALAVRA`
 
-*linha 237*
+*linha 241*
 
 > Um caractere a mais para a palavra mais longa de uma coluna de texto. Os 0,19 cm
 > são a média, e palavra com `m`, `w` ou maiúscula passa dela: `Spearman`, na coluna
@@ -17850,7 +17868,7 @@ fixo.
 
 ### `class Estilos`
 
-*linha 246*
+*linha 250*
 
 Os estilos que este modelo oferece, já resolvidos.
 
@@ -17863,7 +17881,7 @@ em um estilo e metade em outro.
 
 ### `def escrever(relatorio, caminho, template)`
 
-*linha 267*
+*linha 271*
 
 Escreve o `.docx` do relatório. Devolve o caminho escrito.
 
@@ -17874,7 +17892,7 @@ Args:
     template: o `.docx` que empresta estilos, cabeçalho, rodapé e capa.
         Sem ele, o documento sai com os estilos padrão desta função.
 
-*linha 307*
+*linha 311*
 
 > A primeira página já tem conteúdo? É disso que depende a quebra antes da
 > primeira seção, mais abaixo. O texto de abertura responde quase sempre; a
@@ -17882,21 +17900,21 @@ Args:
 > página com um parágrafo ou uma caixa amarela dentro não é uma página em
 > branco. As duas funções são chamadas antes do `or`: as duas escrevem.
 
-- *linha 318* — `deitada = False` — a seção do Word aberta agora está em paisagem
+- *linha 322* — `deitada = False` — a seção do Word aberta agora está em paisagem
 
-*linha 321*
+*linha 325*
 
 > A tabela deitada abre uma seção do Word em paisagem antes da seção do
 > relatório, e a primeira seção que não começa com uma tabela deitada volta ao
 > retrato. A quebra de seção já abre a página.
 
-*linha 330*
+*linha 334*
 
 > A seção que continua a primeira página — a tabela do relatório da amostra,
 > logo depois da conta escrita — não tem título nem quebra: a legenda da tabela
 > já diz o que ela é, e o título repetiria a legenda.
 
-*linha 346*
+*linha 350*
 
 > A primeira variável começa em página nova, para que a abertura fique
 > sozinha na primeira, e a primeira depois da Tabela 1 também. É
@@ -17908,7 +17926,7 @@ Args:
 
 ### `def _encolher_o_fim(documento)`
 
-*linha 377*
+*linha 381*
 
 O parágrafo vazio do fim do documento, encolhido a um ponto.
 
@@ -17921,7 +17939,7 @@ nada muda.
 
 ### `def _abrir(template)`
 
-*linha 405*
+*linha 409*
 
 Abre o modelo, ou monta o documento padrão quando não há modelo.
 
@@ -17930,11 +17948,11 @@ vira exceção crua: o `python-docx` estoura com `PackageNotFoundError`, que
 não diz nada a quem escolheu o arquivo. Vira `RelatorioError`, com o que
 fazer.
 
-- *linha 421* — `except Exception as erro:` — noqa: BLE001 - o docx estoura de várias formas
+- *linha 425* — `except Exception as erro:` — noqa: BLE001 - o docx estoura de várias formas
 
 ### `def _documento_padrao()`
 
-*linha 433*
+*linha 437*
 
 O documento de quem ainda não tem modelo: A4, margens de 2,5 cm, rodapé com o
 número da página.
@@ -17952,7 +17970,7 @@ documento do primeiro dia sairia com uma cara que ninguém escolheu.
 
 ### `def _texto_padrao(documento, relatorio, estilos)`
 
-*linha 470*
+*linha 474*
 
 Os parágrafos fixos que abrem todo relatório. Devolve se escreveu algum.
 
@@ -17978,7 +17996,7 @@ cima que um dia decida não imprimir marcador nenhum.
 
 ### `def _metodologia(documento, relatorio, estilos)`
 
-*linha 503*
+*linha 507*
 
 O subtítulo da metodologia e o parágrafo dela. Devolve se escreveu algum.
 
@@ -17995,18 +18013,18 @@ fórmulas em destaque, que saem como equações do Word (`_equacao`). A frase qu
 apresenta uma fórmula em destaque fica presa a ela, e a legenda do «Onde:», presa a
 si mesma: nenhuma das duas termina uma página separada do que explica.
 
-*linha 550*
+*linha 554*
 
 > A frase que apresenta a fórmula termina em dois-pontos, e a fórmula
 > continua a frase: o respiro entre as duas é metade do de um parágrafo.
 
 ### `def _tem_conteudo(bloco)`
 
-*linha 558*
+*linha 562*
 
 ### `def _corrido(documento, texto, estilos)`
 
-*linha 562*
+*linha 566*
 
 Um parágrafo de texto corrido: o estilo do corpo, justificado, 8 pt depois.
 
@@ -18014,7 +18032,7 @@ Um parágrafo de texto corrido: o estilo do corpo, justificado, 8 pt depois.
 
 ### `FONTE_DA_FORMULA`
 
-*linha 575*
+*linha 579*
 
 > A fonte das equações do Word. Fica fora do modelo de propósito: é a que o próprio Word
 > usa nas equações, e a fonte do corpo — a Arial — não tem os sinais matemáticos com o
@@ -18022,7 +18040,7 @@ Um parágrafo de texto corrido: o estilo do corpo, justificado, 8 pt depois.
 
 ### `def _corrido_com_formulas(documento, paragrafo, estilos, colado)`
 
-*linha 581*
+*linha 585*
 
 Um parágrafo de texto corrido com fórmula no meio da linha — `com N = 1700 unidades`.
 
@@ -18032,19 +18050,19 @@ esticaria a altura da linha (ver o `formulas.py`); a que tem fração sai como e
 na linha. A linha de uma lista (`junto`) sai à esquerda, e `colado` tira o respiro
 de baixo, quando a linha seguinte é da mesma lista.
 
-*linha 605*
+*linha 609*
 
 > Um só dos dois: no Word, índice e expoente são o mesmo atributo, e
 > desligar um apaga o outro.
 
-*linha 612*
+*linha 616*
 
 > O texto de dentro guarda os espaços: são eles que separam a fórmula das
 > palavras em volta. Só as pontas do parágrafo se aparam, como no `_corrido`.
 
 ### `def _equacao(documento, equacao, estilos)`
 
-*linha 628*
+*linha 632*
 
 Uma fórmula em destaque: um parágrafo só dela, com a equação do Word centralizada.
 
@@ -18054,36 +18072,36 @@ na altura de uma linha de texto.
 
 ### `def _equacao_na_linha(formula)`
 
-*linha 651*
+*linha 655*
 
 A fórmula como equação do Word, o `m:oMath`.
 
 ### `def _encher(pai, formula)`
 
-*linha 658*
+*linha 662*
 
 ### `def _omml(elemento)`
 
-*linha 663*
+*linha 667*
 
 Uma peça da fórmula no XML de equação do Word (OMML). Cada peça tem a sua estrutura
 lá — a fração (`m:f`), a potência (`m:sSup`), o índice (`m:sSub`), os parênteses
 (`m:d`) —, e é ela que faz o Word desenhar a fração empilhada e o expoente no alto.
 
-*linha 692*
+*linha 696*
 
 > Os parênteses são o padrão do Word, e só os outros se escrevem.
 
 ### `_TEM_ALGARISMO`
 
-*linha 702*
+*linha 706*
 
 > O número sai como texto comum dentro da equação, e não como símbolo matemático: como
 > símbolo, a vírgula decimal é pontuação, e o Word põe um espaço depois dela — `384, 15`.
 
 ### `def _corrida(texto, em_pe)`
 
-*linha 707*
+*linha 711*
 
 Um trecho da equação, o `m:r`. A letra sai em itálico, que é o padrão da equação do
 Word; o que vem `em_pe` — operador e palavra — leva o estilo «normal» (`m:sty p`), e o
@@ -18091,11 +18109,11 @@ número, o texto comum (`m:nor`).
 
 ### `def _filho(pai, etiqueta)`
 
-*linha 730*
+*linha 734*
 
 ### `def _caixa_de_aviso(documento, alerta, estilos)`
 
-*linha 736*
+*linha 740*
 
 Um alerta, em uma caixa amarela de uma célula só.
 
@@ -18105,7 +18123,7 @@ resolve a primeira e o negrito do título resolve a segunda.
 
 ### `def _escrever_tabela(documento, tabela, numero, estilos)`
 
-*linha 773*
+*linha 777*
 
 Uma tabela do `.csv`, com a legenda em cima. As notas do `.csv` não vêm
 junto: ver o comentário no fim da função.
@@ -18115,17 +18133,17 @@ O texto das células atravessa intacto: `28,7` no arquivo é `28,7` no Word. A
 pelo começo, e número à direita, porque se lê pela unidade. Ver
 `_colunas_de_texto`.
 
-*linha 814*
+*linha 820*
 
 > A letra do teste colada ao p sai sobrescrita, nas tabelas com a legenda
 > embaixo. A primeira coluna é rótulo: uma categoria `3b` não perde o `b`.
 
-*linha 833*
+*linha 839*
 
 > Um rótulo e números — toda tabela da descritiva — ficam na repartição de
 > sempre. Mais de uma coluna de texto é outra tabela, e reparte pelo conteúdo.
 
-*linha 848*
+*linha 854*
 
 > As notas do `.csv` — os dois denominadores, a convenção de fechamento das
 > faixas — são lidas pelo `relatorio.py` e **não** são impressas: saíram na
@@ -18136,7 +18154,7 @@ pelo começo, e número à direita, porque se lê pela unidade. Ver
 
 ### `def _rodape(documento, linhas, estilos)`
 
-*linha 857*
+*linha 863*
 
 O que sai embaixo da Tabela 1: a legenda dos testes e a frase dos percentuais, em
 letra pequena, presos à tabela — a última linha dela se prende ao primeiro, e cada
@@ -18148,7 +18166,7 @@ escreve.
 
 ### `def _repartir_larguras(quadro, largura_util, colunas)`
 
-*linha 883*
+*linha 889*
 
 Dá à coluna do rótulo o espaço que ela precisa, e reparte o resto.
 
@@ -18162,7 +18180,7 @@ este módulo toma.
 
 ### `def _larguras_pelo_conteudo(tabela, de_texto, largura_util)`
 
-*linha 909*
+*linha 915*
 
 A repartição das tabelas com mais de uma coluna de texto: cada coluna pelo que
 ela carrega.
@@ -18191,20 +18209,20 @@ sempre — que pelo menos é previsível.
 
 #### `def em_emu(caracteres)`
 
-*linha 938*
+*linha 944*
 
 #### `def textos(posicao)`
 
-*linha 941*
+*linha 947*
 
-*linha 987*
+*linha 993*
 
 > A soma das palavras mais longas cabia, mas a ordem da divisão pode ter dado a
 > uma coluna curta o que faltou a uma longa. Estourar a mancha da página nunca.
 
 ### `def _fixar_larguras(quadro, larguras)`
 
-*linha 994*
+*linha 1000*
 
 Aplica largura por coluna e desliga o autoajuste.
 
@@ -18213,7 +18231,7 @@ A largura precisa ser escrita em **toda** célula da coluna, e não só no
 documento que sai certo em um e torto no outro é um documento que ainda dá
 trabalho.
 
-*linha 1003*
+*linha 1009*
 
 > `autofit = False` já escreve `<w:tblLayout w:type="fixed"/>` no lugar certo
 > do `tblPr`. Acrescentar outro à mão deixava dois no mesmo elemento, o
@@ -18223,7 +18241,7 @@ trabalho.
 
 ### `def _escrever_figura(documento, figura, numero, estilos)`
 
-*linha 1016*
+*linha 1022*
 
 Uma figura, na largura útil da página do modelo.
 
@@ -18233,11 +18251,11 @@ sobe como a exceção do `python-docx` (`UnrecognizedImageError`, que nem é
 `OSError`): vira `RelatorioError` com o nome do arquivo, e o
 `executar_relatorio` devolve o relatório anterior ao lugar.
 
-- *linha 1033* — `except Exception as erro:` — noqa: BLE001 - a leitura de imagem estoura de várias formas
+- *linha 1039* — `except Exception as erro:` — noqa: BLE001 - a leitura de imagem estoura de várias formas
 
 ### `def _legenda(documento, texto, estilos)`
 
-*linha 1046*
+*linha 1052*
 
 A legenda de uma tabela ou de uma figura, sempre acima do objeto.
 
@@ -18245,7 +18263,7 @@ Quando o modelo tem um estilo de legenda, ele manda inteiro — nem tamanho,
 nem cor, nem negrito são forçados por aqui. É o degrau de baixo da fila que
 escreve à mão, e só ele.
 
-*linha 1068*
+*linha 1074*
 
 > Legenda nunca fica órfã no pé da página: ela anda com o objeto que nomeia.
 > Sem isto, `Figura 2. Escolaridade` termina uma página e a figura começa a
@@ -18255,11 +18273,11 @@ escreve à mão, e só ele.
 
 ### `def _paragrafo(documento, texto, estilo, tamanho, negrito, italico, cor, espaco_antes, espaco_depois)`
 
-*linha 1077*
+*linha 1083*
 
 ### `def _texto(paragrafo, conteudo, tamanho, negrito, italico, cor, estilo, aplicar_estilo)`
 
-*linha 1099*
+*linha 1105*
 
 Escreve o texto e formata à mão só o que o estilo não resolveu.
 
@@ -18269,19 +18287,19 @@ o código passaria por cima da decisão que você tomou no Word, que é
 exatamente o que a separação template/código existe para impedir. Tamanho e
 cor só entram quando não há estilo para mandar neles.
 
-- *linha 1121* — `except KeyError:` — pragma: no cover - o estilo veio da resolução
+- *linha 1127* — `except KeyError:` — pragma: no cover - o estilo veio da resolução
 
-*linha 1124*
+*linha 1130*
 
 > O XML do Word recusa esses caracteres e o lxml levanta ValueError; o perfil já os acusa.
 
 ### `def _alinhar(paragrafo, de_texto)`
 
-*linha 1138*
+*linha 1144*
 
 ### `_CELULA_NUMERICA`
 
-*linha 1142*
+*linha 1148*
 
 > Uma célula que se lê como número: `15`, `26,8`, `+0,45`, `−1,2`, `< 0,001`,
 > `100,0%` — e a data `01/03/2026`, que numa tabela de período se alinha com os
@@ -18290,20 +18308,20 @@ cor só entram quando não há estilo para mandar neles.
 
 ### `_LETRA_COLADA`
 
-*linha 1150*
+*linha 1156*
 
 > A letra do teste colada ao p na Tabela 1 — `0,026a`, `< 0,001b` —, e a letra de cada
 > teste na legenda embaixo dela — `a t de Welch; b Mann-Whitney.`.
 
 ### `_FORA_DO_XML`
 
-*linha 1154*
+*linha 1160*
 
 > O que o XML 1.0 não aceita: controle C0 (menos tab, LF e CR), surrogate solto, U+FFFE/FFFF.
 
 ### `def _colunas_de_texto(tabela)`
 
-*linha 1158*
+*linha 1164*
 
 As posições das colunas que são texto e vão à esquerda.
 
@@ -18320,33 +18338,33 @@ Pelo conteúdo, e não por uma marca no `.csv`, porque o `.csv` é o que a anál
 escreve e o que você abre no Excel — acrescentar a ele uma linha de metadado de
 alinhamento seria pôr apresentação dentro do dado.
 
-- *linha 1179* — `if tabela.rodape:` — na Tabela 1, o p com a letra do teste é número
+- *linha 1185* — `if tabela.rodape:` — na Tabela 1, o p com a letra do teste é número
 
 ### `def _letra_do_teste(celula)`
 
-*linha 1187*
+*linha 1193*
 
 `0,026a` → `0,026` e `a`; o que não é um número com a letra colada fica inteiro.
 
 ### `def _largura_util(documento)`
 
-*linha 1195*
+*linha 1201*
 
 A mancha da página: largura menos as duas margens, lida da seção.
 
 ### `def _resolver_estilos(documento)`
 
-*linha 1203*
+*linha 1209*
 
 Percorre as filas e devolve o primeiro nome que o modelo tem.
 
 #### `def primeiro(fila)`
 
-*linha 1209*
+*linha 1215*
 
 ### `def _limpar_fim(documento)`
 
-*linha 1225*
+*linha 1231*
 
 Descarta os parágrafos vazios do fim do modelo.
 
@@ -18357,7 +18375,7 @@ inteira em branco, o que faz o documento parecer defeituoso já na abertura.
 
 ### `def _propriedades(documento, relatorio)`
 
-*linha 1242*
+*linha 1248*
 
 Os metadados do arquivo, que o Windows mostra sem ninguém abrir o documento.
 
@@ -18368,7 +18386,7 @@ pode não existir: o relatório da amostra sai de um projeto que só tem o
 
 ### `def _salvar_atomico(documento, caminho)`
 
-*linha 1266*
+*linha 1272*
 
 Grava o documento inteiro ou não grava nada.
 
@@ -18384,7 +18402,7 @@ O temporário é o do `ficha.temporario_ao_lado`, que respeita o `umask`: o
 
 ### `def _manter_junta(quadro, com_rodape, recuo)`
 
-*linha 1296*
+*linha 1302*
 
 Impede que uma tabela curta se parta na quebra de página.
 
@@ -18403,19 +18421,19 @@ parte, e o `Não` do AVC não abre a página seguinte longe do `Sim`.
 
 #### `def prender(linha)`
 
-*linha 1315*
+*linha 1321*
 
-*linha 1320*
+*linha 1326*
 
 > O rodapé da Tabela 1 anda com ela: a última linha se prende a ele, e a tabela
 > que se parte leva junto, do outro lado, a última linha e o rodapé.
 
-*linha 1324*
+*linha 1330*
 
 > A linha recuada `i` dos dados é a `i + 1` da tabela, debaixo do cabeçalho: a de
 > cima dela é a `i`.
 
-*linha 1334*
+*linha 1340*
 
 > A tabela longa parte, e é o cabeçalho repetido que resolve a leitura do
 > outro lado. Com uma exceção: o `Total`. Sozinho no alto de uma página,
@@ -18426,7 +18444,7 @@ parte, e o `Não` do AVC não abre a página seguinte longe do `Sim`.
 
 ### `def _nova_secao(documento, deitada)`
 
-*linha 1345*
+*linha 1351*
 
 Abre uma seção do Word em página nova: em paisagem, para a tabela deitada, ou de
 volta ao retrato, depois dela.
@@ -18439,7 +18457,7 @@ diferente, que é a da capa, nem o recomeço da numeração das páginas.
 
 ### `def _repetir_cabecalho(linha)`
 
-*linha 1386*
+*linha 1392*
 
 Marca a primeira linha como cabeçalho, para o Word repeti-la a cada página.
 
@@ -18449,17 +18467,17 @@ metade de baixo é uma coluna de números sem nome.
 
 ### `def _sombrear(celula, cor)`
 
-*linha 1400*
+*linha 1406*
 
 ### `def _bordas_da_tabela(tabela, cor, espessura)`
 
-*linha 1408*
+*linha 1414*
 
 Uma borda em volta de tudo. Serve a caixa de aviso, que é uma célula só.
 
 ### `def _bordas_de_tres_linhas(quadro, cor)`
 
-*linha 1421*
+*linha 1427*
 
 Topo, sob o cabeçalho, base. Nenhuma vertical.
 
@@ -18471,11 +18489,11 @@ o cliente pôr dois relatórios lado a lado.
 
 ### `def _lado_da_borda(nome, espessura, cor)`
 
-*linha 1439*
+*linha 1445*
 
 ### `def _escrever_bordas(tabela, lados)`
 
-*linha 1448*
+*linha 1454*
 
 Escreve `w:tblBorders`, com `none` explícito no que não foi pedido.
 
@@ -18483,13 +18501,13 @@ O `none` precisa ser escrito: sem ele, o lado herda a borda do estilo de
 tabela do modelo, e uma tabela de três linhas herdaria as verticais de um
 `Table Grid` institucional sem nada no código dizendo de onde elas vieram.
 
-*linha 1466*
+*linha 1472*
 
 > `tblBorders` vem antes de `tblLayout` e `tblLook` no esquema do OOXML.
 
 ### `def _rodape_com_pagina(secao)`
 
-*linha 1474*
+*linha 1480*
 
 O rodapé do documento padrão: `página N`, centralizado.
 
@@ -18499,13 +18517,13 @@ como instrução (`PAGE`) e o Word calcula na hora de exibir. Escrever o número
 
 ### `def _campo(paragrafo, instrucao, tamanho)`
 
-*linha 1490*
+*linha 1496*
 
 ### O modelo
 
 ### `def escrever_template(caminho)`
 
-*linha 1512*
+*linha 1518*
 
 Escreve um `template.docx` com os estilos do FlatCap já definidos.
 
@@ -18519,7 +18537,7 @@ procura antes de qualquer outro. Mude a fonte de `FlatCap Corpo` e o
 documento inteiro muda; ponha o logotipo no cabeçalho e ele aparece em todas
 as páginas de todos os relatórios.
 
-*linha 1535*
+*linha 1541*
 
 > As propriedades do arquivo são o único lugar de dentro do `.docx` em que
 > cabe uma explicação: elas aparecem no Word em Arquivo → Informações, não são
@@ -18528,14 +18546,14 @@ as páginas de todos os relatórios.
 
 ### `_NOTA_DO_MODELO`
 
-*linha 1548*
+*linha 1554*
 
 > O `dc:description` do OOXML tem limite de 255 caracteres — daí a nota ser um
 > ponteiro para a folha de decisões, e não a explicação inteira.
 
 ### `def _escrever_decisoes(caminho)`
 
-*linha 1558*
+*linha 1564*
 
 Escreve a folha de decisões ao lado do modelo, se ela ainda não existir.
 
@@ -18547,7 +18565,7 @@ a fusão do `dicionario.csv` existe para impedir.
 
 ### `def _fonte_do_estilo(estilo, nome)`
 
-*linha 1574*
+*linha 1580*
 
 Escreve a fonte nos quatro atributos do `w:rFonts`, e não só em dois.
 
@@ -18562,7 +18580,7 @@ convivem, quem vence depende da versão do Word.
 
 ### `def _fixar_tema(documento)`
 
-*linha 1596*
+*linha 1602*
 
 Põe a mesma fonte também no tema do documento.
 
@@ -18577,7 +18595,7 @@ mexe em outra coisa — e ele não tem como descobrir por quê.
 
 ### `def _definir_estilos(documento)`
 
-*linha 1619*
+*linha 1625*
 
 Cria os estilos `FlatCap *`, cada um herdando de um nativo do Word.
 
@@ -18600,13 +18618,13 @@ variável no painel de navegação do Word e num sumário, e `FlatCap Legenda` d
 
 #### `def criar(nome, base, tipo)`
 
-*linha 1644*
+*linha 1650*
 
-- *linha 1650* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
+- *linha 1656* — `except KeyError:` — pragma: no cover - as bases são nativas do Word
 
 ### `def _estilo_de_tabela(documento)`
 
-*linha 1693*
+*linha 1699*
 
 Cria `FlatCap Tabela` — as três linhas, dentro do modelo.
 
@@ -18627,7 +18645,7 @@ cabeçalho" sem precisar saber quantas linhas a tabela tem.
 
 ### `def _margens_da_celula(cm)`
 
-*linha 1742*
+*linha 1748*
 
 O respiro entre a régua e o texto. Sem ele a tabela de três linhas fica
 apertada — sem verticais, é o espaço que separa as colunas.
@@ -18786,7 +18804,7 @@ inteira.
 
 `SPDX-FileCopyrightText: 2026 Matheus Fernandes` · `SPDX-License-Identifier: GPL-3.0-or-later`
 
-*1937 linhas.*
+*1942 linhas.*
 
 A amostragem — o plano da amostra de um projeto, na pasta dela, com o relatório dela.
 
@@ -19585,18 +19603,23 @@ o alerta quando estão em branco —, e o texto de metodologia, com a conta, vem
 depois deles, no lugar da metodologia do relatório das análises. A tabela fecha a
 página, logo abaixo da conta, sem título e sem quebra (`Secao.na_primeira_pagina`):
 a legenda dela já diz o que ela é. É lida do texto do `tamanho.csv` pelo
-`tabela_do_texto`, a mesma função que lê o arquivo do disco.
+`tabela_do_texto`, a mesma função que lê o arquivo do disco, e a última linha, o
+tamanho da amostra, sai no verde da linha `Total` (`ultima_em_destaque`).
+
+*linha 1732*
+
+> A última linha, o tamanho da amostra, sai no verde da linha `Total`: é a resposta.
 
 ### `def texto_de_metodologia(amostragem)`
 
-*linha 1760*
+*linha 1765*
 
 O texto de metodologia do desenho, com a conta: os parágrafos e as fórmulas em
 destaque. Vazio para o desenho que ainda não tem o dele.
 
 ### `def nome_do_relatorio_da_amostra(matricula, quando)`
 
-*linha 1771*
+*linha 1776*
 
 `Amostragem_123465_2026-10-26.docx`, como o `relatorio.nome_do_relatorio`.
 
@@ -19605,7 +19628,7 @@ pessoa, em outro sistema, e o que vem de fora não monta caminho.
 
 ### `def resumo_do_tamanho(tamanho)`
 
-*linha 1782*
+*linha 1787*
 
 `325 de 1200`, `385` ou `120 de 120 — a população inteira`: a linha do terminal.
 
@@ -19613,7 +19636,7 @@ pessoa, em outro sistema, e o que vem de fora não monta caminho.
 
 ### `def _arquivamento(pasta, quando, anterior)`
 
-*linha 1793*
+*linha 1798*
 
 O que a rodada vigente escreveu, e para onde vai quando ela for refeita.
 
@@ -19625,7 +19648,7 @@ então, e a falta dele não impede o arquivamento.
 
 ### `def _rodada_vigente(pasta)`
 
-*linha 1830*
+*linha 1835*
 
 O manifesto da rodada que está no alto da pasta, quando há um legível e da amostragem.
 
@@ -19635,7 +19658,7 @@ a rodada nova: ela sai sem o aviso e sem a cópia.
 
 ### `def _mudanca(anterior, tamanho)`
 
-*linha 1847*
+*linha 1852*
 
 O aviso de quando o tamanho muda em relação à rodada vigente.
 
@@ -19646,7 +19669,7 @@ o vigente.
 
 ### `def _acao_do_historico(plano)`
 
-*linha 1870*
+*linha 1875*
 
 ## `flatcap/cli.py`
 
