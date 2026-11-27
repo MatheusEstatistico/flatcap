@@ -872,6 +872,32 @@ class TestSecaoDaPrimeiraPagina:
     def test_o_relatorio_das_analises_nao_usa(self, documento):
         _, plano = documento()
         assert not any(secao.na_primeira_pagina for secao in plano.secoes)
+        assert not any(tabela.ultima_em_destaque for tabela in plano.relatorio.tabelas)
+
+    def test_a_ultima_linha_em_destaque_qualquer_que_seja_o_rotulo(self, documento, tmp_path):
+        """O verde da linha `Total` na última linha, mesmo sem o rótulo `Total`."""
+        from dataclasses import replace
+
+        from docx.oxml.ns import qn
+
+        from flatcap.documento import FUNDO_TOTAL
+
+        _, plano = documento()
+        secao = plano.secoes[0]
+        tabela = replace(secao.tabelas[0], ultima_em_destaque=True)
+        tabela = replace(tabela, linhas=tuple(
+            linha for linha in tabela.linhas if linha[0].strip() != "Total"
+        ))
+        primeira = replace(secao, tabelas=(tabela,), figuras=(), na_primeira_pagina=True)
+        doc = _com_formulas(plano, tmp_path, *plano.relatorio.metodologia, secoes=(primeira,))
+        (quadro,) = doc.tables
+        pintadas = [
+            indice
+            for indice, linha in enumerate(quadro.rows)
+            if any(s.get(qn("w:fill")) == FUNDO_TOTAL
+                   for celula in linha.cells for s in celula._tc.iter(qn("w:shd")))
+        ]
+        assert pintadas == [len(quadro.rows) - 1]
 
 
 # ── O contrato com o template ───────────────────────────────────────────────
